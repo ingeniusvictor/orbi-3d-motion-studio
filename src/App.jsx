@@ -41,6 +41,7 @@ export default function App() {
   const mountRef = useRef(null), viewer = useRef(null), fileInput = useRef(null), animationInput = useRef(null);
   const [model, setModel] = useState(null);
   const [lightMeshes, setLightMeshes] = useState([]);
+  const [lightBoneCount,setLightBoneCount] = useState(0);
   const [finalFormat,setFinalFormat] = useState('glb');
   const [clips, setClips] = useState([]);
   const [activeClip, setActiveClip] = useState(null);
@@ -71,10 +72,10 @@ export default function App() {
   },[syncPlayer]);
   const openFiles = useCallback(async files => {
     if (!files?.length || !viewer.current) return;
-    setBusy('Abriendo modelo…');setNotice(null);setImportResults([]);setAllowVrmExport(false);setFinalFormat('glb');setLightMeshes([]);
+    setBusy('Abriendo modelo…');setNotice(null);setImportResults([]);setAllowVrmExport(false);setFinalFormat('glb');setLightMeshes([]);setLightBoneCount(0);
     try {
       const info = await viewer.current.open(files);
-      if (info) { setModel(info);setLightMeshes(viewer.current.getLightMeshes());syncPlayer();setNotice({type:'success',text:`${info.filename} cargado correctamente.`}); }
+      if (info) { setModel(info);setLightMeshes(viewer.current.getLightMeshes());setLightBoneCount(viewer.current.getLightBoneCount());syncPlayer();setNotice({type:'success',text:`${info.filename} cargado correctamente.`}); }
     } catch(error) {setNotice({type:'error',text:error.message||String(error)});}
     finally {setBusy('');}
   },[syncPlayer]);
@@ -161,12 +162,12 @@ export default function App() {
               <select value={finalFormat} onChange={e=>setFinalFormat(e.target.value)} style={{display:'block',width:'100%',marginTop:6,padding:9,borderRadius:8,background:'#17273b',color:'#e1f3fa',border:'1px solid #315064'}}>
                 <option value="glb">GLB — descarga directa</option>
                 <option value="fbx">FBX — GLB + conversor gratuito Blender</option>
-                <option value="vrm" disabled>VRM — exportación nativa pendiente</option>
+                <option value="vrm" disabled>VRM + VRMA — pendiente (formato separado)</option>
               </select>
             </label>
             <button className="export-btn" onClick={exportModel} disabled={!model||!clips.length||(model.format==='VRM'&&!allowVrmExport)||!!busy}><Download size={17}/>{finalFormat==='fbx'?' Preparar GLB final para convertir a FBX':model?.format==='VRM'?' Exportar GLB animado (aproximado)':' Exportar GLB integrado'}</button>
             <div className="small-note">{finalFormat==='fbx'?'Para obtener FBX binario, exporta aquí el GLB y usa el conversor Blender del panel inferior.':'Se genera una copia nueva. Tu modelo original nunca se modifica.'}</div></section>
-          <LightPrep model={model} meshes={lightMeshes} busy={busy} onExport={prepareLight} onScript={downloadScript}/>
+          <LightPrep model={model} meshes={lightMeshes} boneCount={lightBoneCount} busy={busy} onExport={prepareLight} onScript={downloadScript}/>
           <button className="help-card" onClick={()=>setShowTutorial(true)}><div><span className="eyebrow">¿PRIMERA VEZ AQUÍ?</span><strong>Una guía para crear sin límites.</strong><small>Descubre cómo preparar animaciones con Mixamo y probarlas aquí.</small><span className="help-link">Ver tutorial <ChevronRight size={14}/></span></div><Sparkles size={28}/></button>
           </aside>
         </div>

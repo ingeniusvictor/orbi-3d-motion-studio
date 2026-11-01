@@ -6,7 +6,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { adaptFbxToVrm } from './vrmMotion.js';
 import { bakeVrmForGlb } from './vrmExport.js';
-import { skinnedMeshes, exportLightweightGLB } from './lightweight.js';
+import { skinnedMeshes, skinBoneCount, exportLightweightGLB } from './lightweight.js';
 import { extensionOf, formatBytes, inspectRigCompatibility, uniqueClipName, summarizeRenderableGeometry, validateLoadedContent } from './modelInfo.js';
 
 const EMPTY_INFO = { meshes: 0, vertices: 0, triangles: 0, materials: 0, bones: 0, animations: 0, nodes: 0, textures: 0, hierarchy: [] };
@@ -264,6 +264,7 @@ export class MotionViewer {
     });
   }
   getLightMeshes() { return this.model ? skinnedMeshes(this.model) : []; }
+  getLightBoneCount() { return this.model ? skinBoneCount(this.model) : 0; }
   async exportLightweight(ids) {
     if(!this.model)throw new Error('Primero carga un personaje.');
     const result=await exportLightweightGLB(this.model,ids);

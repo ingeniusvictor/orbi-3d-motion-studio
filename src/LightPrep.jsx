@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Download, FileCode2, ShieldCheck, BookOpen, Layers3 } from 'lucide-react';
 import { suggestLightMeshes } from './lib/lightweight.js';
 
-export default function LightPrep({ model, meshes, busy, onExport, onScript }) {
+export default function LightPrep({ model, meshes, boneCount, busy, onExport, onScript }) {
   const [checked,setChecked]=useState([]);
   const [showAll,setShowAll]=useState(false);
   useEffect(()=> {
@@ -18,6 +18,7 @@ export default function LightPrep({ model, meshes, busy, onExport, onScript }) {
       <div><h3 style={{fontSize:16,margin:'0 0 4px'}}>Preparar versión ligera para Mixamo</h3>
         <p style={{margin:0,fontSize:12,color:'#98aeca',lineHeight:1.6}}>Una copia corporal sin texturas ni animaciones, conservando los huesos del personaje. El original no cambia.</p></div>
     </div>
+    {model && <p style={{fontSize:12,color:'#89d6c9',margin:'5px 0 12px'}}>Esqueleto vinculado a las mallas: <strong>{boneCount||0} huesos</strong> (se conservan por nombre y jerarquía; no se fija un número universal de 155).</p>}
     {model && !meshes.length && <p style={{fontSize:12,color:'#e3b7ad'}}>Este archivo no contiene una malla SkinnedMesh utilizable. La preparación requiere un modelo ya riggeado con malla vinculada a huesos.</p>}
     {model && meshes.length>0 && <>
       <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:7,color:'#b7cce2'}}>
@@ -52,7 +53,7 @@ export default function LightPrep({ model, meshes, busy, onExport, onScript }) {
         <li><strong>Usa Mixamo.</strong> En <a href="https://www.mixamo.com/" target="_blank" rel="noreferrer">mixamo.com</a>, sube el FBX generado. Si ya está riggeado, comprueba su mapeo; no vuelvas a riggearlo si Mixamo lo reconoce.</li>
         <li><strong>Descarga movimientos.</strong> Sin cambiar de personaje, descarga Idle, Thinking, Walk u otros movimientos como FBX, preferentemente Without Skin.</li>
         <li><strong>Regresa a ORBI.</strong> Abre el personaje ORIGINAL completo, no el ligero. Añade los FBX en «Integrar movimientos», reproduce cada clip y comprueba caderas, brazos, piernas y cabeza.</li>
-        <li><strong>Guarda el resultado.</strong> Exporta GLB integrado. Para un FBX final con animaciones, vuelve a ejecutar el script con <code>--with-animations</code> después del nombre del GLB. Verifica en Blender que se exportaron las acciones; para Mixamo NO uses esa opción. Para volver a VRM, se requiere un editor con <a href="https://vrm-addon-for-blender.info/en-us/" target="_blank" rel="noreferrer">VRM Add-on</a> y reconstruir/validar sus propiedades específicas; no equivale a renombrar el GLB.</li>
+        <li><strong>Guarda el resultado.</strong> Exporta GLB integrado. Para un FBX final con animaciones, vuelve a ejecutar el script con <code>--with-animations</code> después del nombre del GLB. Verifica en Blender que se exportaron las acciones; para Mixamo NO uses esa opción. Para mantener el personaje VRM con animaciones reutilizables, se recomienda VRM original + archivos VRMA por separado. La exportación VRMA aún no está implementada; si deseas crear un nuevo VRM, se requiere un editor con <a href="https://vrm-addon-for-blender.info/en-us/" target="_blank" rel="noreferrer">VRM Add-on</a> y reconstruir/validar sus propiedades específicas; no equivale a renombrar el GLB. <a href="https://vrm.dev/en/vrma/" target="_blank" rel="noreferrer">Consulta la documentación oficial de VRM Animation</a>.</li>
       </ol>
       <p style={{fontSize:11,color:'#9eb6c9',margin:0}}>ORBI no realiza rigging ni exportación FBX/VRM nativa. El script convierte con Blender. La geometría ligera puede no ser aceptada por Mixamo si no presenta un cuerpo humanoide adecuado; verifica siempre el resultado.</p>
     </details>

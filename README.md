@@ -89,3 +89,6 @@ Prueba manual pendiente: abrir personaje Mixamo **With Skin** (o su GLB), import
 - Tutorial de nueve pasos integrado; no se modifica la visualización o la integración ya verificadas.
 
 **Conversión FBX final:** el script acepta `--with-animations` después del GLB para solicitar a Blender exportar acciones animadas. Para el FBX ligero de Mixamo NO debe indicarse. La exportación de varios clips puede variar según la versión de Blender, por lo que el usuario debe volver a importar el FBX final y comprobar todos los movimientos.
+
+### Aclaración VRM 1.0 y VRMA
+La especificación VRM 1.0 no contempla almacenar un banco de animaciones integrado en el VRM; para animación humanoide reutilizable se define un archivo separado .vrma. El resultado VRM + VRMA podría implementarse posteriormente, pero no está habilitado hoy. Fuente: https://vrm.dev/en/vrma/ y https://github.com/vrm-c/vrm-specification/tree/master/specification/VRMC_vrm_animation-1.0.
