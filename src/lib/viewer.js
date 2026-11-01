@@ -5,6 +5,7 @@ import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { adaptFbxToVrm } from './vrmMotion.js';
+import { bakeVrmForGlb } from './vrmExport.js';
 import { extensionOf, formatBytes, inspectRigCompatibility, uniqueClipName, summarizeRenderableGeometry, validateLoadedContent } from './modelInfo.js';
 
 const EMPTY_INFO = { meshes: 0, vertices: 0, triangles: 0, materials: 0, bones: 0, animations: 0, nodes: 0, textures: 0, hierarchy: [] };
@@ -317,25 +318,47 @@ export class MotionViewer {
     this.notify();
     return result;
   }
-  async exportGLB() {
-    if (!this.model) throw new Error('Primero carga un modelo.');
-    if (this.vrm) throw new Error('VRM está disponible para visualización e inspección. Exportarlo como GLB podría perder las funciones y materiales VRM; por seguridad, la exportación VRM no está disponible en esta versión.');
-    // The built-in AnimationClips and compatible imported clips are exported together.
-    const exporter = new GLTFExporter();
-    const buffer = await exporter.parseAsync(this.model,{
-      binary:true, animations:this.clips.map(item=>item.clip),
-      onlyVisible:false, trs:true, maxTextureSize:2048,
+  async exportGLB({allowApproximateVRM=false}={}) {
+    if(!this.model) throw new Error('Primero carga un modelo.');
+    if(!this.clips.length) throw new Error('Primero añade al menos una animación para crear el GLB integrado.');
+    if(this.vrm && !allowApproximateVRM) {
+      throw new Error('La conversión VRM → GLB es aproximada. Confirma que aceptas perder funciones exclusivas de VRM.');
+    }
+    // Never overwrite or modify the source file. VRM is baked to RAW skin bones,
+    // copied into a separate model, and converted to portable PBR materials.
+    const converted = this.vrm ? bakeVrmForGlb(this.vrm,this.clips) : null;
+    const exportModel=converted?.model||this.model;
+    const exportClips=converted?.clips||this.clips.map(item=>item.clip);
+    const exporter=new GLTFExporter();
+    const buffer=await exporter.parseAsync(exportModel,{
+      binary:true, animations:exportClips, onlyVisible:false,
+      trs:true, maxTextureSize:2048,
     });
-    if (!(buffer instanceof ArrayBuffer)) throw new Error('No se generó un GLB válido.');
-    // Smoke-check the generated file before delivery.
-    const loader = new GLTFLoader();
-    const verified = await loader.parseAsync(buffer,'');
-    if (verified.animations.length !== this.clips.length) throw new Error('La comprobación encontró diferencias en la cantidad de animaciones exportadas.');
-    const filename = `${(this.lastFilename || 'modelo').replace(/\.[^.]+$/,'')}-orbi-motion.glb`;
-    const href = URL.createObjectURL(new Blob([buffer],{type:'model/gltf-binary'}));
-    const anchor = document.createElement('a');anchor.href=href;anchor.download=filename;document.body.append(anchor);anchor.click();anchor.remove();
-    setTimeout(()=>URL.revokeObjectURL(href),3000);
-    return {filename,size:formatBytes(buffer.byteLength),animations:verified.animations.length};
+    if(!(buffer instanceof ArrayBuffer)) throw new Error('No se generó un GLB válido.');
+    // Reimport the exported binary and validate the actual animation payload.
+    const parsed=await new GLTFLoader().parseAsync(buffer,'');
+    if(parsed.animations.length!==exportClips.length ||
+      parsed.animations.some((clip,i)=>!clip.tracks.length || !Number.isFinite(clip.duration))) {
+      throw new Error('El GLB exportado no conserva todas las animaciones; no se descargará un archivo incompleto.');
+    }
+    if(this.vrm){
+      let skin=0;
+      parsed.scene.traverse(node=>{if(node.isSkinnedMesh)skin++;});
+      if(!skin)throw new Error('No se pudo conservar el esqueleto con su malla en el GLB.');
+    }
+    const filename=(this.lastFilename||'modelo').replace(/\.[^.]+$/,'')+
+      (this.vrm?'-orbi-animated-standard':'-orbi-motion')+'.glb';
+    const blob=new Blob([buffer],{type:'model/gltf-binary'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=filename; document.body.append(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),5000);
+    return {
+      filename,size:formatBytes(buffer.byteLength),animations:parsed.animations.length,
+      warning: this.vrm
+        ? 'GLB estándar (no VRM): materiales MToon aproximados; física, expresiones y metadatos VRM no incluidos. Los movimientos omitidos en la previsualización tampoco se recuperan al exportar.'
+        : null,
+    };
   }
   dispose() {
     this.disposed=true;

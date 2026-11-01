@@ -69,3 +69,11 @@ Prueba manual pendiente: abrir personaje Mixamo **With Skin** (o su GLB), import
 - La previsualización del VRM puede transferir únicamente las pistas humanoides y omitir pistas de movimiento de la malla FBX, **con advertencia explícita**. No debe interpretarse como integración fiel ni ofrecerse exportación VRM.
 - Solo se permite esta omisión de forma automática para un objeto identificable como malla skinned o grupo que la contiene, con al menos una animación humanoide válida. Las pistas animadas de otros objetos externos siguen produciendo error.
 - Confirmar la postura y el desplazamiento con modelos reales; esta fase no realiza exportación ni conserva movimientos externos desconocidos.
+
+
+## MOTION-02G — Exportación VRM → GLB animado (beta)
+- Convierte la animación previsualizada sobre huesos normalizados VRM a pistas muestreadas en huesos reales del skin; clona el modelo y convierte materiales MToon a una aproximación PBR.
+- Exporta **GLB estándar**, nunca un archivo VRM equivalente. No se conservan necesariamente materiales MToon, expresiones, físicas spring-bones ni extensiones/metadatos VRM.
+- La exportación exige consentimiento explícito sobre posibles pérdidas y valida con reimportación las animaciones y la presencia de un SkinnedMesh.
+- Las pistas de movimiento de malla omitidas durante la previsualización NO se restituyen al exportar. Original local intacto; limitar cantidad de clips para no agotar memoria.
+- Beta, pendiente prueba manual con VRM de LUMIA y sus clips FBX reales.
