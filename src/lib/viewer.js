@@ -277,11 +277,15 @@ export class MotionViewer {
         for (const original of loaded.clips) {
           const clip = original.clone();
           // Only same-rig remapping. No spatial retargeting or rest-pose corrections.
-          clip.tracks = clip.tracks.map(track => {
-            const found = match.mappedTracks.find(([sourceTrack]) => sourceTrack.name === track.name);
-            const renamed = track.clone();
-            renamed.name = `${found[1].name}.${found[2]}`;
-            return renamed;
+          // Map from the original source tracks so any neutral auxiliary-root
+          // channel is omitted without changing the remaining animation.
+          const mapping = new Map(match.mappedTracks.map(([track,bone,channel])=>[track,{bone,channel}]));
+          clip.tracks = original.tracks.flatMap(track=>{
+            const target=mapping.get(track);
+            if(!target)return [];
+            const renamed=track.clone();
+            renamed.name=target.bone.name+'.'+target.channel;
+            return [renamed];
           });
           clip.resetDuration();
           const raw = loaded.clips.length === 1 ? file.name.replace(/\.fbx$/i,'') : original.name;
@@ -290,7 +294,7 @@ export class MotionViewer {
           named.push({name,clip,source:'Mixamo / FBX'});
         }
         this.clips.push(...named);
-        result.push({name:file.name,ok:true,count:named.length});
+        result.push({name:file.name,ok:true,count:named.length,warning:match.advisory});
       } catch(error) {
         result.push({name:file.name,ok:false,reason:error.message||String(error)});
       } finally {

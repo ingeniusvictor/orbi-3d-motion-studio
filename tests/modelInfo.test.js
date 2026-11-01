@@ -71,3 +71,48 @@ test('un modelo visual sigue necesitando geometría visible', () => {
   assert.equal(validateLoadedContent({hasGeometry:true,drawableMeshes:1},0,false),null);
   assert.match(validateLoadedContent({hasGeometry:true,drawableMeshes:0},2,false),/ocultas/);
 });
+
+function wrappedRig(extra=false){
+  const scene=new Object3D(),root=extra?new Bone():null;
+  if(root){root.name='root';scene.add(root);}
+  const hips=new Bone();hips.name='mixamorig:Hips';
+  const spine=new Bone();spine.name='mixamorig:Spine';
+  (root||scene).add(hips);hips.add(spine);
+  return {scene,root,hips,spine};
+}
+test('Mixamo root adicional neutro conserva todos los canales del rig real',()=>{
+  const base=wrappedRig(),source=wrappedRig(true);
+  const rootTrack=new QuaternionKeyframeTrack('root.quaternion',[0,1],[0,0,0,1,0,0,0,1]);
+  const hipTrack=new QuaternionKeyframeTrack('mixamorig:Hips.quaternion',[0,1],[0,0,0,1,0,0,0,1]);
+  const clip=new AnimationClip('Idle',1,[rootTrack,hipTrack]);
+  const check=inspectRigCompatibility(base.scene,source.scene,[clip]);
+  assert.equal(check.ok,true,check.reason);
+  assert.equal(check.mappedTracks.length,1);
+  assert.equal(check.skippedTracks.length,1);
+  assert.match(check.advisory,/Raíz auxiliar/);
+  const reverse=inspectRigCompatibility(source.scene,base.scene,[new AnimationClip('Idle',1,[hipTrack])]);
+  assert.equal(reverse.ok,true,reverse.reason);
+});
+test('rechaza un root de animación no neutro',()=>{
+  const base=wrappedRig(),source=wrappedRig(true);
+  const rootTrack=new QuaternionKeyframeTrack('root.quaternion',[0,1],[0,0,0,1,0.1,0,0,0.994987]);
+  const hipTrack=new QuaternionKeyframeTrack('mixamorig:Hips.quaternion',[0,1],[0,0,0,1,0,0,0,1]);
+  const check=inspectRigCompatibility(base.scene,source.scene,[new AnimationClip('Idle',1,[rootTrack,hipTrack])]);
+  assert.equal(check.ok,false);
+  assert.match(check.reason,/raíz adicional/);
+});
+test('rechaza huesos de otro personaje aun cuando se llame root',()=>{
+  const base=wrappedRig(),source=wrappedRig(true);
+  const extra=new Bone();extra.name='OtherCharacterBone';source.spine.add(extra);
+  const check=inspectRigCompatibility(base.scene,source.scene,[clip]);
+  assert.equal(check.ok,false);
+  assert.match(check.reason,/othercharacterbone/);
+});
+test('rechaza root con escala o sin ser ancestro de todo el rig',()=>{
+  const base=wrappedRig(),source=wrappedRig(true);
+  source.root.scale.setScalar(0.01);
+  assert.equal(inspectRigCompatibility(base.scene,source.scene,[clip]).ok,false);
+  source.root.scale.setScalar(1);
+  source.scene.add(source.hips);
+  assert.equal(inspectRigCompatibility(base.scene,source.scene,[clip]).ok,false);
+});
