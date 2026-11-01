@@ -96,6 +96,17 @@ export const inspectRigCompatibility = (base, imported, clips) => {
   if(missing.length||extra.length)return {ok:false,reason:
     'Los esqueletos no son idénticos: '+(missing.length?'falta en base «'+missing[0]+'»; ':'')+
     (extra.length?'falta en animación «'+extra[0]+'».':'')+' Comprueba que descargaste ambas versiones del mismo rig.'};
+  // A single extra root must actually wrap the entire shared rig.
+  // Multiple neutral duplicates can be exporter artifacts and are never driven.
+  for(const [index,other,side] of [[source,target,'FBX importado'],[target,source,'personaje base']]){
+    for(const [name,bones] of index) {
+      if(!optionalRoots.has(name)||other.has(name)||bones.length!==1)continue;
+      const wrapper=bones[0];
+      if(!neutralBone(wrapper)||![...sourceCore].every(key=>index.has(key)&&ancestor(wrapper,index.get(key)[0]))){
+        return {ok:false,reason:'La raíz auxiliar «'+name+'» de '+side+' no es una envoltura neutra de todo el esqueleto.'};
+      }
+    }
+  }
   const skipOptionalParent=bone=>{
     let parent=boneParent(bone);
     while(parent && optionalRoots.has(boneKey(parent.name))){
@@ -128,7 +139,7 @@ export const inspectRigCompatibility = (base, imported, clips) => {
           mappedTracks.push([track,dst[0],property]);valid++;continue;
         }
         if(!neutralChannel(track,property)){
-          return {ok:false,reason:'La pista «'+track.name+'» mueve una raíz duplicada o distinta. Para conservar el movimiento correctamente se necesita el mismo rig exportado de Mixamo.'};
+          return {ok:false,reason:'La pista «'+track.name+'» mueve una raíz adicional duplicada o distinta. Para conservar el movimiento correctamente se necesita el mismo rig exportado de Mixamo.'};
         }
         // Neutral channels on redundant wrappers are safe to discard.
         skippedTracks.push(track);continue;
@@ -140,7 +151,7 @@ export const inspectRigCompatibility = (base, imported, clips) => {
     if(!valid)return {ok:false,reason:'La animación «'+clip.name+'» no contiene canales para el personaje.'};
   }
   return {ok:true,mappedTracks,skippedTracks,advisory:
-    skippedTracks.length?'Se omitieron solo pistas neutras de raíces auxiliares. Revisa el movimiento antes de exportar.':null};
+    skippedTracks.length?'Raíz auxiliar neutra: se omitieron sus pistas sin afectar los huesos del personaje. Revisa el movimiento antes de exportar.':null};
 };
 
 /** A Mixamo 'Without Skin' FBX has animation tracks but no model to draw. */

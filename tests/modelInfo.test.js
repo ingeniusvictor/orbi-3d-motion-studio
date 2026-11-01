@@ -140,7 +140,7 @@ test('root repetido animado no se integra silenciosamente',()=>{
   ]);
   const match=inspectRigCompatibility(scene.scene,src.scene,[clip]);
   assert.equal(match.ok,false);
-  assert.match(match.reason,/raíz duplicada/);
+  assert.match(match.reason,/raíz adicional/);
 });
 test('raíz neutra repetida en destino no bloquea una animación real',()=>{
   const base=wrappedRig(),src=wrappedRig();
