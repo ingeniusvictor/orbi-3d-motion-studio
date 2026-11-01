@@ -74,3 +74,42 @@ test('preserves raw-bone animations originally embedded in the VRM',()=>{
   assert.equal(result.clips.length,1);
   assert.ok(result.clips[0].tracks.some(track=>track.name==='rawHip.quaternion'));
 });
+
+test('reimporta GLB con skin y animación convertida (smoke test real)', async()=>{
+  const { GLTFExporter }=await import('three/addons/exporters/GLTFExporter.js');
+  const { GLTFLoader }=await import('three/addons/loaders/GLTFLoader.js');
+  const oldReader=globalThis.FileReader;
+  if(!oldReader) {
+    globalThis.FileReader=class {
+      result=null;
+      async readAsArrayBuffer(blob){
+        try {this.result=await blob.arrayBuffer();this.onloadend?.({target:this});}
+        catch(e){this.onerror?.(e);}
+      }
+      async readAsDataURL(blob){
+        try{
+          const data=Buffer.from(await blob.arrayBuffer()).toString('base64');
+          this.result='data:'+(blob.type||'application/octet-stream')+';base64,'+data;
+          this.onloadend?.({target:this});
+        }catch(e){this.onerror?.(e);}
+      }
+    };
+  }
+  try {
+    const {vrm}=fixture();
+    const rotation=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),0.5);
+    const clip=new THREE.AnimationClip('Motion',1,[
+      new THREE.QuaternionKeyframeTrack('normalizedHip.quaternion',[0,1],[0,0,0,1,...rotation.toArray()])
+    ]);
+    const packed=bakeVrmForGlb(vrm,[{name:'Motion',clip,source:'VRM / Mixamo (experimental)'}],{fps:10});
+    const bin=await new GLTFExporter().parseAsync(packed.model,{binary:true,animations:packed.clips,trs:true,onlyVisible:false});
+    assert.ok(bin instanceof ArrayBuffer);
+    const loaded=await new GLTFLoader().parseAsync(bin,'');
+    assert.equal(loaded.animations.length,1);
+    assert.ok(loaded.animations[0].tracks.some(track=>/rawHip/.test(track.name)));
+    let skin=0;loaded.scene.traverse(node=>{if(node.isSkinnedMesh)skin++;});
+    assert.equal(skin,1);
+  } finally {
+    if(!oldReader)delete globalThis.FileReader;
+  }
+});
