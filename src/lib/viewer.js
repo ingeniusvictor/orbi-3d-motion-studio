@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+import { adaptFbxToVrm } from './vrmMotion.js';
 import { extensionOf, formatBytes, inspectRigCompatibility, uniqueClipName, summarizeRenderableGeometry, validateLoadedContent } from './modelInfo.js';
 
 const EMPTY_INFO = { meshes: 0, vertices: 0, triangles: 0, materials: 0, bones: 0, animations: 0, nodes: 0, textures: 0, hierarchy: [] };
@@ -272,33 +273,40 @@ export class MotionViewer {
       let loaded = null;
       try {
         loaded = await loadObject([file], {animationSource: true});
-        const match = inspectRigCompatibility(this.model,loaded.model,loaded.clips);
-        if (!match.ok) throw new Error(match.reason);
+        const isVrm = Boolean(this.vrm);
+        const match = isVrm ? null : inspectRigCompatibility(this.model,loaded.model,loaded.clips);
+        if (match && !match.ok) throw new Error(match.reason);
         const named = [];
+        const diagnostics = [];
         for (const original of loaded.clips) {
-          const clip = original.clone();
-          // Only same-rig remapping. No spatial retargeting or rest-pose corrections.
-          // Map from the original source tracks so any neutral auxiliary-root
-          // channel is omitted without changing the remaining animation.
-          const mapping = new Map(match.mappedTracks.map(([track,bone,channel])=>[track,{bone,channel}]));
-          clip.tracks = original.tracks.flatMap(track=>{
-            const target=mapping.get(track);
-            if(!target)return [];
-            const renamed=track.clone();
-            renamed.name=target.bone.name+'.'+target.channel;
-            return [renamed];
-          });
+          let clip;
+          if (isVrm) {
+            const converted = adaptFbxToVrm(loaded.model,this.vrm,original);
+            clip = converted.clip;
+            diagnostics.push(converted.warning);
+          } else {
+            clip = original.clone();
+            // Supports tracks on rig bones and compatible named scene objects.
+            const mapping = new Map(match.mappedTracks.map(([track,node,channel])=>[track,{node,channel}]));
+            clip.tracks = original.tracks.flatMap(track=>{
+              const mapped=mapping.get(track);
+              if(!mapped)return [];
+              const renamed=track.clone();
+              renamed.name=mapped.node.name+'.'+mapped.channel;
+              return [renamed];
+            });
+          }
           clip.resetDuration();
           const raw = loaded.clips.length === 1 ? file.name.replace(/\.fbx$/i,'') : original.name;
           const name = uniqueClipName([...this.clips,...named].map(c=>c.name),raw);
           clip.name = name;
-          named.push({name,clip,source:'Mixamo / FBX'});
+          named.push({name,clip,source:isVrm?'VRM / Mixamo (experimental)':'Mixamo / FBX'});
         }
         this.clips.push(...named);
         // three-vrm normally overwrites raw human bones from normalized proxies.
         // FBX channels animate the raw bones, so disable that copy for previews.
-        if (this.vrm?.humanoid) this.vrm.humanoid.autoUpdateHumanBones = false;
-        result.push({name:file.name,ok:true,count:named.length,warning:match.advisory});
+        if (this.vrm?.humanoid) this.vrm.humanoid.autoUpdateHumanBones = true;
+        result.push({name:file.name,ok:true,count:named.length,warning:isVrm?diagnostics.join(' '):match.advisory});
       } catch(error) {
         result.push({name:file.name,ok:false,reason:error.message||String(error)});
       } finally {

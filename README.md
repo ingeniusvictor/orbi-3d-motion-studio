@@ -54,3 +54,11 @@ Prueba manual pendiente: abrir personaje Mixamo **With Skin** (o su GLB), import
 - Si cambia la jerarquía real, faltan huesos, la raíz tiene transformaciones propias o pistas animadas, el integrador rechaza el FBX por seguridad.
 - Reporte original: personaje Thinking.fbx + movimiento Idle.fbx rechazado por hueso `root`. Sin ambos archivos originales no se puede certificar que ese par sea exactamente compatible.
 - Pruebas automatizadas de raíz neutra, raíz animada, esqueleto ajeno y escala no neutra. Pendiente prueba manual de ese par de FBX concreto.
+
+
+## MOTION-02E — Previsualización VRM desde Mixamo
+- FBX a FBX/GLB: admite animaciones sobre objetos nombrados y transformaciones compatibles, además de huesos.
+- VRM: adaptador experimental de animaciones de Mixamo basado en el ejemplo oficial three-vrm humanoidAnimation. Permite nombres estándar Mixamo o coincidencia con nombres crudos del VRM.
+- Mapea caderas, columna, cabeza, brazos y piernas a huesos normalizados de VRM. No cubre cualquier rig ni garantiza movimientos idénticos.
+- Nunca exporta desde VRM: sus metadatos y expresiones necesitan tratamiento específico.
+- Verificar visualmente con archivos reales; la interfaz informa pistas omitidas y fallos.
