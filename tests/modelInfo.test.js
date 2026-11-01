@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Object3D, Bone, AnimationClip, QuaternionKeyframeTrack } from 'three';
-import { extensionOf, isSupportedModel, formatBytes, uniqueClipName, boneKey, inspectRigCompatibility, summarizeRenderableGeometry } from '../src/lib/modelInfo.js';
+import { extensionOf, isSupportedModel, formatBytes, uniqueClipName, boneKey, inspectRigCompatibility, summarizeRenderableGeometry, validateLoadedContent } from '../src/lib/modelInfo.js';
 
 test('admite modelos GLB, glTF, FBX y VRM sin distinguir mayúsculas', () => {
   assert.equal(isSupportedModel('Lumia.GLB'), true);
@@ -58,4 +58,16 @@ test('detecta modelos con mallas ocultas y respeta jerarquía de visibilidad', a
   const result = summarizeRenderableGeometry(root);
   assert.equal(result.hasGeometry, true);
   assert.equal(result.drawableMeshes, 0);
+});
+
+test('Mixamo Without Skin puede importarse como animación, pero no visualizarse como personaje', () => {
+  const emptyGeometry = {hasGeometry:false, drawableMeshes:0};
+  assert.equal(validateLoadedContent(emptyGeometry,1,true),null);
+  assert.match(validateLoadedContent(emptyGeometry,1,false),/Without Skin/);
+  assert.match(validateLoadedContent(emptyGeometry,0,true),/no contiene animaciones/);
+});
+
+test('un modelo visual sigue necesitando geometría visible', () => {
+  assert.equal(validateLoadedContent({hasGeometry:true,drawableMeshes:1},0,false),null);
+  assert.match(validateLoadedContent({hasGeometry:true,drawableMeshes:0},2,false),/ocultas/);
 });

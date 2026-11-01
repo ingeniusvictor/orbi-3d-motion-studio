@@ -79,3 +79,19 @@ export const summarizeRenderableGeometry = root => {
   });
   return { meshes, drawableMeshes, vertices, hasGeometry: vertices > 0 };
 };
+
+/** A file may be a complete visible model or an animation-only Mixamo FBX. */
+export function validateLoadedContent(geometry, clipCount, animationSource = false) {
+  if (animationSource) {
+    return clipCount > 0 ? null : 'Este FBX no contiene animaciones.';
+  }
+  if (!geometry.hasGeometry) {
+    return clipCount > 0
+      ? 'Este archivo contiene animaciones pero no una malla visible. Los FBX de Mixamo descargados «Without Skin» son solo movimientos: carga primero el personaje FBX «With Skin» o su GLB y luego usa «Añadir animaciones FBX».'
+      : 'El archivo no contiene geometría 3D que pueda mostrarse. Comprueba que exportaste la malla del personaje.';
+  }
+  if (!geometry.drawableMeshes) {
+    return 'El archivo contiene mallas, pero están ocultas en la jerarquía. Hazlas visibles antes de exportar desde tu editor 3D.';
+  }
+  return null;
+}

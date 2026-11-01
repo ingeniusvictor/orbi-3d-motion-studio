@@ -35,3 +35,13 @@ Proyecto ORBI Ecosystem · 2026.
 - Solo el cliente procesa los modelos, sin almacenarlos en servidores.
 
 Validación: ejecutar `npm install`, `npm test` y `npm run build`. Después comprobar visualmente con un FBX *With Skin* real de Mixamo, un FBX *Without Skin* y archivos VRM 0.x y 1.0.
+
+## MOTION-02B — Compatibilidad de importación Mixamo (corrección)
+
+- Un FBX descargado **Without Skin** puede importarse como fuente de movimiento sin requerir geometría.
+- La opción «Abrir modelo» continúa exigiendo malla visible: si se abre directamente un FBX solo de animación, informa qué hacer.
+- La integración sigue limitada a huesos y jerarquías estrictamente compatibles. No realiza retargeting.
+- Los objetos temporales de los FBX importados se liberan al finalizar cada importación.
+- Los archivos VRM continúan disponibles solo para inspección y visualización; **no** se convierten ni fusionan con FBX.
+
+Prueba manual pendiente: abrir personaje Mixamo **With Skin** (o su GLB), importar FBX **Without Skin** del mismo rig, reproducir movimientos y reabrir el GLB exportado.

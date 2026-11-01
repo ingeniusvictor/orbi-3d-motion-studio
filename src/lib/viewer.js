@@ -4,7 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
-import { extensionOf, formatBytes, inspectRigCompatibility, uniqueClipName, summarizeRenderableGeometry } from './modelInfo.js';
+import { extensionOf, formatBytes, inspectRigCompatibility, uniqueClipName, summarizeRenderableGeometry, validateLoadedContent } from './modelInfo.js';
 
 const EMPTY_INFO = { meshes: 0, vertices: 0, triangles: 0, materials: 0, bones: 0, animations: 0, nodes: 0, textures: 0, hierarchy: [] };
 
@@ -60,7 +60,7 @@ function makeManager(files) {
   return { manager, urls, resources };
 }
 
-async function loadObject(files) {
+async function loadObject(files, { animationSource = false } = {}) {
   const list = Array.from(files);
   const primary = list.find(file => ['glb','gltf','fbx','vrm'].includes(extensionOf(file.name)));
   if (!primary) throw new Error('Selecciona un modelo .glb, .gltf, .fbx o .vrm.');
@@ -79,14 +79,10 @@ async function loadObject(files) {
     const model = vrm?.scene || (extension === 'fbx' ? loaded : loaded.scene);
     const clips = (loaded.animations || []).map(clip => clip.clone());
     const geometry = summarizeRenderableGeometry(model);
-    if (!geometry.hasGeometry) {
-      throw new Error(clips.length
-        ? 'Este archivo contiene animaciones pero no una malla visible. Los FBX de Mixamo descargados «Without Skin» son solo movimientos: carga primero el personaje FBX «With Skin» o su GLB y luego usa «Añadir animaciones FBX».'
-        : 'El archivo no contiene geometría 3D que pueda mostrarse. Comprueba que exportaste la malla del personaje.');
-    }
-    if (!geometry.drawableMeshes) {
-      throw new Error('El archivo contiene mallas, pero están ocultas en la jerarquía. Hazlas visibles antes de exportar desde tu editor 3D.');
-    }
+    // Animation-only Mixamo files intentionally have bones and clips, but no mesh.
+    // Permit them ONLY in the import-animations workflow, not as visible models.
+    const reason = validateLoadedContent(geometry, clips.length, animationSource && extension === 'fbx');
+    if (reason) throw new Error(reason);
     model.updateWorldMatrix(true, true);
     return {model, clips, vrm, name:primary.name, bytes: list.reduce((n,file) => n+file.size,0), format:vrm ? 'VRM' : extension.toUpperCase()};
   } catch(error) {
@@ -272,9 +268,9 @@ export class MotionViewer {
     const result = [];
     for (const file of files) {
       if(extensionOf(file.name)!=='fbx') {result.push({name:file.name,ok:false,reason:'Para integrar movimientos selecciona archivos FBX.'});continue;}
+      let loaded = null;
       try {
-        const loaded = await loadObject([file]);
-        if (!loaded.clips.length) throw new Error('Este FBX no contiene animaciones.');
+        loaded = await loadObject([file], {animationSource: true});
         const match = inspectRigCompatibility(this.model,loaded.model,loaded.clips);
         if (!match.ok) throw new Error(match.reason);
         const named = [];
@@ -297,6 +293,9 @@ export class MotionViewer {
         result.push({name:file.name,ok:true,count:named.length});
       } catch(error) {
         result.push({name:file.name,ok:false,reason:error.message||String(error)});
+      } finally {
+        // Imported source is only used to extract clips: release unused FBX meshes.
+        if (loaded?.model) VRMUtils.deepDispose(loaded.model);
       }
     }
     this.notify();
