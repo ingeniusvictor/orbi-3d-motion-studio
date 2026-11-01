@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Bone, Object3D, AnimationClip, QuaternionKeyframeTrack, VectorKeyframeTrack, Group, SkinnedMesh, BufferGeometry, MeshBasicMaterial } from 'three';
+import { Bone, Object3D, AnimationClip, QuaternionKeyframeTrack, VectorKeyframeTrack, Group, SkinnedMesh, BufferGeometry, MeshBasicMaterial, Mesh } from 'three';
 const THREE_FOR_TEST = { Group, SkinnedMesh, BufferGeometry, MeshBasicMaterial };
 import { adaptFbxToVrm } from '../src/lib/vrmMotion.js';
 
@@ -118,4 +118,22 @@ test('VRM: un objeto ajeno al personaje con movimiento sigue bloqueado',()=>{
   const group=new Object3D();group.name='CameraRig';source.add(group);
   tracks.push(new VectorKeyframeTrack('CameraRig.position',[0,1],[0,0,0, 1,0,0]));
   assert.throws(()=>adaptFbxToVrm(source,vrm,new AnimationClip('Idle',1,tracks)),/objeto externo/);
+});
+
+test('VRM: acepta vista aproximada con Mesh simple, sin necesidad de skin reconocido',()=>{
+  const {source,vrm,tracks}=fixtures();
+  const plain=new Group();plain.name='LUMIA_FULL_SKIN_1';
+  plain.add(new Mesh(new BufferGeometry(),new MeshBasicMaterial()));
+  source.add(plain);
+  tracks.push(new VectorKeyframeTrack('LUMIA_FULL_SKIN_1.position',[0,1],[0,0,0,0,1,0]));
+  const out=adaptFbxToVrm(source,vrm,new AnimationClip('Thinking',1,tracks));
+  assert.deepEqual(out.omittedExternalMotion,['LUMIA_FULL_SKIN_1.position']);
+});
+test('VRM: permite vista aproximada con un grupo ancestro del esqueleto, incluso Without Skin',()=>{
+  const {source,vrm,tracks}=fixtures();
+  const root=new Group();root.name='LUMIA_FULL_SKIN_1';source.add(root);
+  const hip=source.children.find(x=>x.name==='j_bip_c_hips');root.add(hip);
+  tracks.push(new VectorKeyframeTrack('LUMIA_FULL_SKIN_1.position',[0,1],[0,0,0,0,1,0]));
+  const out=adaptFbxToVrm(source,vrm,new AnimationClip('Idle',1,tracks));
+  assert.equal(out.omittedExternalMotion.length,1);
 });

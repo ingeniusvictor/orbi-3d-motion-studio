@@ -84,10 +84,15 @@ export function adaptFbxToVrm(sourceRoot,vrm,original) {
   let skipped=0;
   const omittedExternalMotion=[];
   const isCharacterGeometry = obj => {
-    if(obj?.isSkinnedMesh) return true;
-    let found=false;
-    obj?.traverse?.(child=>{if(child.isSkinnedMesh)found=true;});
-    return found;
+    // FBX With Skin may encode the character as SkinnedMesh, plain Mesh,
+    // or a parent group. Animation-only FBX may animate an ancestor of hips.
+    if(!obj || obj.isBone || obj.isCamera || obj.isLight) return false;
+    let geometry=false;
+    obj.traverse?.(child=>{if(child.isMesh)geometry=true;});
+    if(geometry) return true;
+    const hips=sourceHips;
+    for(let parent=hips?.parent;parent;parent=parent.parent){if(parent===obj)return true;}
+    return false;
   };
   const isVrm0=vrm.meta?.metaVersion==='0';
   const sourceHips=[...roles.values()].find(x=>x.role==='hips')?.node;
