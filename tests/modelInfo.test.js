@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Object3D, Bone, AnimationClip, QuaternionKeyframeTrack } from 'three';
-import { extensionOf, isSupportedModel, formatBytes, uniqueClipName, boneKey, inspectRigCompatibility, summarizeRenderableGeometry, validateLoadedContent } from '../src/lib/modelInfo.js';
+import { Object3D, Bone, AnimationClip, QuaternionKeyframeTrack, VectorKeyframeTrack } from 'three';
+import { extensionOf, isSupportedModel, formatBytes, uniqueClipName, boneKey, inspectRigCompatibility, summarizeRenderableGeometry, validateLoadedContent, staticTrackAtRest } from '../src/lib/modelInfo.js';
 
 test('admite modelos GLB, glTF, FBX y VRM sin distinguir mayúsculas', () => {
   assert.equal(isSupportedModel('Lumia.GLB'), true);
@@ -148,4 +148,31 @@ test('raíz neutra repetida en destino no bloquea una animación real',()=>{
   const clip=new AnimationClip('Idle',1,[new QuaternionKeyframeTrack('mixamorig:Hips.quaternion',[0,1],[0,0,0,1,0,0,0,1])]);
   const match=inspectRigCompatibility(base.scene,src.scene,[clip]);
   assert.equal(match.ok,true,match.reason);
+});
+
+test('acepta una pista de grupo del mismo nombre junto con el rig',()=>{
+  const base=wrappedRig(),source=wrappedRig();
+  const a=new Object3D(),b=new Object3D();
+  a.name='LUMIA_FULL_SKIN_1';b.name='LUMIA_FULL_SKIN_1';
+  base.scene.add(a);source.scene.add(b);
+  const pos=new VectorKeyframeTrack('LUMIA_FULL_SKIN_1.position',[0,1],[0,0,0,0,1,0]);
+  const hip=new QuaternionKeyframeTrack('mixamorig:Hips.quaternion',[0,1],[0,0,0,1,0,0,0,1]);
+  const match=inspectRigCompatibility(base.scene,source.scene,[new AnimationClip('Thinking',1,[pos,hip])]);
+  assert.equal(match.ok,true,match.reason);
+  assert.equal(match.mappedTracks.length,2);
+  assert.equal(match.mappedTracks[0][1],a);
+});
+test('ignora solo una pista de objeto estable en la pose de reposo',()=>{
+  const base=wrappedRig(),source=wrappedRig();
+  const group=new Object3D();group.name='LUMIA_FULL_SKIN_1';group.position.set(0,3,0);source.scene.add(group);
+  const hips=new QuaternionKeyframeTrack('mixamorig:Hips.quaternion',[0,1],[0,0,0,1,0,0,0,1]);
+  const still=new VectorKeyframeTrack('LUMIA_FULL_SKIN_1.position',[0,1],[0,3,0,0,3,0]);
+  const moving=new VectorKeyframeTrack('LUMIA_FULL_SKIN_1.position',[0,1],[0,3,0,0,4,0]);
+  assert.equal(staticTrackAtRest(still,group,'position'),true);
+  const ok=inspectRigCompatibility(base.scene,source.scene,[new AnimationClip('Idle',1,[hips,still])]);
+  assert.equal(ok.ok,true,ok.reason);
+  assert.equal(ok.skippedTracks.length,1);
+  const bad=inspectRigCompatibility(base.scene,source.scene,[new AnimationClip('Idle',1,[hips,moving])]);
+  assert.equal(bad.ok,false);
+  assert.match(bad.reason,/pista de objeto/);
 });

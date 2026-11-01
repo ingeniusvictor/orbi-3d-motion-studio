@@ -71,6 +71,25 @@ const selectedRig = root => {
   }
   return selected;
 };
+const uniqueObjectByName = (root,name) => {
+  const matches=[];
+  root.traverse(node=>{ if(node.name===name)matches.push(node); });
+  return matches.length===1?matches[0]:null;
+};
+export const staticTrackAtRest = (track,node,property) => {
+  const value=node?.[property];
+  if(!value||!track.times.length)return false;
+  const width=property==='quaternion'?4:3;
+  const reference=property==='quaternion'?[value.x,value.y,value.z,value.w]:[value.x,value.y,value.z];
+  if(!reference.every(Number.isFinite)||track.values.length!==track.times.length*width)return false;
+  for(let offset=0;offset<track.values.length;offset+=width){
+    if(property==='quaternion'){
+      let dot=0;for(let j=0;j<4;j++)dot+=reference[j]*track.values[offset+j];
+      if(!near(Math.abs(dot),1))return false;
+    }else if(!reference.every((a,j)=>near(a,track.values[offset+j])))return false;
+  }
+  return true;
+};
 export const inspectRigCompatibility = (base, imported, clips) => {
   const target=selectedRig(base),source=selectedRig(imported);
   if(!target.size||!source.size)return {ok:false,reason:'Ambos archivos deben tener un esqueleto con huesos.'};
@@ -145,13 +164,26 @@ export const inspectRigCompatibility = (base, imported, clips) => {
         skippedTracks.push(track);continue;
       }
       const src=source.get(key)?.[0],dst=target.get(key)?.[0];
-      if(!src||!dst)return {ok:false,reason:'La pista «'+track.name+'» no tiene un hueso correspondiente en el personaje.'};
+      if(!src){
+        // Mixamo also animates named groups/meshes, not exclusively bones.
+        const from=uniqueObjectByName(imported,found[1]);
+        const to=uniqueObjectByName(base,found[1]);
+        if(!from||from.isBone)return {ok:false,reason:'La pista «'+track.name+'» no tiene un objeto de origen único.'};
+        if(to&&!to.isBone&&from.type===to.type){
+          mappedTracks.push([track,to,property]);valid++;continue;
+        }
+        if(staticTrackAtRest(track,from,property)){
+          skippedTracks.push(track);continue;
+        }
+        return {ok:false,reason:'La pista de objeto «'+track.name+'» mueve un elemento sin correspondencia en el modelo principal. Exporta desde el mismo rig.'};
+      }
+      if(!dst)return {ok:false,reason:'La pista «'+track.name+'» no tiene un hueso correspondiente en el personaje.'};
       mappedTracks.push([track,dst,property]);valid++;
     }
     if(!valid)return {ok:false,reason:'La animación «'+clip.name+'» no contiene canales para el personaje.'};
   }
   return {ok:true,mappedTracks,skippedTracks,advisory:
-    skippedTracks.length?'Raíz auxiliar neutra: se omitieron sus pistas sin afectar los huesos del personaje. Revisa el movimiento antes de exportar.':null};
+    skippedTracks.length?'Raíz auxiliar: se omitieron únicamente pistas estáticas de objetos auxiliares. Revisa el movimiento antes de exportar.':null};
 };
 
 /** A Mixamo 'Without Skin' FBX has animation tracks but no model to draw. */
