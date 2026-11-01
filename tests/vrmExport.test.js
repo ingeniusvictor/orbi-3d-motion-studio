@@ -10,7 +10,14 @@ function fixture() {
   scene.add(rawHip);
   const normHip=new THREE.Bone();normHip.name='normalizedHip';
   scene.add(normHip);
-  const mesh=new THREE.SkinnedMesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshStandardMaterial());
+  const geometry=new THREE.BoxGeometry(1,1,1);
+  const count=geometry.getAttribute('position').count;
+  const indices=new Uint16Array(count*4);
+  const weights=new Float32Array(count*4);
+  for(let i=0;i<count;i++)weights[i*4]=1;
+  geometry.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(indices,4));
+  geometry.setAttribute('skinWeight',new THREE.Float32BufferAttribute(weights,4));
+  const mesh=new THREE.SkinnedMesh(geometry,new THREE.MeshStandardMaterial());
   mesh.name='body';scene.add(mesh);
   mesh.bind(new THREE.Skeleton([rawHip,rawSpine]));
   const humanoid={
