@@ -52,59 +52,95 @@ const neutralChannel = (track,property) => {
   }
   return true;
 };
+const selectedRig = root => {
+  const full=boneIndex(root);
+  let best=null, bestCount=0;
+  root.traverse(node=>{
+    const bones=node.isSkinnedMesh?node.skeleton?.bones:null;
+    if(!bones?.length)return;
+    const unique=new Set(bones.filter(x=>x?.isBone).map(x=>boneKey(x.name)));
+    if(unique.size>bestCount){ bestCount=unique.size; best=bones; }
+  });
+  if(!best || bestCount<2)return full;
+  const selected=new Map();
+  for(const bone of best) {
+    if(!bone?.isBone)continue;
+    const key=boneKey(bone.name);
+    if(!selected.has(key))selected.set(key,[]);
+    if(!selected.get(key).includes(bone))selected.get(key).push(bone);
+  }
+  return selected;
+};
 export const inspectRigCompatibility = (base, imported, clips) => {
-  const target=boneIndex(base), source=boneIndex(imported);
+  const target=selectedRig(base),source=selectedRig(imported);
   if(!target.size||!source.size)return {ok:false,reason:'Ambos archivos deben tener un esqueleto con huesos.'};
-  for(const [key,nodes] of [...target,...source]){
-    if(!key||nodes.length!==1)return {ok:false,reason:'El esqueleto tiene huesos repetidos o sin nombre ('+(key||'sin nombre')+').'};
-  }
-  const sourceExtra=new Set([...source.keys()].filter(k=>!target.has(k)));
-  const targetExtra=new Set([...target.keys()].filter(k=>!source.has(k)));
-  const shared=[...source.keys()].filter(k=>target.has(k));
-  const count='(base: '+target.size+' huesos; importado: '+source.size+')';
-  if(shared.length<1)return {ok:false,reason:'No hay huesos comunes '+count};
-  const checkExtras=(extras,map,side)=>{
-    for(const key of extras){
-      if(!optionalRoots.has(key))return 'La estructura es distinta: el hueso «'+key+'» solo aparece en '+side+' '+count;
-      const root=map.get(key)[0];
-      if(shared.length<2||!shared.every(k=>ancestor(root,map.get(k)[0])))
-        return 'La raíz «'+key+'» de '+side+' no es una envoltura auxiliar del esqueleto completo.';
-      if(!neutralBone(root))
-        return 'La raíz «'+key+'» de '+side+' tiene escala o transformación propia. No se puede omitir de forma segura.';
+  // Nodes named root or armature are often duplicated by Mixamo/FBX exports.
+  // They may only be ignored if their rest transform and animation are neutral.
+  const nonHelper = index => new Set([...index.keys()].filter(k=>!optionalRoots.has(k)));
+  const sourceCore=nonHelper(source),targetCore=nonHelper(target);
+  if(!sourceCore.size||!targetCore.size)return {ok:false,reason:'No se encontró un esqueleto principal reconocible.'};
+  for(const [side,index] of [['personaje',target],['animación',source]]) {
+    for(const [key,bones] of index) {
+      if(!key)return {ok:false,reason:'Hay un hueso sin nombre en el '+side+'.'};
+      if(optionalRoots.has(key)){
+        // Multiple neutral helper roots are fine; animation tracks are checked below.
+        if(bones.length>1 && bones.some(b=>!neutralBone(b)))
+          return {ok:false,reason:'El archivo de '+side+' contiene varios huesos «'+key+'» con transformaciones distintas. No se puede elegir automáticamente uno.'};
+      } else if(bones.length!==1){
+        return {ok:false,reason:'El hueso «'+key+'» aparece repetido en '+side+'. Necesitamos un rig único para integrarlo con seguridad.'};
+      }
     }
-    return null;
-  };
-  const error=checkExtras(sourceExtra,source,'el FBX nuevo')||checkExtras(targetExtra,target,'el personaje base');
-  if(error)return {ok:false,reason:error};
-  const parentKey=(bone,extras)=>{
-    let p=boneParent(bone);
-    while(p&&extras.has(boneKey(p.name)))p=boneParent(p);
-    return p?boneKey(p.name):null;
-  };
-  for(const k of shared){
-    if(parentKey(source.get(k)[0],sourceExtra)!==parentKey(target.get(k)[0],targetExtra))
-      return {ok:false,reason:'La jerarquía del hueso «'+k+'» es distinta; no se realiza retargeting.'};
   }
+  const missing=[...sourceCore].filter(k=>!targetCore.has(k));
+  const extra=[...targetCore].filter(k=>!sourceCore.has(k));
+  if(missing.length||extra.length)return {ok:false,reason:
+    'Los esqueletos no son idénticos: '+(missing.length?'falta en base «'+missing[0]+'»; ':'')+
+    (extra.length?'falta en animación «'+extra[0]+'».':'')+' Comprueba que descargaste ambas versiones del mismo rig.'};
+  const skipOptionalParent=bone=>{
+    let parent=boneParent(bone);
+    while(parent && optionalRoots.has(boneKey(parent.name))){
+      if(!neutralBone(parent))return '__nonneutral_wrapper__';
+      parent=boneParent(parent);
+    }
+    return parent?boneKey(parent.name):null;
+  };
+  for(const key of sourceCore){
+    const src=source.get(key)[0],dst=target.get(key)[0];
+    if(skipOptionalParent(src)!==skipOptionalParent(dst))
+      return {ok:false,reason:'La jerarquía del hueso «'+key+'» no coincide.'};
+  }
+  // Additional helper roots can only be considered neutral wrappers. Do not
+  // discard animated body translations or rotations under any circumstances.
   const mappedTracks=[],skippedTracks=[];
   for(const clip of clips){
     let valid=0;
     for(const track of clip.tracks){
       const found=/^(.+)\.(position|quaternion|scale)$/.exec(track.name);
-      if(!found)return {ok:false,reason:'Canal no compatible: '+track.name};
-      const k=boneKey(found[1]);
-      if(sourceExtra.has(k)){
-        if(!neutralChannel(track,found[2]))return {ok:false,reason:'La pista «'+track.name+'» mueve la raíz adicional. No es seguro ignorarla.'};
+      if(!found)return {ok:false,reason:'Canal de animación no compatible: '+track.name};
+      const key=boneKey(found[1]),property=found[2];
+      if(optionalRoots.has(key)){
+        const src=source.get(key)||[],dst=target.get(key)||[];
+        if(src.length===1 && dst.length===1 &&
+           skipOptionalParent(src[0])===skipOptionalParent(dst[0]) &&
+           src[0].quaternion.angleTo(dst[0].quaternion)<0.01 &&
+           src[0].position.distanceTo(dst[0].position)<0.001 &&
+           src[0].scale.distanceTo(dst[0].scale)<0.001){
+          mappedTracks.push([track,dst[0],property]);valid++;continue;
+        }
+        if(!neutralChannel(track,property)){
+          return {ok:false,reason:'La pista «'+track.name+'» mueve una raíz duplicada o distinta. Para conservar el movimiento correctamente se necesita el mismo rig exportado de Mixamo.'};
+        }
+        // Neutral channels on redundant wrappers are safe to discard.
         skippedTracks.push(track);continue;
       }
-      if(!source.has(k))return {ok:false,reason:'Pista sin hueso de origen: '+track.name};
-      const destination=target.get(k)?.[0];
-      if(!destination)return {ok:false,reason:'Falta hueso en el personaje base: '+k};
-      mappedTracks.push([track,destination,found[2]]);valid++;
+      const src=source.get(key)?.[0],dst=target.get(key)?.[0];
+      if(!src||!dst)return {ok:false,reason:'La pista «'+track.name+'» no tiene un hueso correspondiente en el personaje.'};
+      mappedTracks.push([track,dst,property]);valid++;
     }
-    if(!valid)return {ok:false,reason:'La animación no contiene movimiento aplicable al personaje base.'};
+    if(!valid)return {ok:false,reason:'La animación «'+clip.name+'» no contiene canales para el personaje.'};
   }
-  return {ok:true,mappedTracks,skippedTracks,advisory:sourceExtra.size||targetExtra.size?
-    'Raíz auxiliar neutra ignorada. Comprueba visualmente el movimiento antes de exportar.':null};
+  return {ok:true,mappedTracks,skippedTracks,advisory:
+    skippedTracks.length?'Se omitieron solo pistas neutras de raíces auxiliares. Revisa el movimiento antes de exportar.':null};
 };
 
 /** A Mixamo 'Without Skin' FBX has animation tracks but no model to draw. */

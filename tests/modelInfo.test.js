@@ -116,3 +116,36 @@ test('rechaza root con escala o sin ser ancestro de todo el rig',()=>{
   source.scene.add(source.hips);
   assert.equal(inspectRigCompatibility(base.scene,source.scene,[clip]).ok,false);
 });
+
+test('root repetido neutro en FBX se ignora con el mismo rig corporal',()=>{
+  const scene=wrappedRig(),src=wrappedRig();
+  const helperA=new Bone();helperA.name='root';
+  const helperB=new Bone();helperB.name='root';
+  src.scene.add(helperA,helperB);
+  const original=new AnimationClip('Idle',1,[
+    new QuaternionKeyframeTrack('mixamorig:Hips.quaternion',[0,1],[0,0,0,1,0,0,0,1])
+  ]);
+  const match=inspectRigCompatibility(scene.scene,src.scene,[original]);
+  assert.equal(match.ok,true,match.reason);
+  assert.equal(match.mappedTracks.length,1);
+});
+test('root repetido animado no se integra silenciosamente',()=>{
+  const scene=wrappedRig(),src=wrappedRig();
+  const helperA=new Bone();helperA.name='root';
+  const helperB=new Bone();helperB.name='root';
+  src.scene.add(helperA,helperB);
+  const clip=new AnimationClip('Move',1,[
+    new QuaternionKeyframeTrack('mixamorig:Hips.quaternion',[0,1],[0,0,0,1,0,0,0,1]),
+    new QuaternionKeyframeTrack('root.quaternion',[0,1],[0,0,0,1,0.1,0,0,0.994987])
+  ]);
+  const match=inspectRigCompatibility(scene.scene,src.scene,[clip]);
+  assert.equal(match.ok,false);
+  assert.match(match.reason,/raíz duplicada/);
+});
+test('raíz neutra repetida en destino no bloquea una animación real',()=>{
+  const base=wrappedRig(),src=wrappedRig();
+  for(let i=0;i<3;i++){ const r=new Bone();r.name='root';base.scene.add(r); }
+  const clip=new AnimationClip('Idle',1,[new QuaternionKeyframeTrack('mixamorig:Hips.quaternion',[0,1],[0,0,0,1,0,0,0,1])]);
+  const match=inspectRigCompatibility(base.scene,src.scene,[clip]);
+  assert.equal(match.ok,true,match.reason);
+});

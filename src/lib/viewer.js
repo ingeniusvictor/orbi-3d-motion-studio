@@ -264,7 +264,8 @@ export class MotionViewer {
   getInfo() { return this.model ? inspect(this.model,this.clips) : EMPTY_INFO; }
   async addAnimations(files) {
     if (!this.model) throw new Error('Primero carga el personaje base.');
-    if (this.vrm) throw new Error('La integración y exportación de VRM no están habilitadas en esta versión. Puedes visualizarlo, inspeccionarlo y reproducir sus animaciones.');
+    // VRM is also rigged: accept FBX only when its raw bone hierarchy matches.
+    // No automatic retargeting of different rigs.
     const result = [];
     for (const file of files) {
       if(extensionOf(file.name)!=='fbx') {result.push({name:file.name,ok:false,reason:'Para integrar movimientos selecciona archivos FBX.'});continue;}
@@ -294,6 +295,9 @@ export class MotionViewer {
           named.push({name,clip,source:'Mixamo / FBX'});
         }
         this.clips.push(...named);
+        // three-vrm normally overwrites raw human bones from normalized proxies.
+        // FBX channels animate the raw bones, so disable that copy for previews.
+        if (this.vrm?.humanoid) this.vrm.humanoid.autoUpdateHumanBones = false;
         result.push({name:file.name,ok:true,count:named.length,warning:match.advisory});
       } catch(error) {
         result.push({name:file.name,ok:false,reason:error.message||String(error)});
