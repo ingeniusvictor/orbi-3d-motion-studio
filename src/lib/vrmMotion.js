@@ -82,6 +82,13 @@ export function adaptFbxToVrm(sourceRoot,vrm,original) {
   }
   const tracks=[];
   let skipped=0;
+  const omittedExternalMotion=[];
+  const isCharacterGeometry = obj => {
+    if(obj?.isSkinnedMesh) return true;
+    let found=false;
+    obj?.traverse?.(child=>{if(child.isSkinnedMesh)found=true;});
+    return found;
+  };
   const isVrm0=vrm.meta?.metaVersion==='0';
   const sourceHips=[...roles.values()].find(x=>x.role==='hips')?.node;
   const sourceHeight=Math.abs(sourceHips?.position.y||0);
@@ -99,8 +106,16 @@ export function adaptFbxToVrm(sourceRoot,vrm,original) {
       const obj=named.get(name);
       // A constant mesh/group transform is just FBX export metadata.
       if(obj?.length===1 && staticTrackAtRest(track,obj[0],property)){skipped++;continue;}
-      if(bones.has(boneKey(name))){skipped++;continue;} // Fingers/twist/face outside humanoid map
-      throw new Error('La pista «'+track.name+'» anima un objeto externo al humanoide. No se puede adaptar automáticamente sin perder ese desplazamiento.');
+      if(bones.has(boneKey(name))){skipped++;continue;} // Unmapped secondary bone channels
+      if(obj?.length===1 && isCharacterGeometry(obj[0])){
+        // Mixamo With Skin can also keyframe the skinned mesh or its wrapper.
+        // VRM has no equivalent of this object's motion. Preview ONLY the
+        // transferred humanoid channels, with an explicit loss warning.
+        omittedExternalMotion.push(track.name);
+        skipped++;
+        continue;
+      }
+      throw new Error('La pista «'+track.name+'» anima un objeto externo al humanoide que no corresponde a la geometría del personaje. No se puede convertir automáticamente.');
     }
     const {role,node,target}=roleInfo;
     if(property==='quaternion'){
@@ -138,8 +153,12 @@ export function adaptFbxToVrm(sourceRoot,vrm,original) {
   }
   return {
     clip:new THREE.AnimationClip(original.name||'Mixamo / VRM',original.duration,tracks),
-    warning:'Adaptación VRM experimental: '+mappedRoles.size+' zonas animadas; '+skipped+' pistas auxiliares omitidas. Comprueba postura, manos y desplazamientos antes de utilizarla.',
+    warning:(omittedExternalMotion.length
+      ? 'PREVISUALIZACIÓN APROXIMADA: se omitieron '+omittedExternalMotion.length+' pistas con movimiento propio de la malla FBX ('+omittedExternalMotion.slice(0,3).join(', ')+(omittedExternalMotion.length>3?', …':'')+'). Ese desplazamiento NO está integrado al VRM; no exportes ni utilices como animación definitiva. '
+      : 'Previsualización VRM experimental. ')+
+      mappedRoles.size+' zonas humanoides transferidas; '+skipped+' pistas no transferidas. Revisa postura, manos y desplazamientos.',
     mappedRoles:mappedRoles.size,
     skipped,
+    omittedExternalMotion,
   };
 }

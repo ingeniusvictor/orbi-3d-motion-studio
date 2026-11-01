@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Bone, Object3D, AnimationClip, QuaternionKeyframeTrack, VectorKeyframeTrack } from 'three';
+import { Bone, Object3D, AnimationClip, QuaternionKeyframeTrack, VectorKeyframeTrack, Group, SkinnedMesh, BufferGeometry, MeshBasicMaterial } from 'three';
+const THREE_FOR_TEST = { Group, SkinnedMesh, BufferGeometry, MeshBasicMaterial };
 import { adaptFbxToVrm } from '../src/lib/vrmMotion.js';
 
 const roleNames = {
@@ -85,4 +86,36 @@ test('VRM: no acepta un FBX sin caderas, torso y extremidades reconocidas',()=>{
   const {vrm}=fixtures();
   const track=new QuaternionKeyframeTrack('foo.quaternion',[0,1],[0,0,0,1,0,0,0,1]);
   assert.throws(()=>adaptFbxToVrm(source,vrm,new AnimationClip('X',1,[track])),/estructuras humanoides/);
+});
+
+
+test('VRM: permite vista aproximada cuando el FBX anima su malla SkinnedMesh',()=>{
+  const {source,vrm,tracks}=fixtures();
+  const { SkinnedMesh, BufferGeometry, MeshBasicMaterial } = THREE_FOR_TEST;
+  const mesh=new SkinnedMesh(new BufferGeometry(),new MeshBasicMaterial());
+  mesh.name='LUMIA_FULL_SKIN_1';
+  source.add(mesh);
+  tracks.push(new VectorKeyframeTrack('LUMIA_FULL_SKIN_1.position',[0,1],[0,0,0, 1,0,0]));
+  const out=adaptFbxToVrm(source,vrm,new AnimationClip('Idle',1,tracks));
+  assert.equal(out.mappedRoles,7);
+  assert.deepEqual(out.omittedExternalMotion,['LUMIA_FULL_SKIN_1.position']);
+  assert.match(out.warning,/PREVISUALIZACIÓN APROXIMADA/);
+  assert.match(out.warning,/NO está integrado al VRM/);
+  assert.equal(out.clip.tracks.length,7);
+});
+test('VRM: permite vista aproximada cuando el FBX anima grupo de malla',()=>{
+  const {source,vrm,tracks}=fixtures();
+  const { Group, SkinnedMesh, BufferGeometry, MeshBasicMaterial } = THREE_FOR_TEST;
+  const group=new Group();group.name='CharacterWrapper';
+  group.add(new SkinnedMesh(new BufferGeometry(),new MeshBasicMaterial()));
+  source.add(group);
+  tracks.push(new VectorKeyframeTrack('CharacterWrapper.position',[0,1],[0,0,0, 2,0,0]));
+  const out=adaptFbxToVrm(source,vrm,new AnimationClip('Walk',1,tracks));
+  assert.equal(out.omittedExternalMotion.length,1);
+});
+test('VRM: un objeto ajeno al personaje con movimiento sigue bloqueado',()=>{
+  const {source,vrm,tracks}=fixtures();
+  const group=new Object3D();group.name='CameraRig';source.add(group);
+  tracks.push(new VectorKeyframeTrack('CameraRig.position',[0,1],[0,0,0, 1,0,0]));
+  assert.throws(()=>adaptFbxToVrm(source,vrm,new AnimationClip('Idle',1,tracks)),/objeto externo/);
 });

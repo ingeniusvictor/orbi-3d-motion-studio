@@ -62,3 +62,10 @@ Prueba manual pendiente: abrir personaje Mixamo **With Skin** (o su GLB), import
 - Mapea caderas, columna, cabeza, brazos y piernas a huesos normalizados de VRM. No cubre cualquier rig ni garantiza movimientos idénticos.
 - Nunca exporta desde VRM: sus metadatos y expresiones necesitan tratamiento específico.
 - Verificar visualmente con archivos reales; la interfaz informa pistas omitidas y fallos.
+
+
+## MOTION-02F — FBX con movimiento de malla y vista VRM aproximada
+- Un FBX With Skin puede traer pistas de `SkinnedMesh` o del grupo que la contiene (por ejemplo `LUMIA_FULL_SKIN_1.position`). El rig VRM normalizado no tiene un equivalente directo de dichas transformaciones.
+- La previsualización del VRM puede transferir únicamente las pistas humanoides y omitir pistas de movimiento de la malla FBX, **con advertencia explícita**. No debe interpretarse como integración fiel ni ofrecerse exportación VRM.
+- Solo se permite esta omisión de forma automática para un objeto identificable como malla skinned o grupo que la contiene, con al menos una animación humanoide válida. Las pistas animadas de otros objetos externos siguen produciendo error.
+- Confirmar la postura y el desplazamiento con modelos reales; esta fase no realiza exportación ni conserva movimientos externos desconocidos.
