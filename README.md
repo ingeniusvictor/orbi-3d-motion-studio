@@ -87,3 +87,5 @@ Prueba manual pendiente: abrir personaje Mixamo **With Skin** (o su GLB), import
 - La conversión FBX requiere Blender local; el navegador no promete generar FBX nativo y no se añade un backend de pago.
 - Formato final: GLB directo; FBX con el script gratuito tras exportar GLB; VRM final nativo pendiente por necesidad de metadatos/extensiones, expresiones y restricciones propias de VRM.
 - Tutorial de nueve pasos integrado; no se modifica la visualización o la integración ya verificadas.
+
+**Conversión FBX final:** el script acepta `--with-animations` después del GLB para solicitar a Blender exportar acciones animadas. Para el FBX ligero de Mixamo NO debe indicarse. La exportación de varios clips puede variar según la versión de Blender, por lo que el usuario debe volver a importar el FBX final y comprobar todos los movimientos.

@@ -9,6 +9,7 @@ export const blenderConvertScript = () => [
   'source = os.path.abspath(argv[0])',
   'if not os.path.isfile(source): raise RuntimeError("No existe: " + source)',
   'destination = os.path.splitext(source)[0] + ".fbx"',
+  'keep_animations = "--with-animations" in argv[1:]',
   'bpy.ops.object.select_all(action="SELECT")',
   'bpy.ops.object.delete(use_global=False)',
   'bpy.ops.import_scene.gltf(filepath=source)',
@@ -20,9 +21,12 @@ export const blenderConvertScript = () => [
   '    raise RuntimeError("No hay mallas: Mixamo necesita un personaje visible.")',
   'bpy.ops.export_scene.fbx(filepath=destination, use_selection=False,',
   '    object_types={"ARMATURE","MESH"}, add_leaf_bones=False,',
-  '    bake_anim=False, use_mesh_modifiers=False,',
+  '    bake_anim=keep_animations, bake_anim_use_all_actions=keep_animations,',
+  '    bake_anim_use_nla_strips=False, bake_anim_force_startend_keying=False,',
+  '    use_mesh_modifiers=False,',
   '    axis_forward="-Z", axis_up="Y", path_mode="AUTO")',
   'print("ORBI FBX preparado:", destination)',
+  'print("Exportación de animaciones:", "activada" if keep_animations else "desactivada")',
   ''
 ].join('\n');
 export const blenderManualInstructions = [

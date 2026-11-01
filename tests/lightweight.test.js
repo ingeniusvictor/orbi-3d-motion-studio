@@ -81,5 +81,7 @@ test('the user receives a real Blender FBX script, not a renamed GLB',()=>{
   assert.match(py,/import_scene.gltf/);
   assert.match(py,/export_scene.fbx/);
   assert.match(py,/add_leaf_bones=False/);
-  assert.match(py,/bake_anim=False/);
+  assert.match(py,/keep_animations/);
+  assert.match(py,/bake_anim=keep_animations/);
+  assert.match(py,/bake_anim_use_all_actions/);
 });
