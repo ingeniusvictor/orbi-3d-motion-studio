@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Object3D, Bone, AnimationClip, QuaternionKeyframeTrack } from 'three';
-import { extensionOf, isSupportedModel, formatBytes, uniqueClipName, boneKey, inspectRigCompatibility } from '../src/lib/modelInfo.js';
+import { extensionOf, isSupportedModel, formatBytes, uniqueClipName, boneKey, inspectRigCompatibility, summarizeRenderableGeometry } from '../src/lib/modelInfo.js';
 
-test('admite modelos GLB, glTF y FBX sin distinguir mayúsculas', () => {
+test('admite modelos GLB, glTF, FBX y VRM sin distinguir mayúsculas', () => {
   assert.equal(isSupportedModel('Lumia.GLB'), true);
   assert.equal(isSupportedModel('personaje.gltf'), true);
   assert.equal(isSupportedModel('idle.FBX'), true);
+  assert.equal(isSupportedModel('avatar.VRM'), true);
   assert.equal(isSupportedModel('foto.png'), false);
   assert.equal(extensionOf('archivo.sin.modelo.obj'), 'obj');
 });
@@ -37,4 +38,24 @@ test('rechaza huesos ausentes y jerarquías incompletas', () => {
 test('rechaza clips con canales sin hueso correspondiente', () => {
   const unsupported = new AnimationClip('Scale', 1, [new QuaternionKeyframeTrack('unknown.quaternion',[0,1],[0,0,0,1,0,0,0,1])]);
   assert.equal(inspectRigCompatibility(model(['Hips']), model(['Hips']), [unsupported]).ok, false);
+});
+
+test('distingue FBX solo de animación de un personaje con geometría', () => {
+  const root = new Object3D();
+  root.add(new Bone());
+  assert.deepEqual(summarizeRenderableGeometry(root), {
+    meshes:0, drawableMeshes:0, vertices:0, hasGeometry:false,
+  });
+});
+test('detecta modelos con mallas ocultas y respeta jerarquía de visibilidad', async () => {
+  const { Mesh, BufferGeometry, Float32BufferAttribute } = await import('three');
+  const root = new Object3D();
+  const geo = new BufferGeometry();
+  geo.setAttribute('position',new Float32BufferAttribute([0,0,0, 1,0,0, 0,1,0],3));
+  root.add(new Mesh(geo));
+  assert.equal(summarizeRenderableGeometry(root).drawableMeshes, 1);
+  root.visible = false;
+  const result = summarizeRenderableGeometry(root);
+  assert.equal(result.hasGeometry, true);
+  assert.equal(result.drawableMeshes, 0);
 });

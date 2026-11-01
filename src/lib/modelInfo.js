@@ -1,4 +1,4 @@
-export const SUPPORTED_EXTENSIONS = new Set(['glb', 'gltf', 'fbx']);
+export const SUPPORTED_EXTENSIONS = new Set(['glb', 'gltf', 'fbx', 'vrm']);
 export const extensionOf = (name = '') => name.split('.').pop()?.toLowerCase() || '';
 export const isSupportedModel = (name) => SUPPORTED_EXTENSIONS.has(extensionOf(name));
 export const formatBytes = (value) => {
@@ -60,4 +60,22 @@ export const inspectRigCompatibility = (base, imported, clips) => {
   }
   if (!tracks.length) return {ok:false, reason:'No hay pistas de animación óseas compatibles.'};
   return {ok:true, mappedTracks:tracks};
+};
+
+/** A Mixamo 'Without Skin' FBX has animation tracks but no model to draw. */
+export const summarizeRenderableGeometry = root => {
+  let meshes = 0, drawableMeshes = 0, vertices = 0;
+  root?.traverse?.(node => {
+    if (!node.isMesh) return;
+    meshes += 1;
+    const count = node.geometry?.getAttribute?.('position')?.count || 0;
+    vertices += count;
+    if (count && node.visible && node.layers?.isEnabled?.(0) !== false) {
+      // Parent visibility is relevant: FBX sometimes hides entire hierarchies.
+      let visible = true, parent = node.parent;
+      while (parent) { if (!parent.visible) { visible = false; break; } parent = parent.parent; }
+      if (visible) drawableMeshes += 1;
+    }
+  });
+  return { meshes, drawableMeshes, vertices, hasGeometry: vertices > 0 };
 };

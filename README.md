@@ -1,54 +1,37 @@
 # ORBI 3D Motion Studio
 
-> Tus modelos 3D y sus animaciones, en un solo lugar. Visualiza, inspecciona y reproduce.
+Tu espacio para visualizar, inspeccionar y reproducir modelos 3D gratuitamente.
 
-**MOTION-01 — beta funcional** · React + Vite + Three.js · procesamiento local en el navegador
+Sitio: https://orbi-3d-motion-studio.vercel.app/
+Repositorio: https://github.com/ingeniusvictor/orbi-3d-motion-studio
 
-**Sitio:** https://orbi-3d-motion-studio.vercel.app/  
-**Rama de desarrollo:** `feat/motion-01-viewer-inspector`  
-**PR de revisión:** https://github.com/ingeniusvictor/orbi-3d-motion-studio/pull/1
-
-## ¿Qué hace?
-
-- Abre **GLB**, **glTF** (+ archivos .bin / texturas cuando correspondan) y **FBX**.
-- Permite rotar, acercar, centrar la cámara, ver cuadrícula, wireframe y esqueleto.
-- Inspecciona mallas, vértices, triángulos, materiales, texturas, huesos y jerarquía.
-- Detecta y reproduce clips integrados con pausa y velocidad ajustable.
-- Acepta **FBX del mismo rig** y rechaza nombres o jerarquías de huesos distintos.
-- Exporta una copia GLB con clips y verifica que puede volver a abrirse.
-
-**Importante:** no crea esqueletos, no hace rigging, no hace retargeting, no corrige poses ni reemplaza Blender o Mixamo. Que coincidan los huesos es una condición necesaria, pero no garantiza que dos modelos tengan una pose de reposo idéntica; comprueba siempre los movimientos visualmente antes de utilizar la exportación.
-
-## Cómo usarlo
-
-1. Pulsa **Cargar modelo** o arrastra un GLB, glTF o FBX al visor.
-2. Si cargas un glTF con recursos externos, selecciona al mismo tiempo el .gltf, el .bin y las texturas.
-3. Inspecciona la composición o selecciona un clip en **Biblioteca de animaciones**.
-4. Opcional: prepara en Mixamo movimientos del **mismo personaje base**, descárgalos en FBX (preferiblemente *Without Skin*) e impórtalos con **Añadir animaciones FBX**.
-5. Si la validación permite importarlos y su previsualización se ve correcta, pulsa **Exportar GLB integrado**.
-
-Los archivos se abren mediante URLs locales del navegador; no se almacenan en un servidor de ORBI. Se recomienda trabajar con archivos de tamaño moderado para no agotar la memoria del dispositivo.
+## Funciones (MOTION-01 beta)
+- Importación GLB, glTF (+ recursos), FBX
+- Cámara orbital, esqueleto, cuadrícula y wireframe
+- Estadísticas y estructura 3D
+- Biblioteca de animaciones con controles
+- Importación de FBX de un esqueleto estrictamente compatible (experimental)
+- Exportación de GLB con verificación de lectura
 
 ## Desarrollo
-
-Requiere Node.js 22 o compatible con Vite 6.
-
-```bash
 npm install
 npm run dev
 npm test
 npm run build
-npm run preview
-```
 
-El pipeline de GitHub Actions ejecuta `npm test` y `npm run build` en cada PR. La validación con los GLB/FBX reales de LUMIA y Mixamo debe realizarse en navegador antes de considerar certificada la integración.
+No efectúa rigging, ni retargeting. Solo integra movimientos basados en la misma estructura y nombres de huesos. Comprueba siempre visualmente el resultado.
 
-## Seguridad, licencias y alcance
+Los archivos se procesan en tu navegador y no se suben a servidores ORBI. Se mantiene el modelo original intacto.
 
-- Código separado de LUMIA Motion; no cambia sus archivos.
-- Los modelos originales no son alterados: cada exportación crea un archivo nuevo.
-- No subas contenidos de terceros sin los derechos necesarios.
-- Mixamo es un servicio de Adobe ajeno a ORBI; las animaciones se preparan allí y se importan por el usuario.
-- Alojamiento de prueba en Vercel Hobby sujeto a las condiciones de uso del plan.
+Proyecto ORBI Ecosystem · 2026.
 
-Proyecto del ecosistema **ORBI**, 2026.
+
+## MOTION-02A — Corrección FBX y visualización VRM
+
+- FBX a escala de centímetros: se eliminó la niebla a distancia fija que los podía ocultar y se mejoró el encuadre automático con FOV horizontal y vertical.
+- FBX «Without Skin»: son **animaciones sin malla**. El visor explica por qué no aparece el personaje y recomienda cargar el personaje «With Skin» antes de agregar los movimientos.
+- VRM 0.x / 1.0: visor dedicado mediante `@pixiv/three-vrm`; se preserva la lógica de materiales MToon, expresiones y simulación VRM durante la reproducción.
+- Por seguridad, exportación e integración FBX **no disponibles** sobre VRM hasta poder conservar correctamente sus metadatos; sí se pueden abrir e inspeccionar y reproducir clips existentes.
+- Solo el cliente procesa los modelos, sin almacenarlos en servidores.
+
+Validación: ejecutar `npm install`, `npm test` y `npm run build`. Después comprobar visualmente con un FBX *With Skin* real de Mixamo, un FBX *Without Skin* y archivos VRM 0.x y 1.0.

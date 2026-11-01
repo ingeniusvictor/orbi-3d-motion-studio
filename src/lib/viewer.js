@@ -3,7 +3,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
-import { extensionOf, formatBytes, inspectRigCompatibility, uniqueClipName } from './modelInfo.js';
+import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+import { extensionOf, formatBytes, inspectRigCompatibility, uniqueClipName, summarizeRenderableGeometry } from './modelInfo.js';
 
 const EMPTY_INFO = { meshes: 0, vertices: 0, triangles: 0, materials: 0, bones: 0, animations: 0, nodes: 0, textures: 0, hierarchy: [] };
 
@@ -61,17 +62,33 @@ function makeManager(files) {
 
 async function loadObject(files) {
   const list = Array.from(files);
-  const primary = list.find(file => ['glb','gltf','fbx'].includes(extensionOf(file.name)));
-  if (!primary) throw new Error('Selecciona un modelo .glb, .gltf o .fbx.');
+  const primary = list.find(file => ['glb','gltf','fbx','vrm'].includes(extensionOf(file.name)));
+  if (!primary) throw new Error('Selecciona un modelo .glb, .gltf, .fbx o .vrm.');
   const {manager, urls, resources} = makeManager(list);
   try {
     const extension = extensionOf(primary.name);
     const loader = extension === 'fbx' ? new FBXLoader(manager) : new GLTFLoader(manager);
+    if (extension !== 'fbx') loader.register(parser => new VRMLoaderPlugin(parser));
     const source = resources.get(primary.name.toLowerCase());
     const loaded = await loader.loadAsync(source);
-    const model = extension === 'fbx' ? loaded : loaded.scene;
-    const clips = (extension === 'fbx' ? loaded.animations : loaded.animations || []).map(x => x.clone());
-    return {model, clips, name:primary.name, bytes: list.reduce((n,file) => n+file.size,0), format:extension.toUpperCase()};
+    const vrm = extension === 'fbx' ? null : loaded.userData?.vrm || null;
+    if (extension === 'vrm' && !vrm) {
+      throw new Error('El archivo usa la extensión .vrm, pero no contiene metadatos VRM compatibles.');
+    }
+    if (vrm) VRMUtils.rotateVRM0(vrm);
+    const model = vrm?.scene || (extension === 'fbx' ? loaded : loaded.scene);
+    const clips = (loaded.animations || []).map(clip => clip.clone());
+    const geometry = summarizeRenderableGeometry(model);
+    if (!geometry.hasGeometry) {
+      throw new Error(clips.length
+        ? 'Este archivo contiene animaciones pero no una malla visible. Los FBX de Mixamo descargados «Without Skin» son solo movimientos: carga primero el personaje FBX «With Skin» o su GLB y luego usa «Añadir animaciones FBX».'
+        : 'El archivo no contiene geometría 3D que pueda mostrarse. Comprueba que exportaste la malla del personaje.');
+    }
+    if (!geometry.drawableMeshes) {
+      throw new Error('El archivo contiene mallas, pero están ocultas en la jerarquía. Hazlas visibles antes de exportar desde tu editor 3D.');
+    }
+    model.updateWorldMatrix(true, true);
+    return {model, clips, vrm, name:primary.name, bytes: list.reduce((n,file) => n+file.size,0), format:vrm ? 'VRM' : extension.toUpperCase()};
   } catch(error) {
     throw new Error(`No se pudo abrir ${primary.name}. Si utilizas .gltf, selecciona también sus .bin y texturas. Detalle: ${error?.message || error}`);
   } finally {
@@ -86,7 +103,9 @@ export class MotionViewer {
     this.notify = notify;
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color('#0b1220');
-    this.scene.fog = new THREE.Fog('#0b1220', 15, 90);
+    // Fixed-distance fog made centimeter-scale FBX models vanish entirely.
+    // Keep the clean dark backdrop and render all model scales without fog.
+    this.scene.fog = null;
     this.camera = new THREE.PerspectiveCamera(38, 1, 0.01, 2000);
     this.camera.position.set(3,2.5,5);
     this.renderer = new THREE.WebGLRenderer({antialias:true, alpha:false, powerPreference:'high-performance'});
@@ -113,6 +132,7 @@ export class MotionViewer {
     this.clock = new THREE.Clock();
     this.clips = [];
     this.model = null;
+    this.vrm = null;
     this.mixer = null;
     this.current = null;
     this.playing = false;
@@ -132,6 +152,8 @@ export class MotionViewer {
       this.raf = requestAnimationFrame(this.animate);
       const delta = Math.min(this.clock.getDelta(),0.1);
       if (this.mixer && this.playing) this.mixer.update(delta);
+      // VRM spring bones, constraints and expressions require an update each frame.
+      this.vrm?.update(delta);
       this.controls.update();
       this.renderer.render(this.scene,this.camera);
     };
@@ -150,24 +172,29 @@ export class MotionViewer {
       this.controls.update();
       return;
     }
-    const box = new THREE.Box3().setFromObject(this.model);
-    if (box.isEmpty()) {
+    this.model.updateWorldMatrix(true, true);
+    const box = new THREE.Box3().setFromObject(this.model, true);
+    if (box.isEmpty() || !Number.isFinite(box.min.x) || !Number.isFinite(box.max.x) ||
+      !Number.isFinite(box.min.y) || !Number.isFinite(box.max.y) ||
+      !Number.isFinite(box.min.z) || !Number.isFinite(box.max.z)) {
       this.camera.position.set(3,2.5,5); this.controls.target.set(0,0,0); this.controls.update(); return;
     }
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
-    const radius = Math.max(size.length(), 0.2);
-    this.camera.near = Math.max(radius / 1000, 0.001);
-    this.camera.far = Math.max(radius * 100, 100);
+    const radius = Math.max(size.length() / 2, 0.001);
+    const vfov = THREE.MathUtils.degToRad(this.camera.fov);
+    const hfov = 2 * Math.atan(Math.tan(vfov / 2) * this.camera.aspect);
+    const distance = Math.max(radius / Math.sin(vfov / 2), radius / Math.sin(hfov / 2), 0.02) * 1.35;
+    this.camera.near = Math.max(distance / 2000, 0.00001);
+    this.camera.far = Math.max(distance * 100, radius * 100, 100);
     this.camera.updateProjectionMatrix();
-    const distance = Math.max(radius/(2*Math.tan(THREE.MathUtils.degToRad(this.camera.fov)/2)) * 1.15, 1);
-    this.camera.position.set(center.x + distance*0.55,center.y + distance*0.28,center.z + distance);
+    this.camera.position.set(center.x + distance * 0.24, center.y + distance * 0.15, center.z + distance);
     this.controls.target.copy(center);
-    this.controls.minDistance = Math.max(radius*0.06,0.02);
-    this.controls.maxDistance = Math.max(radius*30,50);
+    this.controls.minDistance = Math.max(radius * 0.05, 0.0005);
+    this.controls.maxDistance = Math.max(distance * 40, 50);
     this.controls.update();
     this.grid.position.y = box.min.y-0.015;
-    this.grid.scale.setScalar(Math.max(radius/5,0.1));
+    this.grid.scale.setScalar(Math.max(radius / 5, 0.001));
   }
   async open(files) {
     const request = ++this.loadSequence;
@@ -175,16 +202,17 @@ export class MotionViewer {
     if (this.disposed || request !== this.loadSequence) return null;
     this.clearModel();
     this.model = loaded.model;
+    this.vrm = loaded.vrm;
     this.model.name ||= loaded.name.replace(/\.[^.]+$/,'');
     this.lastFilename = loaded.name;
     this.lastFormat = loaded.format;
     this.scene.add(this.model);
     this.clips = loaded.clips.map((clip,index)=>({name:uniqueClipName(loaded.clips.slice(0,index).map(c=>c.name),clip.name || `Animación ${index+1}`),clip,source:'Original'}));
     this.mixer = new THREE.AnimationMixer(this.model);
+    if (this.clips.length) { this.play(0); this.mixer.update(0); }
     this.resetCamera();
     this.setSkeletonVisible(this.showBones);
     this.setWireframe(this.wireframe);
-    if (this.clips.length) this.play(0);
     const info = inspect(this.model,this.clips);
     this.notify();
     return {...info, filename:loaded.name, bytes:loaded.bytes, format:loaded.format};
@@ -192,8 +220,12 @@ export class MotionViewer {
   clearModel() {
     if (this.mixer) { this.mixer.stopAllAction(); this.mixer.uncacheRoot(this.model); }
     if (this.skeleton) {this.scene.remove(this.skeleton);this.skeleton.dispose(); this.skeleton=null;}
-    if (this.model) this.scene.remove(this.model);
+    if (this.model) {
+      this.scene.remove(this.model);
+      VRMUtils.deepDispose(this.model);
+    }
     this.model = null;
+    this.vrm = null;
     this.mixer = null;
     this.clips = [];
     this.current = null;
@@ -236,6 +268,7 @@ export class MotionViewer {
   getInfo() { return this.model ? inspect(this.model,this.clips) : EMPTY_INFO; }
   async addAnimations(files) {
     if (!this.model) throw new Error('Primero carga el personaje base.');
+    if (this.vrm) throw new Error('La integración y exportación de VRM no están habilitadas en esta versión. Puedes visualizarlo, inspeccionarlo y reproducir sus animaciones.');
     const result = [];
     for (const file of files) {
       if(extensionOf(file.name)!=='fbx') {result.push({name:file.name,ok:false,reason:'Para integrar movimientos selecciona archivos FBX.'});continue;}
@@ -271,6 +304,7 @@ export class MotionViewer {
   }
   async exportGLB() {
     if (!this.model) throw new Error('Primero carga un modelo.');
+    if (this.vrm) throw new Error('VRM está disponible para visualización e inspección. Exportarlo como GLB podría perder las funciones y materiales VRM; por seguridad, la exportación VRM no está disponible en esta versión.');
     // The built-in AnimationClips and compatible imported clips are exported together.
     const exporter = new GLTFExporter();
     const buffer = await exporter.parseAsync(this.model,{
