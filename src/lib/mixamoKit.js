@@ -1,0 +1,38 @@
+// Blender is the reliable local FBX exporter; browsers cannot run it.
+// The generated script works with a light .glb or an integrated final .glb.
+export const blenderConvertScript = () => [
+  '# ORBI 3D Motion Studio - GLB a FBX binario con Blender',
+  '# Uso: blender --background --python orbi-convert-fbx.py -- "mi-personaje.glb"',
+  'import bpy, os, sys',
+  'argv = sys.argv[sys.argv.index("--")+1:] if "--" in sys.argv else []',
+  'if len(argv) < 1: raise RuntimeError("Indica el GLB de entrada después de --")',
+  'source = os.path.abspath(argv[0])',
+  'if not os.path.isfile(source): raise RuntimeError("No existe: " + source)',
+  'destination = os.path.splitext(source)[0] + ".fbx"',
+  'bpy.ops.object.select_all(action="SELECT")',
+  'bpy.ops.object.delete(use_global=False)',
+  'bpy.ops.import_scene.gltf(filepath=source)',
+  'for obj in list(bpy.data.objects):',
+  '    if obj.type not in {"ARMATURE", "MESH"}: bpy.data.objects.remove(obj, do_unlink=True)',
+  'if not any(obj.type=="ARMATURE" for obj in bpy.data.objects):',
+  '    raise RuntimeError("No hay armature. El archivo puede haber perdido su esqueleto.")',
+  'if not any(obj.type=="MESH" for obj in bpy.data.objects):',
+  '    raise RuntimeError("No hay mallas: Mixamo necesita un personaje visible.")',
+  'bpy.ops.export_scene.fbx(filepath=destination, use_selection=False,',
+  '    object_types={"ARMATURE","MESH"}, add_leaf_bones=False,',
+  '    bake_anim=False, use_mesh_modifiers=False,',
+  '    axis_forward="-Z", axis_up="Y", path_mode="AUTO")',
+  'print("ORBI FBX preparado:", destination)',
+  ''
+].join('\n');
+export const blenderManualInstructions = [
+  '1. Instala Blender desde blender.org y abre una escena nueva.',
+  '2. File > Import > glTF 2.0 (.glb/.gltf) y selecciona el GLB ligero de ORBI.',
+  '3. Comprueba que aparecen Armature y Mesh y que el personaje conserva su pose de referencia.',
+  '4. File > Export > FBX (.fbx). En Include selecciona Mesh y Armature.',
+  '5. En Armature desactiva Add Leaf Bones; en Bake Animation desactiva Bake Animation.',
+  '6. Guarda el archivo FBX (binario). Súbelo a Mixamo > Upload Character.',
+  '7. Descarga movimientos del MISMO personaje, preferiblemente Without Skin.',
+  '8. En ORBI abre el personaje completo original y agrega los movimientos FBX.',
+  '9. Revisa todas las animaciones, exporta GLB completo y vuelve a abrirlo para confirmar.',
+].join('\n');
