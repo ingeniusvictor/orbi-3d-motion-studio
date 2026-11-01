@@ -77,3 +77,13 @@ Prueba manual pendiente: abrir personaje Mixamo **With Skin** (o su GLB), import
 - La exportación exige consentimiento explícito sobre posibles pérdidas y valida con reimportación las animaciones y la presencia de un SkinnedMesh.
 - Las pistas de movimiento de malla omitidas durante la previsualización NO se restituyen al exportar. Original local intacto; limitar cantidad de clips para no agotar memoria.
 - Beta, pendiente prueba manual con VRM de LUMIA y sus clips FBX reales.
+
+
+## MOTION-03A — Preparación ligera del mismo rig para Mixamo
+
+- El panel **Preparar versión ligera para Mixamo** permite elegir qué mallas corporales conservar. Exporta GLB local sin texturas, sin morph targets, sin animaciones, con una malla skinned válida y nombres de huesos originales. Mantiene el modelo cargado intacto.
+- Verifica mediante GLTFLoader el número de huesos del skin después del export (el número puede variar según el modelo, no se impone 155).
+- Botón para descargar el script de Blender para convertir cualquier GLB ligero/final a FBX binario. Mixamo exige FBX para personajes riggeados (no acepta GLB directamente).
+- La conversión FBX requiere Blender local; el navegador no promete generar FBX nativo y no se añade un backend de pago.
+- Formato final: GLB directo; FBX con el script gratuito tras exportar GLB; VRM final nativo pendiente por necesidad de metadatos/extensiones, expresiones y restricciones propias de VRM.
+- Tutorial de nueve pasos integrado; no se modifica la visualización o la integración ya verificadas.

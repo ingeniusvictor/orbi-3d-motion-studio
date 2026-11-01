@@ -6,6 +6,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { adaptFbxToVrm } from './vrmMotion.js';
 import { bakeVrmForGlb } from './vrmExport.js';
+import { skinnedMeshes, exportLightweightGLB } from './lightweight.js';
 import { extensionOf, formatBytes, inspectRigCompatibility, uniqueClipName, summarizeRenderableGeometry, validateLoadedContent } from './modelInfo.js';
 
 const EMPTY_INFO = { meshes: 0, vertices: 0, triangles: 0, materials: 0, bones: 0, animations: 0, nodes: 0, textures: 0, hierarchy: [] };
@@ -261,6 +262,17 @@ export class MotionViewer {
         if (material && 'wireframe' in material) material.wireframe = this.wireframe;
       }
     });
+  }
+  getLightMeshes() { return this.model ? skinnedMeshes(this.model) : []; }
+  async exportLightweight(ids) {
+    if(!this.model)throw new Error('Primero carga un personaje.');
+    const result=await exportLightweightGLB(this.model,ids);
+    const filename=(this.lastFilename||'personaje').replace(/\.[^.]+$/,'')+'-orbi-mixamo.glb';
+    const url=URL.createObjectURL(new Blob([result.buffer],{type:'model/gltf-binary'}));
+    const a=document.createElement('a');a.href=url;a.download=filename;
+    document.body.append(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),5000);
+    return {...result,filename,size:formatBytes(result.bytes)};
   }
   getClips() { return this.clips.map(({name,clip,source},index)=>({name,source,index,duration:Number(clip.duration.toFixed(2)),tracks:clip.tracks.length})); }
   getInfo() { return this.model ? inspect(this.model,this.clips) : EMPTY_INFO; }

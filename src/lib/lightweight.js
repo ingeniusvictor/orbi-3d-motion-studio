@@ -66,7 +66,7 @@ export function makeLightweightClone(root,selectedIds){
     node.geometry=geometry;
     node.morphTargetInfluences=undefined;
     node.morphTargetDictionary=undefined;
-    node.material=new THREE.MeshStandardMaterial({color:0xc2cbd8,roughness:1,metalness:0,skinning:true});
+    node.material=new THREE.MeshStandardMaterial({color:0xc2cbd8,roughness:1,metalness:0,});
     node.visible=true;
     node.pose(); // bind pose, on CLONED bones only
     remaining++;
