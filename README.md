@@ -45,3 +45,12 @@ Validación: ejecutar `npm install`, `npm test` y `npm run build`. Después comp
 - Los archivos VRM continúan disponibles solo para inspección y visualización; **no** se convierten ni fusionan con FBX.
 
 Prueba manual pendiente: abrir personaje Mixamo **With Skin** (o su GLB), importar FBX **Without Skin** del mismo rig, reproducir movimientos y reabrir el GLB exportado.
+
+## MOTION-02C — Rig de Mixamo con raíz auxiliar (validación prudente)
+
+- Algunos FBX incluyen un hueso envolvente `root` o `armature` que puede no estar en otro FBX del mismo personaje.
+- Si la raíz es neutra, envuelve todo el rig y **el resto de huesos coincide completamente**, se permite importar la animación sin retargeting.
+- Las pistas neutras de esa raíz se omiten, y la interfaz advierte que debe revisarse la reproducción antes de exportar.
+- Si cambia la jerarquía real, faltan huesos, la raíz tiene transformaciones propias o pistas animadas, el integrador rechaza el FBX por seguridad.
+- Reporte original: personaje Thinking.fbx + movimiento Idle.fbx rechazado por hueso `root`. Sin ambos archivos originales no se puede certificar que ese par sea exactamente compatible.
+- Pruebas automatizadas de raíz neutra, raíz animada, esqueleto ajeno y escala no neutra. Pendiente prueba manual de ese par de FBX concreto.
