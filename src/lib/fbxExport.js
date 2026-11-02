@@ -7,7 +7,23 @@ export function isBinaryFBX(bytes) {
   return bytes instanceof Uint8Array && bytes.length>64 &&
     magic.every((value,index)=>bytes[index]===value);
 }
-export function validateBinaryFBX(bytes,expectedBones) {
+function rigSignature(root) {
+  const items=new Map();
+  root.traverse(node=>{
+    if(!node.isSkinnedMesh)return;
+    for(const bone of node.skeleton?.bones||[]) {
+      if(!bone?.isBone)continue;
+      let parent=bone.parent;
+      while(parent&&!parent.isBone)parent=parent.parent;
+      const name=bone.name,ancestor=parent?.name||null;
+      if(!name)throw new Error('El esqueleto tiene huesos sin nombre.');
+      if(items.has(name)&&items.get(name)!==ancestor)throw new Error('El esqueleto tiene huesos homónimos con jerarquías distintas: '+name);
+      items.set(name,ancestor);
+    }
+  });
+  return items;
+}
+export function validateBinaryFBX(bytes,expectedBones,reference=null) {
   if(!isBinaryFBX(bytes))throw new Error('El exportador no produjo un FBX binario válido.');
   let group;
   try{
@@ -21,6 +37,14 @@ export function validateBinaryFBX(bytes,expectedBones) {
   if(rig!==expectedBones)throw new Error(
     'El FBX no conservó todos los huesos originales (se esperaban '+expectedBones+
     ', se encontraron '+rig+'). No se descargará.');
+  if(reference) {
+    const expected=rigSignature(reference);
+    const actual=rigSignature(group);
+    for(const [name,parent] of expected) {
+      if(!actual.has(name))throw new Error('Se perdió o renombró el hueso «'+name+'» al exportar FBX.');
+      if(actual.get(name)!==parent)throw new Error('Cambió la jerarquía del hueso «'+name+'» en el FBX.');
+    }
+  }
   return {bones:rig,meshes:meshes.length,model:group};
 }
 export function lightweightBinaryFBX(source,ids) {
@@ -33,7 +57,7 @@ export function lightweightBinaryFBX(source,ids) {
     animations:[],bakeAnimations:false,
     onWarning:warning=>warnings.push(String(warning?.message||warning)),
   });
-  const verified=validateBinaryFBX(bytes,prepared.sourceBones);
+  const verified=validateBinaryFBX(bytes,prepared.sourceBones,prepared.model);
   return {bytes,bytesLength:bytes.byteLength,bones:verified.bones,
     meshes:verified.meshes,removed:prepared.removed,warnings};
 }
@@ -49,7 +73,7 @@ export function animatedBinaryFBX(model,clips) {
     bakeAnimations:true,embedTextures:false,
     onWarning:warning=>warnings.push(String(warning?.message||warning)),
   });
-  const verified=validateBinaryFBX(bytes,expected);
+  const verified=validateBinaryFBX(bytes,expected,model);
   if(verified.model.animations?.length && verified.model.animations.length!==clips.length) {
     throw new Error('La cantidad de clips del FBX no coincide con la selección.');
   }
