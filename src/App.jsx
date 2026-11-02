@@ -95,8 +95,8 @@ export default function App() {
     if(!viewer.current || !model) return;
     setBusy('Generando y verificando GLB…');setNotice(null);
     try {
-      const result = await viewer.current.exportGLB({allowApproximateVRM:allowVrmExport});
-      setNotice({type:'success',text:`${result.filename} · ${result.size} · ${result.animations} animaciones. Descarga iniciada.${result.warning?' '+result.warning:''}${finalFormat==='fbx'?' Convierte este GLB a FBX binario con Blender y el script gratuito del panel «Versión ligera».':''}`});
+      const result = finalFormat==='fbx' ? await viewer.current.exportAnimatedFBX({allowApproximateVRM:allowVrmExport}) : await viewer.current.exportGLB({allowApproximateVRM:allowVrmExport});
+      setNotice({type:'success',text:`${result.filename} · ${result.size} · ${result.animations} animaciones. Descarga iniciada.${result.warning?' '+result.warning:''}${finalFormat==='fbx'?' FBX binario experimental: comprueba el resultado y sus animaciones.':''}`});
     } catch(error) {setNotice({type:'error',text:`No se pudo exportar: ${error.message||error}`});}
     finally {setBusy('');}
   };
@@ -116,6 +116,16 @@ export default function App() {
     } catch(error){
       setNotice({type:'error',text:'No se pudo preparar el personaje ligero: '+(error.message||error)});
     } finally {setBusy('');}
+  };
+  const prepareLightFBX = async ids => {
+    if(!viewer.current)return;
+    setBusy('Generando FBX binario y comprobando el esqueleto…');setNotice(null);
+    try {
+      const result=await viewer.current.exportLightweightFBX(ids);
+      setNotice({type:'success',text:'FBX binario ligero: '+result.filename+' ('+result.size+'). Conservó '+result.bones+' huesos y '+result.meshes+' mallas. Comprueba su mapeo en Mixamo y vuelve a abrirlo en ORBI.'});
+    }catch(error) {
+      setNotice({type:'error',text:'No se pudo generar un FBX riggeado: '+(error.message||error)+' Usa el GLB y el conversor Blender gratuito como alternativa.'});
+    }finally{setBusy('');}
   };
   const chooseClip = index => {viewer.current?.play(index);syncPlayer();};
   const togglePlay = () => {viewer.current?.setPlaying(!playing);syncPlayer();};
@@ -161,13 +171,13 @@ export default function App() {
             <label style={{display:'block',fontSize:12,color:'#c6d3e4',margin:'8px 0'}}>Formato final
               <select value={finalFormat} onChange={e=>setFinalFormat(e.target.value)} style={{display:'block',width:'100%',marginTop:6,padding:9,borderRadius:8,background:'#17273b',color:'#e1f3fa',border:'1px solid #315064'}}>
                 <option value="glb">GLB — descarga directa</option>
-                <option value="fbx">FBX — GLB + conversor gratuito Blender</option>
+                <option value="fbx">FBX binario directo — beta</option>
                 <option value="vrm" disabled>VRM + VRMA — pendiente (formato separado)</option>
               </select>
             </label>
-            <button className="export-btn" onClick={exportModel} disabled={!model||!clips.length||(model.format==='VRM'&&!allowVrmExport)||!!busy}><Download size={17}/>{finalFormat==='fbx'?' Preparar GLB final para convertir a FBX':model?.format==='VRM'?' Exportar GLB animado (aproximado)':' Exportar GLB integrado'}</button>
-            <div className="small-note">{finalFormat==='fbx'?'Para obtener FBX binario, exporta aquí el GLB y usa el conversor Blender del panel inferior.':'Se genera una copia nueva. Tu modelo original nunca se modifica.'}</div></section>
-          <LightPrep model={model} meshes={lightMeshes} boneCount={lightBoneCount} busy={busy} onExport={prepareLight} onScript={downloadScript}/>
+            <button className="export-btn" onClick={exportModel} disabled={!model||!clips.length||(model.format==='VRM'&&!allowVrmExport)||!!busy}><Download size={17}/>{finalFormat==='fbx'?' Exportar FBX animado directo (beta)':model?.format==='VRM'?' Exportar GLB animado (aproximado)':' Exportar GLB integrado'}</button>
+            <div className="small-note">{finalFormat==='fbx'?'FBX experimental: vuelve a abrirlo y comprueba la integridad de todos sus clips en Blender y Mixamo.':'Se genera una copia nueva. Tu modelo original nunca se modifica.'}</div></section>
+          <LightPrep model={model} meshes={lightMeshes} boneCount={lightBoneCount} busy={busy} onExport={prepareLight} onExportFBX={prepareLightFBX} onScript={downloadScript}/>
           <button className="help-card" onClick={()=>setShowTutorial(true)}><div><span className="eyebrow">¿PRIMERA VEZ AQUÍ?</span><strong>Una guía para crear sin límites.</strong><small>Descubre cómo preparar animaciones con Mixamo y probarlas aquí.</small><span className="help-link">Ver tutorial <ChevronRight size={14}/></span></div><Sparkles size={28}/></button>
           </aside>
         </div>
