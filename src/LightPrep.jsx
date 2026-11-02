@@ -2,14 +2,18 @@ import { useEffect, useMemo, useState } from 'react';
 import { Download, FileCode2, ShieldCheck, BookOpen, Layers3 } from 'lucide-react';
 import { suggestLightMeshes, categorizeLightMesh } from './lib/lightweight.js';
 
-export default function LightPrep({ model, meshes, boneCount, busy, onExport, onExportFBX, onScript }) {
+export default function LightPrep({ model, meshes, boneCount, busy, onExport, onExportFBX, onPreview, onScript }) {
   const [checked,setChecked]=useState([]);
   const [showAll,setShowAll]=useState(false);
   const [lightFormat,setLightFormat]=useState('fbx');
+  const [preview,setPreview]=useState(false);
   useEffect(()=> {
     setChecked(suggestLightMeshes(meshes));
     setShowAll(false);
+    setPreview(false);
+    onPreview(null);
   },[meshes]);
+  useEffect(()=>{if(preview)onPreview(checked);},[preview,checked]);
   const chosen=useMemo(()=>new Set(checked),[checked]);
   const selectedCount=meshes.filter(mesh=>chosen.has(mesh.id)).length;
   const visible=showAll?meshes:meshes.slice(0,9);
@@ -39,6 +43,9 @@ export default function LightPrep({ model, meshes, boneCount, busy, onExport, on
         <label><input type="radio" checked={lightFormat==='fbx'} onChange={()=>setLightFormat('fbx')}/> FBX binario directo (beta)</label>
         <label><input type="radio" checked={lightFormat==='glb'} onChange={()=>setLightFormat('glb')}/> GLB ligero</label>
       </div>
+      <button className="outline-btn" type="button" disabled={Boolean(busy)} onClick={()=>setPreview(prev=>{const next=!prev;onPreview(next?checked:null);return next;})}>
+        {preview?"Mostrar personaje completo":"Previsualizar solo las mallas seleccionadas"}
+      </button>
       <button className="export-btn" type="button" disabled={Boolean(busy)||!selectedCount} onClick={()=>lightFormat==='fbx'?onExportFBX(checked):onExport(checked)}>
         <Download size={16}/> {lightFormat==='fbx'?'Descargar FBX binario ligero (beta)':'Descargar GLB corporal ligero'}
       </button>
