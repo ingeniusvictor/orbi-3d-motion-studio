@@ -49,6 +49,8 @@ test('direct FBX is real binary, reloads a skinned mesh and all original bones',
 });
 test('animated FBX keeps a rig and includes its movement data',()=>{
   const {root}=character();
+  // Single-skinned-mesh character: the exporter must not duplicate its bones.
+  root.remove(skinnedMeshes(root).length?root.getObjectByName('Vita_Dress_Skin'):null);
   const q=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),0.2);
   const clip=new THREE.AnimationClip('Idle',1,[
     new THREE.QuaternionKeyframeTrack('j_bip_0.quaternion',[0,1],[0,0,0,1,...q.toArray()])
@@ -56,5 +58,10 @@ test('animated FBX keeps a rig and includes its movement data',()=>{
   const out=animatedBinaryFBX(root,[clip]);
   assert.ok(isBinaryFBX(out.bytes));
   assert.equal(out.bones,7);
-  assert.equal(out.meshes,2);
+  assert.equal(out.meshes,1);
+});
+test('multi-mesh animated FBX blocks export when it duplicates the skeleton',()=>{
+  const {root}=character();
+  const clip=new THREE.AnimationClip('Idle',1,[new THREE.QuaternionKeyframeTrack('j_bip_0.quaternion',[0,1],[0,0,0,1,0,0,0,1])]);
+  assert.throws(()=>animatedBinaryFBX(root,[clip]),/no conservó todos los huesos/);
 });
