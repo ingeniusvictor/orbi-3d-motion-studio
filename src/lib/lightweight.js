@@ -15,14 +15,20 @@ export const skinnedMeshes = root => {
   });
   return found;
 };
-const unwanted=/hair|cabello|pelo|eyebrow|eyelash|accessory|accessories|glasses|hat|sombrero|ornament|weapon|earring|shoe|skirt|cloth|outfit|jacket/i;
-const useful=/body|skin|torso|bust|head|face|brazo|pierna|cuerpo|mesh/i;
+const clothes=/hair|cabello|pelo|eyebrow|eyelash|acces|glasses|hat|sombrero|ornament|weapon|earring|shoe|skirt|cloth|outfit|jacket|dress|robe|shirt|pants|trousers|socks|boots|stocking|sleeve|coat|sweater|uniform|uniforme|blouse|bra|panties|underwear|vestido|falda|camisa|pantalon|pantalón|zapato|bota|ropas|ropa|prenda|camiseta|abrigo|chaqueta|manga|blusa|suit|top|bottom|hoodie|belt|belt_|glove|guante|wristband|necktie/i;
+const body=/body|bodymesh|basebody|naked|skin|torso|chest|bust|head|face|brazo|pierna|cuerpo|cara|cabeza|arm|leg|hand|foot|feet|j_bip|nude|undressed/i;
+/** Selection is intentionally conservative: never infer that a dress is body just because it contains "skin". */
+export function categorizeLightMesh(name = '') {
+  if(clothes.test(name))return {type:'clothing',label:'Ropa / accesorio'};
+  if(body.test(name))return {type:'body',label:'Cuerpo / rostro'};
+  return {type:'unknown',label:'Revisar manualmente'};
+}
 export function suggestLightMeshes(meshes){
   if(!meshes?.length)return [];
-  const likely=meshes.filter(m=>useful.test(m.name) && !unwanted.test(m.name));
-  if(likely.length)return likely.map(m=>m.id);
-  const candidate=[...meshes].filter(m=>!unwanted.test(m.name)).sort((a,b)=>b.vertices-a.vertices)[0];
-  return [candidate?.id||[...meshes].sort((a,b)=>b.vertices-a.vertices)[0].id];
+  const eligible=meshes.filter(mesh=>categorizeLightMesh(mesh.name).type==='body');
+  if(eligible.length)return eligible.map(x=>x.id);
+  // Never silently include a garment when names are unknown or ambiguously generic.
+  return [];
 }
 export const skinBoneCount = root => {
   const bones=new Set();
