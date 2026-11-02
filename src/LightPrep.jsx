@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Download, FileCode2, ShieldCheck, BookOpen, Layers3 } from 'lucide-react';
-import { suggestLightMeshes } from './lib/lightweight.js';
+import { suggestLightMeshes, categorizeLightMesh } from './lib/lightweight.js';
 
-export default function LightPrep({ model, meshes, boneCount, busy, onExport, onScript }) {
+export default function LightPrep({ model, meshes, boneCount, busy, onExport, onExportFBX, onScript }) {
   const [checked,setChecked]=useState([]);
   const [showAll,setShowAll]=useState(false);
+  const [lightFormat,setLightFormat]=useState('fbx');
   useEffect(()=> {
     setChecked(suggestLightMeshes(meshes));
     setShowAll(false);
@@ -22,19 +23,24 @@ export default function LightPrep({ model, meshes, boneCount, busy, onExport, on
     {model && !meshes.length && <p style={{fontSize:12,color:'#e3b7ad'}}>Este archivo no contiene una malla SkinnedMesh utilizable. La preparación requiere un modelo ya riggeado con malla vinculada a huesos.</p>}
     {model && meshes.length>0 && <>
       <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:7,color:'#b7cce2'}}>
-        <strong>Mallas corporales que conservar</strong><span>{selectedCount} / {meshes.length}</span>
+        <strong>Modo mínimo: seleccionar solo piel y cuerpo</strong><span>{selectedCount} / {meshes.length}</span>
       </div>
       <div style={{maxHeight:250,overflowY:'auto',border:'1px solid #274057',borderRadius:9,padding:'6px 9px',marginBottom:10}}>
         {visible.map(mesh=><label key={mesh.id} style={{display:'flex',alignItems:'center',gap:7,cursor:'pointer',fontSize:12,padding:'6px 0',color:'#dceaf6'}}>
           <input type="checkbox" checked={chosen.has(mesh.id)} onChange={e=>setChecked(current=>e.target.checked?[...current,mesh.id]:current.filter(id=>id!==mesh.id))} style={{accentColor:'#46d8c8'}}/>
-          <span style={{overflowWrap:'anywhere',flex:1}}>{mesh.name}</span>
+          <span style={{overflowWrap:'anywhere',flex:1}}>{mesh.name}<small style={{display:'block',color:categorizeLightMesh(mesh.name).type==='clothing'?'#f2b1a7':'#8cb9c0'}}>{categorizeLightMesh(mesh.name).label}</small></span>
           <small style={{color:'#8babc0'}}>{mesh.vertices.toLocaleString('es-CL')} v.</small>
         </label>)}
         {meshes.length>9 && <button className="subtle-btn" type="button" onClick={()=>setShowAll(v=>!v)}>{showAll?'Ver menos':'Ver las '+meshes.length+' mallas'}</button>}
       </div>
-      <p style={{fontSize:11,color:'#9fb4c8',lineHeight:1.55}}>La selección inicial es orientativa. Si una malla es cabello, ropa u otro accesorio, desmárcala; conserva cuerpo y rostro. Se comprueba que el GLB mantiene todos los huesos del skin antes de descargarlo.</p>
-      <button className="export-btn" type="button" disabled={Boolean(busy)||!selectedCount} onClick={()=>onExport(checked)}>
-        <Download size={16}/> Descargar GLB corporal ligero
+      <p style={{fontSize:11,color:'#9fb4c8',lineHeight:1.55}}>Solo se seleccionan inicialmente las mallas que parecen cuerpo o piel. Vestido, ropa, cabello y accesorios quedan fuera. Si la ropa está fusionada con el cuerpo, hay que separarla en Blender. Se verifica que se conservan todos los huesos del skin.</p>
+      {!selectedCount&&<p style={{fontSize:12,color:'#ffd2a8'}}>No identificamos con seguridad la malla del cuerpo: revisa las mallas y marca las apropiadas manualmente.</p>}
+      <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center',fontSize:12,margin:'8px 0',color:'#bcd4e9'}}>
+        <label><input type="radio" checked={lightFormat==='fbx'} onChange={()=>setLightFormat('fbx')}/> FBX binario directo (beta)</label>
+        <label><input type="radio" checked={lightFormat==='glb'} onChange={()=>setLightFormat('glb')}/> GLB ligero</label>
+      </div>
+      <button className="export-btn" type="button" disabled={Boolean(busy)||!selectedCount} onClick={()=>lightFormat==='fbx'?onExportFBX(checked):onExport(checked)}>
+        <Download size={16}/> {lightFormat==='fbx'?'Descargar FBX binario ligero (beta)':'Descargar GLB corporal ligero'}
       </button>
     </>}
     <button className="outline-btn" type="button" style={{marginTop:9}} disabled={Boolean(busy)} onClick={onScript}>

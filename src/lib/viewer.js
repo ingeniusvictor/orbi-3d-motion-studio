@@ -7,6 +7,7 @@ import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { adaptFbxToVrm } from './vrmMotion.js';
 import { bakeVrmForGlb } from './vrmExport.js';
 import { skinnedMeshes, skinBoneCount, exportLightweightGLB } from './lightweight.js';
+import { lightweightBinaryFBX, animatedBinaryFBX } from './fbxExport.js';
 import { extensionOf, formatBytes, inspectRigCompatibility, uniqueClipName, summarizeRenderableGeometry, validateLoadedContent } from './modelInfo.js';
 
 const EMPTY_INFO = { meshes: 0, vertices: 0, triangles: 0, materials: 0, bones: 0, animations: 0, nodes: 0, textures: 0, hierarchy: [] };
@@ -274,6 +275,34 @@ export class MotionViewer {
     document.body.append(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(url),5000);
     return {...result,filename,size:formatBytes(result.bytes)};
+  }
+  async exportLightweightFBX(ids) {
+    if(!this.model)throw new Error('Carga primero un personaje.');
+    const result=lightweightBinaryFBX(this.model,ids);
+    const filename=(this.lastFilename||'personaje').replace(/\.[^.]+$/,'')+'-orbi-mixamo.fbx';
+    const url=URL.createObjectURL(new Blob([result.bytes],{type:'application/octet-stream'}));
+    const a=document.createElement('a');a.href=url;a.download=filename;
+    document.body.append(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),5000);
+    return {...result,filename,size:formatBytes(result.bytesLength)};
+  }
+  async exportAnimatedFBX({allowApproximateVRM=false}={}) {
+    if(!this.model)throw new Error('Carga primero un personaje.');
+    if(!this.clips.length)throw new Error('Agrega al menos una animación.');
+    if(this.vrm && !allowApproximateVRM)
+      throw new Error('La conversión VRM→FBX es aproximada. Confirma los posibles cambios.');
+    const prepared=this.vrm?bakeVrmForGlb(this.vrm,this.clips):null;
+    const result=animatedBinaryFBX(prepared?.model||this.model,
+      prepared?.clips||this.clips.map(item=>item.clip));
+    const filename=(this.lastFilename||'personaje').replace(/\.[^.]+$/,'')+'-orbi-animated.fbx';
+    const url=URL.createObjectURL(new Blob([result.bytes],{type:'application/octet-stream'}));
+    const a=document.createElement('a');a.href=url;a.download=filename;
+    document.body.append(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),5000);
+    return {...result,filename,size:formatBytes(result.bytesLength),
+      animations:this.clips.length,
+      warning:['FBX binario beta: revisa los clips en Blender y Mixamo.',
+       ...result.warnings].join(' ')};
   }
   getClips() { return this.clips.map(({name,clip,source},index)=>({name,source,index,duration:Number(clip.duration.toFixed(2)),tracks:clip.tracks.length})); }
   getInfo() { return this.model ? inspect(this.model,this.clips) : EMPTY_INFO; }
