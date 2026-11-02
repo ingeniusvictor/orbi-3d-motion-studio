@@ -92,3 +92,12 @@ Prueba manual pendiente: abrir personaje Mixamo **With Skin** (o su GLB), import
 
 ### Aclaración VRM 1.0 y VRMA
 La especificación VRM 1.0 no contempla almacenar un banco de animaciones integrado en el VRM; para animación humanoide reutilizable se define un archivo separado .vrma. El resultado VRM + VRMA podría implementarse posteriormente, pero no está habilitado hoy. Fuente: https://vrm.dev/en/vrma/ y https://github.com/vrm-c/vrm-specification/tree/master/specification/VRMC_vrm_animation-1.0.
+
+## MOTION-03B · Modo ultraligero y FBX directo (beta)
+
+- Selección conservadora: por defecto se excluyen mallas identificadas como vestido, falda, pantalones, cabello, zapatos u otros accesorios, aunque también tengan «Skin» en su nombre. Mallas sin identificación segura requieren selección manual.
+- Vista previa corporal: alterna entre el modelo original y las mallas seleccionadas antes de exportar.
+- Dos salidas ligeras: **GLB** y **FBX binario directo**. La biblioteca MIT `three-js-fbx-exporter` realiza la conversión local sin ejecutar Blender; se reimporta el FBX con `FBXLoader` y se verifica el mismo número de huesos del skin. Si no coincide, se bloquea la descarga.
+- FBX animado final también está en beta, y se bloquea si el exportador duplica huesos (puede ocurrir con múltiples skinned meshes). El respaldo es GLB y conversión mediante el script de Blender.
+- Importante: Mixamo puede reconocer un FBX pre-riggeado y mapear su esqueleto, pero no garantiza que todos los VRM sean aceptados, ni que sus archivos devueltos mantengan exactamente 155 huesos.
+- Si ropa y cuerpo están combinados en una sola malla, no se pueden separar de forma fiable mediante nombres; se requiere Blender u otro editor.
