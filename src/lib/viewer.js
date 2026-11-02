@@ -218,6 +218,7 @@ export class MotionViewer {
     return {...info, filename:loaded.name, bytes:loaded.bytes, format:loaded.format};
   }
   clearModel() {
+    if(this.lightPreviewStates?.size)this.setLightPreview(null);
     if (this.mixer) { this.mixer.stopAllAction(); this.mixer.uncacheRoot(this.model); }
     if (this.skeleton) {this.scene.remove(this.skeleton);this.skeleton.dispose(); this.skeleton=null;}
     if (this.model) {
@@ -263,6 +264,18 @@ export class MotionViewer {
         if (material && 'wireframe' in material) material.wireframe = this.wireframe;
       }
     });
+  }
+  setLightPreview(selectedIds) {
+    if(!this.model)return;
+    if(!this.lightPreviewStates)this.lightPreviewStates=new Map();
+    this.model.traverse(node=>{
+      if(!node.isMesh)return;
+      if(!this.lightPreviewStates.has(node))this.lightPreviewStates.set(node,node.visible);
+      node.visible = selectedIds
+        ? Boolean(node.isSkinnedMesh && selectedIds.includes(node.uuid))
+        : this.lightPreviewStates.get(node);
+    });
+    if(!selectedIds)this.lightPreviewStates.clear();
   }
   getLightMeshes() { return this.model ? skinnedMeshes(this.model) : []; }
   getLightBoneCount() { return this.model ? skinBoneCount(this.model) : 0; }
