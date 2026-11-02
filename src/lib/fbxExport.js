@@ -44,8 +44,9 @@ export function animatedBinaryFBX(model,clips) {
   const expected=skinBoneCount(model);
   if(!expected)throw new Error('El modelo no tiene un esqueleto skinned exportable.');
   const warnings=[];
-  const bytes=exportCharacterFbx({object3D:model,animations:clips,frameRate:30},{
-    format:'binary',version:7400,target:'threejs',embedTextures:false,
+  const bytes=exportFbx(model,{
+    format:'binary',version:7400,target:'threejs',animations:clips,frameRate:30,
+    bakeAnimations:true,embedTextures:false,
     onWarning:warning=>warnings.push(String(warning?.message||warning)),
   });
   const verified=validateBinaryFBX(bytes,expected);
