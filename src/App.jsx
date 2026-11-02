@@ -127,6 +127,7 @@ export default function App() {
       setNotice({type:'error',text:'No se pudo generar un FBX riggeado: '+(error.message||error)+' Usa el GLB y el conversor Blender gratuito como alternativa.'});
     }finally{setBusy('');}
   };
+  const previewLight = ids => viewer.current?.setLightPreview(ids);
   const chooseClip = index => {viewer.current?.play(index);syncPlayer();};
   const togglePlay = () => {viewer.current?.setPlaying(!playing);syncPlayer();};
   const changeSpeed = event => {const value=Number(event.target.value);setSpeed(value);viewer.current?.setSpeed(value);};
@@ -177,7 +178,7 @@ export default function App() {
             </label>
             <button className="export-btn" onClick={exportModel} disabled={!model||!clips.length||(model.format==='VRM'&&!allowVrmExport)||!!busy}><Download size={17}/>{finalFormat==='fbx'?' Exportar FBX animado directo (beta)':model?.format==='VRM'?' Exportar GLB animado (aproximado)':' Exportar GLB integrado'}</button>
             <div className="small-note">{finalFormat==='fbx'?'FBX experimental: vuelve a abrirlo y comprueba la integridad de todos sus clips en Blender y Mixamo.':'Se genera una copia nueva. Tu modelo original nunca se modifica.'}</div></section>
-          <LightPrep model={model} meshes={lightMeshes} boneCount={lightBoneCount} busy={busy} onExport={prepareLight} onExportFBX={prepareLightFBX} onScript={downloadScript}/>
+          <LightPrep model={model} meshes={lightMeshes} boneCount={lightBoneCount} busy={busy} onExport={prepareLight} onExportFBX={prepareLightFBX} onPreview={previewLight} onScript={downloadScript}/>
           <button className="help-card" onClick={()=>setShowTutorial(true)}><div><span className="eyebrow">¿PRIMERA VEZ AQUÍ?</span><strong>Una guía para crear sin límites.</strong><small>Descubre cómo preparar animaciones con Mixamo y probarlas aquí.</small><span className="help-link">Ver tutorial <ChevronRight size={14}/></span></div><Sparkles size={28}/></button>
           </aside>
         </div>
