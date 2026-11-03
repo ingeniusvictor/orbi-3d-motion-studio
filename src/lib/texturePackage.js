@@ -108,7 +108,7 @@ export function validateTexturePackage(files){
 function entryFile(entry,path){
  return new Promise((resolve,reject)=>{
    entry.file(file=>{
-     try{const name=safeRelativePath(path+'/'+file.name);Object.defineProperty(file,'orbiRelativePath',{value:name});resolve(file);}
+     try{const name=safeRelativePath(path?path+'/'+file.name:file.name);Object.defineProperty(file,'orbiRelativePath',{value:name});resolve(file);}
      catch(e){reject(e);}
    },reject);
  });
