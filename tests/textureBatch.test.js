@@ -1,0 +1,35 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import * as THREE from 'three';
+import {captureMaterialState,restoreMaterialState} from '../src/lib/textureBatch.js';
+import {bindDecodedTexture} from '../src/lib/textureStudio.js';
+test('04C: undo restores material, textures, color and skeleton unchanged',()=>{
+  const root=new THREE.Group(),material=new THREE.MeshPhongMaterial({name:'LUMIA_Skin'});
+  const mesh=new THREE.SkinnedMesh(new THREE.BoxGeometry(1,1,1),material);
+  const bone=new THREE.Bone();bone.name='Hips';root.add(bone);
+  root.add(mesh);
+  const source=mesh.geometry;
+  const initial=material.color.clone(),backup=captureMaterialState(root);
+  const roughness=new THREE.DataTexture(new Uint8Array([123,123,123,255]),1,1);
+  bindDecodedTexture(root,material.uuid,'roughnessMap',roughness,{format:'FBX'});
+  assert.notEqual(mesh.material,material);
+  assert.ok(mesh.material.isMeshStandardMaterial);
+  restoreMaterialState(backup);
+  assert.equal(mesh.material,material);
+  assert.ok(mesh.material.color.equals(initial));
+  assert.equal(mesh.material.roughnessMap,undefined);
+  assert.equal(mesh.geometry,source);
+  assert.equal(root.getObjectByName('Hips'),bone);
+});
+test('04C: undo restores original map even after overwriting it',()=>{
+  const root=new THREE.Group(),base=new THREE.MeshStandardMaterial({name:'Body'});
+  const mesh=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),base);root.add(mesh);
+  const original=new THREE.DataTexture(new Uint8Array([7,7,7,255]),1,1);
+  base.map=original;
+  const snapshot=captureMaterialState(root);
+  const later=new THREE.DataTexture(new Uint8Array([8,8,8,255]),1,1);
+  bindDecodedTexture(root,base.uuid,'map',later,{format:'FBX'});
+  assert.equal(base.map,later);
+  restoreMaterialState(snapshot);
+  assert.equal(base.map,original);
+});
