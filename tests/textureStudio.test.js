@@ -14,12 +14,14 @@ function model(){
 }
 const f=(name,size=120)=>({name,size,type:'image/png'});
 test('admite formatos comunes pero no ZIP, PSD, SVG ni imágenes excesivas',()=>{
-  for(const file of ['body.png','normal.jpg','light.jpeg','eyes.webp'])assert.equal(isTextureFile(f(file)),true);
+  for(const file of ['body.png','normal.jpg','light.jpeg','eyes.webp','Body_BaseColor.dds'])assert.equal(isTextureFile(f(file)),true);
   for(const file of ['textures.zip','material.psd','vector.svg','texture.tga'])assert.equal(isTextureFile(f(file)),false);
   assert.equal(isTextureFile(f('huge.png',60*1024*1024)),false);
 });
 test('deduce mapas de color, normales, rugosidad, metal y ORM sin confundirlos',()=>{
   assert.equal(inferTextureChannel('Skin_BaseColor.png'),'map');
+  assert.equal(inferTextureChannel('Body_Normal.dds'),'normalMap');
+  assert.equal(inferTextureChannel('Clothes_Roughness.dds'),'roughnessMap');
   assert.equal(inferTextureChannel('Body_NormalGL.png'),'normalMap');
   assert.equal(inferTextureChannel('Hair_Roughness.jpg'),'roughnessMap');
   assert.equal(inferTextureChannel('Torso_Metallic.png'),'metalnessMap');
@@ -112,4 +114,22 @@ test('rechaza malla sin UV y canal inexistente sin alterar material',()=>{
   assert.throws(()=>bindDecodedTexture(root,skin.uuid,'map',tex),/UV/);
   assert.equal(body.material.map,null);
   assert.throws(()=>bindDecodedTexture(root,skin.uuid,'mystery',tex),/UV/);
+});
+
+
+test('asocia DDS al mismo material sin cambiar huesos ni geometría',()=>{
+  const {root,skin,body}=model();
+  const bones=new THREE.Bone();bones.name='Avatar_Hips';root.add(bones);
+  const geo=body.geometry;
+  const file=f('LUMIA_Skin_BaseColor.dds');
+  const suggestions=suggestTextureMatches([file],catalogMaterials(root));
+  assert.equal(suggestions.length,1);
+  assert.equal(suggestions[0].materialId,skin.uuid);
+  const tex=new THREE.CanvasTexture({});
+  tex.name=file.name;
+  const result=bindDecodedTexture(root,skin.uuid,'map',tex,{format:'FBX'});
+  assert.equal(result.materialId,skin.uuid);
+  assert.equal(body.material.map,tex);
+  assert.equal(body.geometry,geo);
+  assert.equal(root.getObjectByName('Avatar_Hips'),bones);
 });
