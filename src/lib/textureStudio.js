@@ -1,6 +1,7 @@
 import * as THREE from 'three';
+import { ddsToCanvas } from './ddsTexture.js';
 
-const IMAGE_EXT=/\.(png|jpg|jpeg|webp)$/i;
+const IMAGE_EXT=/\.(png|jpg|jpeg|webp|dds)$/i;
 export const TEXTURE_CHANNELS=[
   {key:'map',label:'Color / Albedo'},
   {key:'normalMap',label:'Normal / Relieve'},
@@ -13,11 +14,11 @@ export const TEXTURE_CHANNELS=[
 ];
 const tokens=s=>String(s||'').replace(/([a-z])([A-Z])/g,'$1 $2')
   .toLowerCase().replace(/\.[^.]+$/,'').split(/[^a-z0-9]+/)
-  .filter(x=>x.length>1&&!['material','mat','mesh','texture','tex','image','img','png','jpg','jpeg','webp',
+  .filter(x=>x.length>1&&!['material','mat','mesh','texture','tex','image','img','png','jpg','jpeg','webp','dds',
     'map','model','default','standard','pbr'].includes(x));
 const key=s=>tokens(s).join('');
 export function inferTextureChannel(filename){
-  const stem=String(filename||'').replace(/\.(png|jpe?g|webp)$/i,'').toLowerCase();
+  const stem=String(filename||'').replace(/\.(png|jpe?g|webp|dds)$/i,'').toLowerCase();
   if(/(?:^|[_\s.\-])(orm|arm|occlusionroughnessmetallic)(?:$|[_\s.\-])/.test(stem))return 'orm';
   if(/(?:^|[_\s.\-])(normal|nrm|norm|normalgl|normaldx|bump)(?:$|[_\s.\-])/.test(stem))return 'normalMap';
   if(/(?:^|[_\s.\-])(rough|roughness)(?:$|[_\s.\-])/.test(stem))return 'roughnessMap';
@@ -133,18 +134,26 @@ export function bindDecodedTexture(root,id,channel,texture,{format='FBX'}={}){
   material.needsUpdate=true;
   return {materialId:material.uuid,channel,fileName:texture.name};
 }
-/** Loads PNG/JPG/WebP file through a temporary browser blob URL. */
+/** Loads PNG/JPG/WebP or decompresses DDS to a standard canvas texture. */
 export async function applyTextureToMaterial(root,id,channel,file,{format='FBX'}={}){
-  if(!isTextureFile(file))throw new Error('Usa imágenes PNG, JPG o WebP válidas (máximo 50 MB por imagen).');
-  const url=URL.createObjectURL(file);
-  let texture;
+  if(!isTextureFile(file))throw new Error('Usa imágenes PNG, JPG, WebP o DDS válidas (máximo 50 MB por archivo).');
+  const dds=/\.dds$/i.test(file.name);
+  let url=null,texture;
   try{
-    texture=await new THREE.TextureLoader().loadAsync(url);
+    if(dds){
+      // RGBA canvas is exportable to standard GLB; GPU-only DDS textures are not.
+      const result=await ddsToCanvas(await file.arrayBuffer());
+      texture=new THREE.CanvasTexture(result.canvas);
+      texture.userData.orbiDDSFormat=result.format;
+    }else{
+      url=URL.createObjectURL(file);
+      texture=await new THREE.TextureLoader().loadAsync(url);
+    }
     texture.name=file.name;
     const applied=bindDecodedTexture(root,id,channel,texture,{format});
-    return {url,...applied};
+    return {url,...applied,ddsConverted:dds};
   }catch(error){
-    URL.revokeObjectURL(url);
+    if(url)URL.revokeObjectURL(url);
     texture?.dispose();
     throw error;
   }
