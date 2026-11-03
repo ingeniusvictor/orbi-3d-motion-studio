@@ -43,6 +43,7 @@ export default function App() {
   const [model, setModel] = useState(null);
   const [lightMeshes, setLightMeshes] = useState([]);
   const [textureMaterials,setTextureMaterials]=useState([]);
+  const [canUndoTextures,setCanUndoTextures]=useState(false);
   const [modelGeneration,setModelGeneration]=useState(0);
   const [lightBoneCount,setLightBoneCount] = useState(0);
   const [finalFormat,setFinalFormat] = useState('glb');
@@ -75,7 +76,7 @@ export default function App() {
   },[syncPlayer]);
   const openFiles = useCallback(async files => {
     if (!files?.length || !viewer.current) return;
-    setBusy('Abriendo modelo…');setNotice(null);setImportResults([]);setAllowVrmExport(false);setFinalFormat('glb');setLightMeshes([]);setLightBoneCount(0);setTextureMaterials([]);
+    setBusy('Abriendo modelo…');setNotice(null);setImportResults([]);setAllowVrmExport(false);setFinalFormat('glb');setLightMeshes([]);setLightBoneCount(0);setTextureMaterials([]);setCanUndoTextures(false);
     try {
       const info = await viewer.current.open(files);
       if (info) { setModel(info);setLightMeshes(viewer.current.getLightMeshes());setLightBoneCount(viewer.current.getLightBoneCount());setTextureMaterials(viewer.current.getTextureMaterials());setModelGeneration(n=>n+1);syncPlayer();setNotice({type:'success',text:`${info.filename} cargado correctamente.`}); }
@@ -105,6 +106,7 @@ export default function App() {
     setBusy('Aplicando textura al material…');setNotice(null);
     try{
       const attached=await viewer.current.attachTextureFile(file,materialId,channel);
+      setCanUndoTextures(false);
       refreshTextureInfo();
       setNotice({type:'success',text:'Imagen «'+file.name+'» aplicada correctamente. Revisa el resultado en el visor y exporta GLB para conservarla.'});
       return attached;
@@ -113,25 +115,26 @@ export default function App() {
       return null;
     }finally{setBusy('');}
   };
-  const autoTexture=async(files,suggestions)=>{
-    if(!viewer.current||!suggestions.length)return;
-    setBusy('Asociando imágenes y materiales…');setNotice(null);
-    const moved=new Map(),errors=[];
-    let ok=0;
+  const batchTexture=async assignments=>{
+    if(!viewer.current||!assignments?.length)return [];
+    setBusy('Aplicando asociaciones seguras…');setNotice(null);
     try{
-      for(const guess of suggestions){
-        const file=files[guess.fileIndex];
-        let id=moved.get(guess.materialId)||guess.materialId;
-        try{
-          const applied=await viewer.current.attachTextureFile(file,id,guess.channel);
-          if(applied.materialId!==id)moved.set(guess.materialId,applied.materialId);
-          ok++;
-        }catch(error){errors.push(file.name+': '+(error.message||error));}
-      }
-      refreshTextureInfo();
-      setNotice({type:ok?'success':'error',
-        text:ok+' imágenes asociadas.'+(errors.length?' '+errors.length+' sin aplicar: '+errors.slice(0,2).join(' · '):'')});
+      const result=await viewer.current.applyTextureBatch(assignments);
+      refreshTextureInfo();setCanUndoTextures(true);
+      setNotice({type:'success',text:result.length+' texturas aplicadas. Revisa el personaje en el visor; puedes deshacer el lote.'});
+      return result;
+    }catch(error){
+      refreshTextureInfo();setCanUndoTextures(Boolean(viewer.current?.canUndoTextureBatch));
+      setNotice({type:'error',text:error.message||String(error)});
+      throw error;
     }finally{setBusy('');}
+  };
+  const undoTexture=async()=>{
+    if(!viewer.current)return false;
+    const result=viewer.current.undoTextureBatch();
+    if(result){refreshTextureInfo();setCanUndoTextures(false);
+      setNotice({type:'success',text:'Se restauraron los materiales anteriores al último lote. El rig y las animaciones no cambiaron.'});}
+    return result;
   };
   const exportModel = async () => {
     if(!viewer.current || !model) return;
@@ -209,7 +212,7 @@ export default function App() {
           </section>
           <aside className="sidebar-panels"><section className="panel inspector-panel"><div className="panel-header"><div><div className="section-icon"><SlidersHorizontal size={19}/></div><div><h3>Inspector 3D</h3><p>Detalles de tu modelo</p></div></div></div>
             {model?<><div className="model-chip"><div className="model-symbol"><Box size={23}/></div><div><strong title={model.filename}>{model.filename}</strong><span>{model.format} · {formatBytes(model.bytes)}</span></div><CheckCircle2 size={17} className="success-ic"/></div><div className="tab-bar"><button className={inspectorTab==='stats'?'active':''} onClick={()=>setInspectorTab('stats')}>Composición</button><button className={inspectorTab==='tree'?'active':''} onClick={()=>setInspectorTab('tree')}>Estructura</button></div>{inspectorTab==='stats'?<div className="stats-grid"><Stat icon={Box} label="Mallas" value={number(model.meshes)}/><Stat icon={Grid2X2} label="Triángulos" value={number(model.triangles)}/><Stat icon={Layers3} label="Materiales" value={number(model.materials)}/><Stat icon={Boxes} label="Texturas" value={number(model.textures)}/><Stat icon={Activity} label="Huesos" value={number(model.bones)}/><Stat icon={Film} label="Animaciones" value={number(clips.length)}/><Stat icon={Eye} label="Nodos" value={number(model.nodes)}/><Stat icon={ScanEye} label="Vértices" value={number(model.vertices)}/></div>:<div className="tree-list">{model.hierarchy.map((node,index)=><div key={index} className="tree-node" style={{paddingLeft:`${Math.min(node.depth,7)*12+8}px`}}><span className="tree-mark">{node.type==='Bone'?'◇':'▸'}</span><span title={node.name}>{node.name}</span><small>{node.type}</small></div>)}{model.nodes>180&&<div className="tree-more">Mostrando los primeros 180 nodos de {model.nodes}.</div>}</div>}</>:<div className="inspector-empty"><Boxes size={32}/><strong>Aún no hay modelo</strong><p>La composición y estructura aparecerán al cargar un archivo.</p></div>}</section>
-          <TextureStudio key={modelGeneration} model={model} materials={textureMaterials} busy={busy} onApply={applyTexture} onAuto={autoTexture}/>
+          <TextureStudio key={modelGeneration} model={model} materials={textureMaterials} busy={busy} onApply={applyTexture} onBatch={batchTexture} onUndo={undoTexture} canUndo={canUndoTextures}/>
           <section className="panel integrate-panel"><div className="panel-header"><div><div className="section-icon mint"><FilePlus2 size={19}/></div><div><h3>Integrar movimientos</h3><p>Animaciones externas del mismo rig</p></div></div></div><div className="compat-note"><ShieldCheck size={17}/><span>{model?.format==='VRM'?'VRM: los movimientos se pueden guardar como GLB estándar aproximado (no como VRM).':'Solo FBX del mismo esqueleto y jerarquía del personaje. No realiza rigging ni retargeting.'}</span></div><button className="outline-btn" onClick={()=>animationInput.current?.click()} disabled={!model||!!busy}><FilePlus2 size={16}/> Añadir animaciones FBX</button>{importResults.length>0&&<div className="results-list">{importResults.map((item,index)=><div key={`${item.name}-${index}`} className={item.ok?'ok':'fail'}>{item.ok?<CheckCircle2 size={15}/>:<XCircle size={15}/>}<span><strong>{item.name}</strong><small>{item.ok?`${item.count} animación(es) añadida(s)`:item.reason}</small>{item.ok&&item.warning&&<small>{item.warning}</small>}</span></div>)}</div>}
             {model?.format==='VRM'&&<label className="vrm-export-warning" style={{display:'flex',alignItems:'flex-start',gap:9,margin:'10px 0',fontSize:12,lineHeight:1.6,color:'#c6d3e4',cursor:'pointer'}}><input type="checkbox" checked={allowVrmExport} onChange={event=>setAllowVrmExport(event.target.checked)} style={{accentColor:'#48d9cb',marginTop:3,flexShrink:0}}/><span>Entiendo que descargaré un <strong>GLB estándar aproximado</strong>, no un VRM. Materiales MToon, expresiones, física y desplazamientos omitidos pueden perderse.</span></label>}
             <label style={{display:'block',fontSize:12,color:'#c6d3e4',margin:'8px 0'}}>Formato final
