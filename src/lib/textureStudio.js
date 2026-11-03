@@ -14,7 +14,7 @@ export const TEXTURE_CHANNELS=[
 const tokens=s=>String(s||'').replace(/([a-z])([A-Z])/g,'$1 $2')
   .toLowerCase().replace(/\.[^.]+$/,'').split(/[^a-z0-9]+/)
   .filter(x=>x.length>1&&!['material','mat','mesh','texture','tex','image','img','png','jpg','jpeg','webp',
-    'map','body','model','default','standard','pbr'].includes(x));
+    'map','model','default','standard','pbr'].includes(x));
 const key=s=>tokens(s).join('');
 export function inferTextureChannel(filename){
   const stem=String(filename||'').replace(/\.(png|jpe?g|webp)$/i,'').toLowerCase();
@@ -101,41 +101,48 @@ function asPBR(root,material){
   });
   return replacement;
 }
-/** Assigns a local image to a named material. Edits the in-memory preview only. */
-export async function applyTextureToMaterial(root,id,channel,file,{format='FBX'}={}){
+/** Binds a previously decoded texture to the in-memory model, without touching its file. */
+export function bindDecodedTexture(root,id,channel,texture,{format='FBX'}={}){
   if(!root)throw new Error('Primero carga un personaje 3D.');
-  if(!isTextureFile(file))throw new Error('Usa imágenes PNG, JPG o WebP válidas (máximo 50 MB por imagen).');
+  if(!texture?.isTexture)throw new Error('No se pudo leer la imagen como una textura.');
   const record=catalogMaterials(root).find(m=>m.id===id);
   if(!record)throw new Error('El material seleccionado ya no existe.');
   if(!record.hasUV)throw new Error('La malla de este material no tiene coordenadas UV. Necesita UV mapping antes de aplicar imágenes.');
+  if(!TEXTURE_CHANNELS.some(x=>x.key===channel))throw new Error('Tipo de textura no compatible.');
   let material=findMaterial(root,id);
   const pbrChannels=new Set(['roughnessMap','metalnessMap','aoMap','orm']);
-  if(pbrChannels.has(channel)&&!material.isMeshStandardMaterial&&!material.isMeshPhysicalMaterial){
-    if(format!=='FBX')throw new Error('Este material no es PBR estándar. No se modificará automáticamente el material especial de VRM/GLB.');
+  const requiresPBR=pbrChannels.has(channel);
+  if((requiresPBR||!(channel in material))&&!material.isMeshStandardMaterial&&!material.isMeshPhysicalMaterial){
+    if(format!=='FBX')
+      throw new Error('Este material especial no admite el canal solicitado. Para conservar VRM/GLB, elige otro canal o convierte a material PBR en Blender.');
+    material=asPBR(root,material);
   }
-  if(!TEXTURE_CHANNELS.some(x=>x.key===channel))throw new Error('Tipo de textura no compatible.');
+  texture.flipY=!['GLB','GLTF','VRM'].includes(String(format).toUpperCase());
+  texture.colorSpace=['map','emissiveMap'].includes(channel)?THREE.SRGBColorSpace:THREE.NoColorSpace;
+  texture.needsUpdate=true;
+  if(channel==='orm'){
+    material.aoMap=texture;material.roughnessMap=texture;material.metalnessMap=texture;
+  }else{
+    if(!(channel in material))throw new Error('El material '+material.type+' no admite este canal.');
+    material[channel]=texture;
+  }
+  if(channel==='map'&&material.color?.isColor&&format==='FBX')material.color.set(0xffffff);
+  if(channel==='alphaMap')material.transparent=true;
+  if(channel==='emissiveMap'&&material.emissive?.isColor&&material.emissive.getHex()===0)
+    material.emissive.set(0xffffff);
+  material.needsUpdate=true;
+  return {materialId:material.uuid,channel,fileName:texture.name};
+}
+/** Loads PNG/JPG/WebP file through a temporary browser blob URL. */
+export async function applyTextureToMaterial(root,id,channel,file,{format='FBX'}={}){
+  if(!isTextureFile(file))throw new Error('Usa imágenes PNG, JPG o WebP válidas (máximo 50 MB por imagen).');
   const url=URL.createObjectURL(file);
   let texture;
   try{
     texture=await new THREE.TextureLoader().loadAsync(url);
     texture.name=file.name;
-    texture.flipY=!['GLB','GLTF','VRM'].includes(String(format).toUpperCase());
-    texture.colorSpace=['map','emissiveMap'].includes(channel)?THREE.SRGBColorSpace:THREE.NoColorSpace;
-    texture.needsUpdate=true;
-    if(pbrChannels.has(channel)&&!material.isMeshStandardMaterial&&!material.isMeshPhysicalMaterial)
-      material=asPBR(root,material);
-    if(channel==='orm'){
-      material.aoMap=texture;material.roughnessMap=texture;material.metalnessMap=texture;
-    }else{
-      if(!(channel in material))throw new Error('El material '+material.type+' no admite este canal.');
-      material[channel]=texture;
-    }
-    if(channel==='map'&&material.color?.isColor&&format==='FBX')material.color.set(0xffffff);
-    if(channel==='alphaMap')material.transparent=true;
-    if(channel==='emissiveMap'&&material.emissive?.isColor&&material.emissive.getHex()===0)
-      material.emissive.set(0xffffff);
-    material.needsUpdate=true;
-    return {url,materialId:material.uuid,channel,fileName:file.name};
+    const applied=bindDecodedTexture(root,id,channel,texture,{format});
+    return {url,...applied};
   }catch(error){
     URL.revokeObjectURL(url);
     texture?.dispose();
