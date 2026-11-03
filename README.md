@@ -125,3 +125,13 @@ La especificación VRM 1.0 no contempla almacenar un banco de animaciones integr
 4. Gira y acerca la cámara, comprueba colores, ojos, ropa y orientación de mapas de normales. No modifiques el rig.
 5. Si tiene animaciones, añádelas como antes. Si no tiene, igual puedes exportarlo como GLB estático.
 6. Elige GLB y pulsa exportar. Vuelve a abrir el resultado en ORBI para comprobar que incluye sus materiales/texturas.
+
+
+## MOTION-04B — Importación directa de DDS (noviembre 2026)
+- El panel Texturas externas admite ahora PNG, JPG, WebP **y DDS**.
+- El navegador decodifica DDS de forma local, incluyendo compresiones BC1/DXT1, BC2/DXT3, BC3/DXT5, BC4, BC5 y BC7 más RGB/RGBA comunes, cuando la librería puede interpretarlas. No todos los DDS existentes son compatibles.
+- Conversión de textura a canvas RGBA antes de asignar a materiales: permite inspeccionarla en Three.js y exportarla en un GLB estándar autocontenido. No depende de soporte de compresión BCn de la GPU.
+- Bloquea archivos corruptos, cubemaps, texturas-array y mapas con más de 4096×4096 píxeles. Límite de archivo 50 MB. En esos casos explica cómo convertir a PNG en un editor.
+- Preserva el rig y las animaciones; no hace UV mapping ni modifica el FBX/VRM original en disco.
+- La exportación de FBX binario continúa experimental y no garantiza texturas empacadas. Se recomienda GLB para compartir un único archivo.
+- Pendiente verificar con archivo DDS real del usuario; las pruebas automatizadas cubren encabezados, conversión y errores.

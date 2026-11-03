@@ -44,8 +44,8 @@ export default function TextureStudio({model,materials,busy,onApply,onAuto}){
         <p style={{margin:0,fontSize:12,color:'#9bb6ca',lineHeight:1.5}}>Da color y detalle a modelos FBX, GLB o VRM con imágenes independientes.</p></div>
     </div>
     <label className="outline-btn" style={{display:'flex',alignItems:'center',gap:8,justifyContent:'center',cursor:model&&!disabled?'pointer':'not-allowed',opacity:model&&!disabled?1:0.5}}>
-      <ImagePlus size={17}/> Elegir imágenes (PNG, JPG o WebP)
-      <input type="file" accept=".png,.jpg,.jpeg,.webp" multiple disabled={!model||disabled} onChange={loadFiles} style={{display:'none'}}/>
+      <ImagePlus size={17}/> Elegir texturas (PNG, JPG, WebP o DDS)
+      <input type="file" accept=".png,.jpg,.jpeg,.webp,.dds" multiple disabled={!model||disabled} onChange={loadFiles} style={{display:'none'}}/>
     </label>
     {model?<>
       <p style={{fontSize:11,color:'#91b6c5',margin:'10px 0'}}>{materials.length} materiales encontrados · {files.length} imágenes seleccionadas{unsupported?' · '+unsupported+' sin UV':''}</p>
@@ -85,7 +85,7 @@ export default function TextureStudio({model,materials,busy,onApply,onAuto}){
             <div style={{fontSize:11,color:'#91acbd'}}>{m.meshNames.join(', ')} · {m.hasUV?'UV disponible':'Sin coordenadas UV'}{m.channels.length?' · '+m.channels.join(', '):''}</div>
           </div>)}
         </div>
-        <p style={{fontSize:11,lineHeight:1.6,color:'#a7c0d4'}}>1. Carga el personaje. 2. Elige sus archivos de imagen. 3. Usa la asociación sugerida por nombres o asigna manualmente material, canal e imagen. 4. Revisa el resultado en el visor. 5. Exporta un GLB estándar con las imágenes incluidas. Un modelo sin UV necesita mapeado en un editor 3D. Para ZIP, TGA, PSD o DDS, extrae o convierte primero a PNG/JPG; la importación de ZIP no está habilitada. Para conservar imágenes dentro del archivo final, exporta GLB: el FBX directo continúa en beta y puede necesitar archivos de textura aparte.</p>
+        <p style={{fontSize:11,lineHeight:1.6,color:'#a7c0d4'}}>1. Carga el personaje. 2. Elige sus archivos de imagen. 3. Usa la asociación sugerida por nombres o asigna manualmente material, canal e imagen. 4. Revisa el resultado en el visor. 5. Exporta un GLB estándar con las imágenes incluidas. Un modelo sin UV necesita mapeado en un editor 3D. Los archivos DDS se convierten localmente a imágenes compatibles con GLB (BC1, BC2, BC3, BC4, BC5, BC7 y RGB/RGBA habituales). Si tu DDS usa otra compresión, aparecerá un aviso para convertirlo a PNG. ZIP, TGA y PSD requieren extracción o conversión. La aplicación no crea UV y limita la conversión DDS a 4096 × 4096 píxeles para proteger la memoria. Para conservar imágenes dentro del archivo final, exporta GLB: el FBX directo continúa en beta y puede necesitar archivos de textura aparte.</p>
       </details>
     </>:<p style={{fontSize:12,color:'#8da9bb',marginTop:9}}>Carga un modelo para habilitar los materiales.</p>}
     <div style={{marginTop:12,display:'flex',gap:7,fontSize:11,lineHeight:1.5,color:'#91b7bc'}}><ShieldCheck size={15} style={{flexShrink:0}}/> Las imágenes se procesan localmente; el original no se modifica. VRM conserva sus materiales especiales mientras se visualiza.</div>

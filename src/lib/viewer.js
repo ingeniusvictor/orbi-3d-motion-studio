@@ -331,7 +331,7 @@ export class MotionViewer {
       URL.revokeObjectURL(applied.url);
       throw new Error('El personaje cambió durante la carga de la imagen.');
     }
-    this.textureAssetUrls.add(applied.url);
+    if(applied.url)this.textureAssetUrls.add(applied.url);
     this.notify();
     return applied;
   }
