@@ -1,7 +1,7 @@
 import { exportFbx, exportCharacterFbx } from 'three-js-fbx-exporter';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { makeLightweightClone, skinBoneCount, skinnedMeshes } from './lightweight.js';
-import { readPhysicalFbxBoneNames } from './fbxBoneAudit.js';
+import { readPhysicalFbxRig } from './fbxBoneAudit.js';
 
 const magic=[75,97,121,100,97,114,97,32,70,66,88,32,66,105,110,97,114,121,32,32,0,26,0];
 export function isBinaryFBX(bytes) {
@@ -32,10 +32,10 @@ export function validateBinaryFBX(bytes,expectedBones,reference=null) {
   }catch(error){
     throw new Error('El FBX generado no se pudo reabrir: '+(error.message||error));
   }
-  // Count limb models from the FBX binary itself, not JS Bone objects created
-  // by FBXLoader. With 17 meshes FBXLoader can report 155×17=2635 proxies.
-  const physicalBones=readPhysicalFbxBoneNames(bytes);
-  const rig=physicalBones.size;
+  // Audit physical LimbNode Models and their parent connections directly.
+  // FBXLoader may return 155×17 runtime proxies for 17 skinned meshes.
+  const physicalRig=readPhysicalFbxRig(bytes);
+  const rig=physicalRig.size;
   const meshes=skinnedMeshes(group);
   if(!meshes.length)throw new Error('El FBX binario no conserva una malla vinculada a huesos.');
   if(rig!==expectedBones)throw new Error(
@@ -43,14 +43,15 @@ export function validateBinaryFBX(bytes,expectedBones,reference=null) {
     expectedBones+'. No se descargará.');
   if(reference) {
     const expected=rigSignature(reference);
-    const actual=rigSignature(group);
     if(expected.size!==expectedBones)throw new Error('La referencia no tiene un rig único que pueda verificarse.');
     for(const [name,parent] of expected) {
-      if(!physicalBones.has(name))throw new Error('El FBX binario perdió o renombró el hueso físico «'+name+'».');
-      if(!actual.has(name))throw new Error('El lector FBX no reconoció el hueso «'+name+'».');
-      if(actual.get(name)!==parent)throw new Error('Cambió la jerarquía del hueso «'+name+'» en el FBX.');
+      if(!physicalRig.has(name))throw new Error('El FBX perdió o renombró el hueso físico «'+name+'».');
+      if(physicalRig.get(name)!==parent)
+        throw new Error('La jerarquía física del hueso «'+name+'» cambió al generar el FBX.');
     }
-    if(actual.size!==expected.size)throw new Error('El FBX reimportado contiene nombres de huesos inesperados.');
+    // The FBXLoader can clone each skin's bone objects internally; never
+    // treat those runtime proxies as additional physical bones.
+    if(physicalRig.size!==expected.size)throw new Error('Aparecieron huesos físicos adicionales en el FBX.');
   }
   return {bones:rig,meshBoneProxies:skinBoneCount(group),meshes:meshes.length,model:group};
 }
