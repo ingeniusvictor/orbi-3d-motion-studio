@@ -41,17 +41,22 @@ export function catalogMaterials(root){
       if(!material?.uuid)return;
       if(!found.has(material.uuid))found.set(material.uuid,{
         id:material.uuid,name:material.name||'Material sin nombre',type:material.type,
-        meshNames:[],hasUV:false,channels:[],meshes:0,
+        meshNames:[],hasUV:true,channels:[],meshes:0,textureReferences:[],
       });
       const record=found.get(material.uuid);
       record.meshes++;
-      record.hasUV ||= Boolean(mesh.geometry?.getAttribute('uv'));
+      record.hasUV &&= Boolean(mesh.geometry?.getAttribute('uv'));
       if(record.meshNames.length<5)record.meshNames.push(mesh.name||'Malla sin nombre');
     });
   });
   for(const result of found.values()){
     const material=findMaterial(root,result.id);
     result.channels=TEXTURE_CHANNELS.filter(x=>x.key!=='orm'&&material[x.key]?.isTexture).map(x=>x.label);
+    result.textureReferences=[
+      ...new Set([...['map','normalMap','roughnessMap','metalnessMap','emissiveMap','aoMap','alphaMap']
+        .map(channel=>material[channel]?.name).filter(Boolean),
+        ...(Array.isArray(material.userData?.textureFiles)?material.userData.textureFiles:[])])
+    ];
   }
   return [...found.values()];
 }

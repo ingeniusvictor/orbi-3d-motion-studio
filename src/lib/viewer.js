@@ -8,6 +8,7 @@ import { adaptFbxToVrm } from './vrmMotion.js';
 import { bakeVrmForGlb, convertVrmMaterials } from './vrmExport.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { catalogMaterials, applyTextureToMaterial } from './textureStudio.js';
+import { captureMaterialState,restoreMaterialState } from './textureBatch.js';
 import { skinnedMeshes, skinBoneCount, exportLightweightGLB } from './lightweight.js';
 import { lightweightBinaryFBX, animatedBinaryFBX } from './fbxExport.js';
 import { extensionOf, formatBytes, inspectRigCompatibility, uniqueClipName, summarizeRenderableGeometry, validateLoadedContent } from './modelInfo.js';
@@ -145,6 +146,7 @@ export class MotionViewer {
     this.lastFilename = null;
     this.lastFormat = null;
     this.textureAssetUrls = new Set();
+    this.lastTextureBatch = null;
     this.loadSequence = 0;
     this.disposed = false;
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -230,6 +232,7 @@ export class MotionViewer {
     }
     for(const url of this.textureAssetUrls)URL.revokeObjectURL(url);
     this.textureAssetUrls.clear();
+    this.lastTextureBatch=null;
     this.model = null;
     this.vrm = null;
     this.mixer = null;
@@ -323,17 +326,65 @@ export class MotionViewer {
        ...result.warnings].join(' ')};
   }
   getTextureMaterials(){return this.model?catalogMaterials(this.model):[];}
-  async attachTextureFile(file,materialId,channel) {
+  async attachTextureFile(file,materialId,channel,{batch=false}={}) {
     if(!this.model)throw new Error('Primero carga un personaje.');
+    if(!batch)this.lastTextureBatch=null; // manual changes invalidate prior undo
     const currentModel=this.model;
     const applied=await applyTextureToMaterial(currentModel,materialId,channel,file,{format:this.lastFormat});
     if(this.model!==currentModel){
-      URL.revokeObjectURL(applied.url);
+      if(applied.url)URL.revokeObjectURL(applied.url);
       throw new Error('El personaje cambió durante la carga de la imagen.');
     }
     if(applied.url)this.textureAssetUrls.add(applied.url);
     this.notify();
     return applied;
+  }
+  get canUndoTextureBatch(){return Boolean(this.lastTextureBatch);}
+  undoTextureBatch(){
+    const state=this.lastTextureBatch;
+    if(!state)return false;
+    if(this.model!==state.model){this.lastTextureBatch=null;return false;}
+    restoreMaterialState(state.snapshot);
+    for(const url of [...this.textureAssetUrls])
+      if(!state.urls.has(url)){URL.revokeObjectURL(url);this.textureAssetUrls.delete(url);}
+    this.lastTextureBatch=null;
+    this.notify();
+    return true;
+  }
+  async applyTextureBatch(assignments){
+    if(!this.model)throw new Error('Primero carga un personaje.');
+    if(!Array.isArray(assignments)||!assignments.length)throw new Error('No hay asociaciones seleccionadas.');
+    const unique=new Set();
+    for(const item of assignments){
+      const k=item.materialId+'|'+item.channel;
+      if(unique.has(k))throw new Error('Conflicto: dos imágenes para el mismo material y canal.');
+      unique.add(k);
+    }
+    const model=this.model,snapshot=captureMaterialState(model);
+    const urls=new Set(this.textureAssetUrls);
+    this.lastTextureBatch=null;
+    const reassigned=new Map();
+    const results=[];
+    try{
+      for(const item of assignments){
+        if(this.model!==model)throw new Error('El personaje cambió durante la aplicación.');
+        const id=reassigned.get(item.materialId)||item.materialId;
+        const applied=await this.attachTextureFile(item.file,id,item.channel,{batch:true});
+        if(applied.materialId!==id)reassigned.set(item.materialId,applied.materialId);
+        results.push({filename:item.file.name,materialId:applied.materialId,channel:item.channel});
+      }
+      this.lastTextureBatch={snapshot,urls,model};
+      this.notify();
+      return results;
+    }catch(error){
+      if(this.model===model){
+        restoreMaterialState(snapshot);
+        for(const url of [...this.textureAssetUrls])
+          if(!urls.has(url)){URL.revokeObjectURL(url);this.textureAssetUrls.delete(url);}
+        this.notify();
+      }
+      throw new Error('Se deshicieron los cambios del lote porque falló una textura: '+(error.message||error));
+    }
   }
   getClips() { return this.clips.map(({name,clip,source},index)=>({name,source,index,duration:Number(clip.duration.toFixed(2)),tracks:clip.tracks.length})); }
   getInfo() { return this.model ? inspect(this.model,this.clips) : EMPTY_INFO; }
