@@ -114,4 +114,14 @@ test('regresión LUMIA: 17 mallas sobre un único rig físico de 155 huesos',()=
     assert.equal(physical.get(bones[i].name),bones[i-1].name);
   }
   assert.equal(physical.get(bones[0].name),null);
+
+  // The exact workflow reported by the user is *lightweight* direct FBX.
+  // Keep all 17 selected meshes to expose per-mesh FBXLoader proxies.
+  const selection=skinnedMeshes(scene).map(mesh=>mesh.id);
+  const lightweight=lightweightBinaryFBX(scene,selection);
+  assert.ok(isBinaryFBX(lightweight.bytes));
+  assert.equal(lightweight.bones,155);
+  assert.equal(lightweight.meshes,17);
+  assert.equal(readPhysicalFbxRig(lightweight.bytes).size,155);
+  assert.equal(skinBoneCount(scene),155); // no mutation of original
 });
