@@ -53,9 +53,11 @@ export function readPhysicalFbxRig(input) {
         if(kind.value==='OO'){
           const child=id(cursor,propEnd);cursor=child.next;
           const parent=id(cursor,propEnd);
-          if(connections.has(child.value)&&connections.get(child.value)!==parent.value)
-            throw new Error('Modelo FBX con múltiples padres físicos.');
-          connections.set(child.value,parent.value);
+          if(!connections.has(child.value))connections.set(child.value,new Set());
+          // FBX LimbNode models connect both to their parent bone AND to
+          // skin Deformer/Cluster nodes; only the bone-to-bone edge is
+          // relevant for the skeletal hierarchy.
+          connections.get(child.value).add(parent.value);
         }
       }
       if(propEnd<end)read(propEnd,end,depth+1);
@@ -69,15 +71,13 @@ export function readPhysicalFbxRig(input) {
     const name=modelById.get(boneId)?.name;
     if(!name)throw new Error('Hueso FBX sin nombre.');
     if(rig.has(name))throw new Error('El FBX tiene dos huesos físicos llamados «'+name+'».');
-    let parentId=connections.get(boneId)||'0';
-    const visitedParents=new Set();
-    // Climb non-bone root/armature wrappers to the closest actual LimbNode.
-    while(parentId!=='0' && !boneIds.has(parentId)){
-      if(visitedParents.has(parentId))throw new Error('Ciclo en la jerarquía del FBX.');
-      visitedParents.add(parentId);
-      parentId=connections.get(parentId)||'0';
-    }
+    const edges=connections.get(boneId)||new Set();
+    const parents=[...edges].filter(id=>id==='0'||boneIds.has(id));
+    if(parents.length!==1)
+      throw new Error('El hueso «'+name+'» no tiene un único padre óseo en el FBX (hay '+parents.length+').');
+    const parentId=parents[0];
     const parent=parentId==='0'?null:modelById.get(parentId)?.name||null;
+    if(parent===name)throw new Error('El hueso «'+name+'» se referencia como su propio padre.');
     rig.set(name,parent);
   }
   if(!rig.size)throw new Error('El FBX no contiene huesos físicos LimbNode.');
