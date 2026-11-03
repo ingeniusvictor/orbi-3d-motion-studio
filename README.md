@@ -135,3 +135,19 @@ La especificación VRM 1.0 no contempla almacenar un banco de animaciones integr
 - Preserva el rig y las animaciones; no hace UV mapping ni modifica el FBX/VRM original en disco.
 - La exportación de FBX binario continúa experimental y no garantiza texturas empacadas. Se recomienda GLB para compartir un único archivo.
 - Pendiente verificar con archivo DDS real del usuario; las pruebas automatizadas cubren encabezados, conversión y errores.
+
+
+## MOTION-04C — Autoaplicación inteligente de texturas (implementación beta · noviembre 2026)
+
+**Estado:** disponible en preview de la rama \`feat/motion-01-viewer-inspector\`, pendiente validación visual con archivos reales.
+
+- Panel **Texturas inteligentes**: escoger imágenes, carpetas (\`webkitdirectory\`), importar ZIP y arrastrar archivos/carpetas compatibles. ZIP descomprimidos localmente con \`fflate\`, validación previa del directorio central, rutas inseguras, archivos encriptados, tamaños exagerados y compresiones inesperadas.
+- Motor determinista \`src/lib/textureAuto.js\`: coincidencias por referencia de textura, material, malla y subcarpeta; análisis sin cambios de escena; nivel de confianza 0–100, motivos legibles y prevención de conflictos por material/canal.
+- Tres resultados: **Seguras** (aplicables en un clic), **Revisión** (confirmación individual y elección manual del material), **Sin relación** (no tocar).
+- Bloqueos explícitos: material sin UV, conflicto por varias imágenes para el mismo canal, textura existente, mapa \`NormalDX\`, gloss/spec/bump sin transformación, mapa especial PBR no compatible.
+- \`src/lib/textureBatch.js\` + \`viewer.applyTextureBatch\`: respaldo de los materiales antes de aplicar, recuperación atómica si alguna textura falla, botón **Deshacer último lote** y liberación de texturas/Blob URLs creadas.
+- Compatible con carga DDS MOTION-04B; no transforma ni modifica el rig, la geometría, blendshapes, clips o el archivo original.
+- Exportación GLB con mapas integrados disponible (sin necesitar clips); FBX binario sigue siendo experimental respecto a inclusión de texturas y VRM exportado es una conversión parcial.
+- Tests \`textureAuto.test.js\`, \`textureBatch.test.js\`, \`texturePackage.test.js\`: matching, conflictos, ambiguos, UV, mapa de datos incompatibles, ZIP, revertir originales y conservar rig. Mantener PR draft y \`main\` sin cambios.
+
+**Prueba manual:** cargar FBX con materiales Body/Hair/Eyes, seleccionar carpeta o ZIP con albedo/normal/roughness (incluyendo DDS), analizar, aplicar solo seguras, revisar visualmente, deshacer/repetir si hace falta, exportar GLB y reabrirlo para confirmar que las imágenes se integraron.

@@ -1,6 +1,6 @@
 # CONTINUIDAD OFICIAL — ORBI 3D MOTION STUDIO
 ## MOTION-04C · Autoaplicación inteligente de texturas — Especificación funcional v1.0
-Fecha: 2026-11-03 · Estado: **especificación aprobada para desarrollo; funcionalidad aún no implementada**
+Fecha: 2026-11-03 · Estado: **MOTION-04C1 y MOTION-04C2 implementados en beta; MOTION-04C3 pendiente validación con modelos reales**
 Repositorio: https://github.com/ingeniusvictor/orbi-3d-motion-studio
 Rama de desarrollo: \`feat/motion-01-viewer-inspector\` · \`main\` protegida.
 

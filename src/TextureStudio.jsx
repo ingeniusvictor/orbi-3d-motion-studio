@@ -58,8 +58,14 @@ export default function TextureStudio({model,materials,busy,onApply,onBatch,onUn
    event.preventDefault();
    if(!model||disabled)return;
    setWorking(true);setError('');
-   try{record(await filesFromDrop(event.dataTransfer));}
-   catch(e){setError('No se pudo importar la carpeta: '+(e.message||e));}
+   try{
+     const zip=[...event.dataTransfer.files||[]].filter(f=>/\.zip$/i.test(f.name));
+     const ordinary=await filesFromDrop(event.dataTransfer);
+     const archives=[];
+     for(const item of zip)archives.push(...await extractTextureZip(item));
+     record([...ordinary,...archives]);
+   }
+   catch(e){setError('No se pudo importar el paquete: '+(e.message||e));}
    finally{setWorking(false);}
  };
  const analyze=()=>{
