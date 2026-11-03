@@ -5,7 +5,9 @@ import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { adaptFbxToVrm } from './vrmMotion.js';
-import { bakeVrmForGlb } from './vrmExport.js';
+import { bakeVrmForGlb, convertVrmMaterials } from './vrmExport.js';
+import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
+import { catalogMaterials, applyTextureToMaterial } from './textureStudio.js';
 import { skinnedMeshes, skinBoneCount, exportLightweightGLB } from './lightweight.js';
 import { lightweightBinaryFBX, animatedBinaryFBX } from './fbxExport.js';
 import { extensionOf, formatBytes, inspectRigCompatibility, uniqueClipName, summarizeRenderableGeometry, validateLoadedContent } from './modelInfo.js';
@@ -142,6 +144,7 @@ export class MotionViewer {
     this.wireframe = false;
     this.lastFilename = null;
     this.lastFormat = null;
+    this.textureAssetUrls = new Set();
     this.loadSequence = 0;
     this.disposed = false;
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -225,6 +228,8 @@ export class MotionViewer {
       this.scene.remove(this.model);
       VRMUtils.deepDispose(this.model);
     }
+    for(const url of this.textureAssetUrls)URL.revokeObjectURL(url);
+    this.textureAssetUrls.clear();
     this.model = null;
     this.vrm = null;
     this.mixer = null;
@@ -317,6 +322,19 @@ export class MotionViewer {
       warning:['FBX binario beta: revisa los clips en Blender y Mixamo.',
        ...result.warnings].join(' ')};
   }
+  getTextureMaterials(){return this.model?catalogMaterials(this.model):[];}
+  async attachTextureFile(file,materialId,channel) {
+    if(!this.model)throw new Error('Primero carga un personaje.');
+    const currentModel=this.model;
+    const applied=await applyTextureToMaterial(currentModel,materialId,channel,file,{format:this.lastFormat});
+    if(this.model!==currentModel){
+      URL.revokeObjectURL(applied.url);
+      throw new Error('El personaje cambió durante la carga de la imagen.');
+    }
+    this.textureAssetUrls.add(applied.url);
+    this.notify();
+    return applied;
+  }
   getClips() { return this.clips.map(({name,clip,source},index)=>({name,source,index,duration:Number(clip.duration.toFixed(2)),tracks:clip.tracks.length})); }
   getInfo() { return this.model ? inspect(this.model,this.clips) : EMPTY_INFO; }
   async addAnimations(files) {
@@ -375,13 +393,19 @@ export class MotionViewer {
   }
   async exportGLB({allowApproximateVRM=false}={}) {
     if(!this.model) throw new Error('Primero carga un modelo.');
-    if(!this.clips.length) throw new Error('Primero añade al menos una animación para crear el GLB integrado.');
+    // GLB can contain a static textured model without any animation clips.
     if(this.vrm && !allowApproximateVRM) {
       throw new Error('La conversión VRM → GLB es aproximada. Confirma que aceptas perder funciones exclusivas de VRM.');
     }
     // Never overwrite or modify the source file. VRM is baked to RAW skin bones,
     // copied into a separate model, and converted to portable PBR materials.
-    const converted = this.vrm ? bakeVrmForGlb(this.vrm,this.clips) : null;
+    const converted=this.vrm
+      ? (this.clips.length ? bakeVrmForGlb(this.vrm,this.clips) : (()=>{
+          const clone=cloneSkeleton(this.vrm.scene);
+          convertVrmMaterials(clone);
+          return {model:clone,clips:[]};
+        })())
+      : null;
     const exportModel=converted?.model||this.model;
     const exportClips=converted?.clips||this.clips.map(item=>item.clip);
     const exporter=new GLTFExporter();
@@ -396,6 +420,8 @@ export class MotionViewer {
       parsed.animations.some((clip,i)=>!clip.tracks.length || !Number.isFinite(clip.duration))) {
       throw new Error('El GLB exportado no conserva todas las animaciones; no se descargará un archivo incompleto.');
     }
+    if(this.textureAssetUrls.size && !this.vrm && inspect(parsed.scene,parsed.animations).textures===0)
+      throw new Error('Las texturas externas no quedaron incorporadas en el GLB. No se descargará un archivo incompleto.');
     if(this.vrm){
       let skin=0;
       parsed.scene.traverse(node=>{if(node.isSkinnedMesh)skin++;});
