@@ -1,6 +1,7 @@
 import { exportFbx, exportCharacterFbx } from 'three-js-fbx-exporter';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { makeLightweightClone, skinBoneCount, skinnedMeshes } from './lightweight.js';
+import { readPhysicalFbxBoneNames } from './fbxBoneAudit.js';
 
 const magic=[75,97,121,100,97,114,97,32,70,66,88,32,66,105,110,97,114,121,32,32,0,26,0];
 export function isBinaryFBX(bytes) {
@@ -31,21 +32,27 @@ export function validateBinaryFBX(bytes,expectedBones,reference=null) {
   }catch(error){
     throw new Error('El FBX generado no se pudo reabrir: '+(error.message||error));
   }
-  const rig=skinBoneCount(group);
+  // Count limb models from the FBX binary itself, not JS Bone objects created
+  // by FBXLoader. With 17 meshes FBXLoader can report 155×17=2635 proxies.
+  const physicalBones=readPhysicalFbxBoneNames(bytes);
+  const rig=physicalBones.size;
   const meshes=skinnedMeshes(group);
   if(!meshes.length)throw new Error('El FBX binario no conserva una malla vinculada a huesos.');
   if(rig!==expectedBones)throw new Error(
-    'El FBX no conservó todos los huesos originales (se esperaban '+expectedBones+
-    ', se encontraron '+rig+'). No se descargará.');
+    'El FBX binario contiene '+rig+' huesos físicos LimbNode, pero se esperaban '+
+    expectedBones+'. No se descargará.');
   if(reference) {
     const expected=rigSignature(reference);
     const actual=rigSignature(group);
+    if(expected.size!==expectedBones)throw new Error('La referencia no tiene un rig único que pueda verificarse.');
     for(const [name,parent] of expected) {
-      if(!actual.has(name))throw new Error('Se perdió o renombró el hueso «'+name+'» al exportar FBX.');
+      if(!physicalBones.has(name))throw new Error('El FBX binario perdió o renombró el hueso físico «'+name+'».');
+      if(!actual.has(name))throw new Error('El lector FBX no reconoció el hueso «'+name+'».');
       if(actual.get(name)!==parent)throw new Error('Cambió la jerarquía del hueso «'+name+'» en el FBX.');
     }
+    if(actual.size!==expected.size)throw new Error('El FBX reimportado contiene nombres de huesos inesperados.');
   }
-  return {bones:rig,meshes:meshes.length,model:group};
+  return {bones:rig,meshBoneProxies:skinBoneCount(group),meshes:meshes.length,model:group};
 }
 export function lightweightBinaryFBX(source,ids) {
   const prepared=makeLightweightClone(source,ids);
