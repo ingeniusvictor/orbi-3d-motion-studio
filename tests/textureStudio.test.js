@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import {TEXTURE_CHANNELS,catalogMaterials,inferTextureChannel,isTextureFile,suggestTextureMatches} from '../src/lib/textureStudio.js';
+import {TEXTURE_CHANNELS,catalogMaterials,inferTextureChannel,isTextureFile,suggestTextureMatches,bindDecodedTexture} from '../src/lib/textureStudio.js';
 
 function model(){
   const root=new THREE.Group();
@@ -63,4 +63,53 @@ test('no sugiere texturas en geometría sin coordenadas UV',()=>{
   body.geometry.setAttribute('position',new THREE.Float32BufferAttribute([0,0,0,1,0,0,0,1,0],3));
   const chosen=suggestTextureMatches([f('Skin_Color.jpg')],catalogMaterials(root));
   assert.equal(chosen.length,0);
+});
+
+test('aplica textura color al material y conserva la geometría y jerarquía',()=>{
+  const {root,body,skin}=model();
+  const geometry=body.geometry;
+  const texture=new THREE.DataTexture(new Uint8Array([255,0,0,255]),1,1);
+  texture.name='LUMIA_BaseColor.png';
+  const result=bindDecodedTexture(root,skin.uuid,'map',texture,{format:'FBX'});
+  assert.equal(result.materialId,skin.uuid);
+  assert.equal(body.material.map,texture);
+  assert.equal(texture.colorSpace,THREE.SRGBColorSpace);
+  assert.equal(texture.flipY,true);
+  assert.equal(body.geometry,geometry);
+  assert.equal(root.children.length,2);
+  assert.equal(catalogMaterials(root).find(m=>m.id===skin.uuid).channels.includes('Color / Albedo'),true);
+});
+test('textura glTF se aplica con origen UV glTF (flipY false)',()=>{
+  const {root,skin}=model();
+  const texture=new THREE.DataTexture(new Uint8Array([0,255,0,255]),1,1);
+  bindDecodedTexture(root,skin.uuid,'map',texture,{format:'GLB'});
+  assert.equal(texture.flipY,false);
+});
+test('FBX con material Phong convierte a PBR cuando se añade rugosidad',()=>{
+  const {root,body}=model();
+  body.material=new THREE.MeshPhongMaterial({name:'Skin_Phong'});
+  const old=body.material;
+  const tex=new THREE.DataTexture(new Uint8Array([128,128,128,255]),1,1);
+  const result=bindDecodedTexture(root,old.uuid,'roughnessMap',tex,{format:'FBX'});
+  assert.ok(body.material.isMeshStandardMaterial);
+  assert.equal(body.material.roughnessMap,tex);
+  assert.notEqual(result.materialId,old.uuid);
+  assert.equal(tex.colorSpace,THREE.NoColorSpace);
+});
+test('no modifica los materiales especiales VRM con canales incompatibles',()=>{
+  const {root,body}=model();
+  const mat=new THREE.MeshPhongMaterial({name:'VRM special'});
+  body.material=mat;
+  const texture=new THREE.DataTexture(new Uint8Array([255,255,255,255]),1,1);
+  assert.throws(()=>bindDecodedTexture(root,mat.uuid,'roughnessMap',texture,{format:'VRM'}),/material especial/);
+  assert.equal(body.material,mat);
+});
+test('rechaza malla sin UV y canal inexistente sin alterar material',()=>{
+  const {root,body,skin}=model();
+  const tex=new THREE.DataTexture(new Uint8Array([255,255,255,255]),1,1);
+  body.geometry=new THREE.BufferGeometry();
+  body.geometry.setAttribute('position',new THREE.Float32BufferAttribute([0,0,0,1,0,0,0,1,0],3));
+  assert.throws(()=>bindDecodedTexture(root,skin.uuid,'map',tex),/UV/);
+  assert.equal(body.material.map,null);
+  assert.throws(()=>bindDecodedTexture(root,skin.uuid,'mystery',tex),/UV/);
 });
