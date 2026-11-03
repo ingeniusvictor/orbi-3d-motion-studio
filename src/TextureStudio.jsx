@@ -85,7 +85,7 @@ export default function TextureStudio({model,materials,busy,onApply,onAuto}){
             <div style={{fontSize:11,color:'#91acbd'}}>{m.meshNames.join(', ')} · {m.hasUV?'UV disponible':'Sin coordenadas UV'}{m.channels.length?' · '+m.channels.join(', '):''}</div>
           </div>)}
         </div>
-        <p style={{fontSize:11,lineHeight:1.6,color:'#a7c0d4'}}>1. Carga el personaje. 2. Elige sus archivos de imagen. 3. Usa la asociación sugerida por nombres o asigna manualmente material, canal e imagen. 4. Revisa el resultado en el visor. 5. Exporta un GLB estándar con las imágenes incluidas. Un modelo sin UV necesita mapeado en un editor 3D. Para ZIP, TGA, PSD o DDS, extrae o convierte primero a PNG/JPG; la importación de ZIP no está habilitada.</p>
+        <p style={{fontSize:11,lineHeight:1.6,color:'#a7c0d4'}}>1. Carga el personaje. 2. Elige sus archivos de imagen. 3. Usa la asociación sugerida por nombres o asigna manualmente material, canal e imagen. 4. Revisa el resultado en el visor. 5. Exporta un GLB estándar con las imágenes incluidas. Un modelo sin UV necesita mapeado en un editor 3D. Para ZIP, TGA, PSD o DDS, extrae o convierte primero a PNG/JPG; la importación de ZIP no está habilitada. Para conservar imágenes dentro del archivo final, exporta GLB: el FBX directo continúa en beta y puede necesitar archivos de textura aparte.</p>
       </details>
     </>:<p style={{fontSize:12,color:'#8da9bb',marginTop:9}}>Carga un modelo para habilitar los materiales.</p>}
     <div style={{marginTop:12,display:'flex',gap:7,fontSize:11,lineHeight:1.5,color:'#91b7bc'}}><ShieldCheck size={15} style={{flexShrink:0}}/> Las imágenes se procesan localmente; el original no se modifica. VRM conserva sus materiales especiales mientras se visualiza.</div>

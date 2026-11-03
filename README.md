@@ -101,3 +101,27 @@ La especificación VRM 1.0 no contempla almacenar un banco de animaciones integr
 - FBX animado final también está en beta, y se bloquea si el exportador duplica huesos (puede ocurrir con múltiples skinned meshes). El respaldo es GLB y conversión mediante el script de Blender.
 - Importante: Mixamo puede reconocer un FBX pre-riggeado y mapear su esqueleto, pero no garantiza que todos los VRM sean aceptados, ni que sus archivos devueltos mantengan exactamente 155 huesos.
 - Si ropa y cuerpo están combinados en una sola malla, no se pueden separar de forma fiable mediante nombres; se requiere Blender u otro editor.
+
+
+## MOTION-04A — Texturas externas y materiales (beta, noviembre 2026)
+
+**Problema:** los modelos gratuitos FBX suelen descargar las mallas, el rig y los clips por separado de las imágenes de textura. Ahora se pueden asociar después de cargar el personaje.
+
+- Panel **Texturas externas**: importa varios archivos PNG, JPG, JPEG o WebP locales y lista materiales reales encontrados en las mallas. No requiere servidor ni cuenta.
+- Selector manual de material, imagen y canal (albedo/color, normal, rugosidad, metalizado, emisión, oclusión AO, transparencia y ORM combinado).
+- **Asociación sugerida por nombres** de imágenes, materiales y mallas, únicamente cuando es inequívoca; no decide en silencio sobre coincidencias ambiguas.
+- UV: si la malla no contiene coordenadas UV, informa que es necesario mapear el personaje antes de aplicarle imágenes.
+- Material FBX de tipo Phong/Lambert: conversión local a PBR estándar cuando se necesita un canal PBR no soportado. Los materiales especiales VRM no se convierten automáticamente.
+- Botón **Exportar GLB con materiales**: disponible incluso para personajes estáticos sin animaciones. Las texturas quedan empaquetadas en el GLB; el archivo se reimporta antes de descargarlo y se comprueba que tenga imágenes.
+- El personaje original, su armature y sus huesos no se modifican en el archivo de origen. Las texturas se mantienen en memoria y se eliminan al cargar otro modelo.
+- **Límites de esta fase:** imágenes PNG/JPG/WebP, máximo 50 MB cada una. ZIP/TGA/PSD/DDS requieren extraer o convertir primero a formato aceptado; no hace UV unwrapping ni edición de atlas.
+- La exportación **FBX binaria** sigue siendo beta y puede referenciar imágenes externas; **para conservarlas en un archivo autocontenido utiliza GLB**.
+- La conversión desde VRM a GLB sigue siendo aproximada y no replica necesariamente las extensiones, expresiones o físicas del VRM.
+
+### Tutorial de usuario
+1. Carga el modelo FBX (o GLB/VRM).
+2. Abre el panel «Texturas externas» y carga las imágenes suministradas con el personaje. Si están dentro de un ZIP, extráelas primero.
+3. Usa «Asociar imágenes sugeridas» si los nombres coinciden; para los demás, elige material, canal e imagen y pulsa «Aplicar al personaje».
+4. Gira y acerca la cámara, comprueba colores, ojos, ropa y orientación de mapas de normales. No modifiques el rig.
+5. Si tiene animaciones, añádelas como antes. Si no tiene, igual puedes exportarlo como GLB estático.
+6. Elige GLB y pulsa exportar. Vuelve a abrir el resultado en ORBI para comprobar que incluye sus materiales/texturas.
