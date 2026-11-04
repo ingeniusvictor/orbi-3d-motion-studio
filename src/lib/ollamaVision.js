@@ -11,11 +11,11 @@ export function ollamaOriginHelp(origin){
 }
 function failureMessage(error){
   if(error?.name==='AbortError')return 'Se canceló o agotó la conexión con Ollama.';
-  return 'No se pudo conectar al Ollama local. Comprueba que Ollama esté abierto, que el modelo esté instalado y que OLLAMA_ORIGINS autorice esta página. '+(error?.message||error);
+  return 'No se pudo acceder al servicio local Ollama. Puede estar cerrado, faltarle OLLAMA_ORIGINS o estar bloqueado el permiso «Acceso a red local / loopback» de Chrome para esta página. Comprueba la URL local, reinicia Ollama tras cambiar OLLAMA_ORIGINS y autoriza la red local en Configuración del sitio. '+(error?.message||error);
 }
 export async function getInstalledOllamaModels({request=fetch,base=OLLAMA_LOCAL,signal}={}){
   let response;
-  try{response=await request(base+'/api/tags',{method:'GET',signal});}
+  try{response=await request(base+'/api/tags',{method:'GET',mode:'cors',targetAddressSpace:'loopback',signal});}
   catch(error){throw new Error(failureMessage(error));}
   if(!response.ok)throw new Error('Ollama respondió HTTP '+response.status+' al consultar los modelos.');
   const json=await response.json();
@@ -70,7 +70,7 @@ export async function askOllamaVisual({
   let response;
   try{
     response=await request(base+'/api/chat',{
-      method:'POST',headers:{'Content-Type':'application/json'},
+      method:'POST',mode:'cors',targetAddressSpace:'loopback',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({model,stream:false,think:false,format:'json',
         options:{temperature:0,num_predict:240,num_ctx:4096},
         messages:[{role:'system',content:instruction},

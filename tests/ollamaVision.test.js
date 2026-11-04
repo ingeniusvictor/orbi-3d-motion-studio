@@ -9,6 +9,8 @@ test('04D: asks only local Ollama for installed models and selects known install
  const urls=[];
  const list=await getInstalledOllamaModels({request:async(url,init)=>{
    urls.push(url);assert.equal(init.method,'GET');
+   assert.equal(init.targetAddressSpace,'loopback');
+   assert.equal(init.mode,'cors');
    return {ok:true,json:async()=>({models:[{name:'qwen3.5:0.8b'},{name:'other:latest'}]})};
  }});
  assert.deepEqual(list,['qwen3.5:0.8b','other:latest']);
@@ -21,6 +23,8 @@ test('04D: vision request sends two bounded images, JSON prompt, and never mater
   materialName:'face',meshNames:['jaw','eyes'],candidates,request:async(url,options)=>{
     assert.equal(url,OLLAMA_LOCAL+'/api/chat');
     assert.equal(options.method,'POST');
+    assert.equal(options.targetAddressSpace,'loopback');
+    assert.equal(options.mode,'cors');
     payload=JSON.parse(options.body);
     return {ok:true,json:async()=>({message:{content:'{"candidateIndex":2,"confidence":"medium","part":"cabello","reason":"patrón compatible"}'}})};
   }});
