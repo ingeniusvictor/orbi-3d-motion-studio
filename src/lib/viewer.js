@@ -325,6 +325,79 @@ export class MotionViewer {
       warning:['FBX binario beta: revisa los clips en Blender y Mixamo.',
        ...result.warnings].join(' ')};
   }
+  /**
+   * Local visual evidence for a material: two isolated views, no scene edits
+   * retained. Rendering occurs on a temporary WebGLRenderTarget, not by
+   * exporting model files or sending any geometry to a server.
+   */
+  captureMaterialViews(materialId){
+    if(!this.model)throw new Error('Primero carga un personaje 3D.');
+    const meshes=[];
+    const visibility=[];
+    this.model.updateMatrixWorld(true);
+    this.model.traverse(node=>{
+      if(node.isMesh){
+        visibility.push({node,visible:node.visible});
+        const mats=Array.isArray(node.material)?node.material:[node.material];
+        if(mats.some(mat=>mat?.uuid===materialId))meshes.push(node);
+      }
+    });
+    if(!meshes.length)throw new Error('No se encontró la malla vinculada a ese material.');
+    const bounds=new THREE.Box3();
+    for(const mesh of meshes)bounds.expandByObject(mesh,true);
+    if(bounds.isEmpty())throw new Error('La malla no tiene volumen visible.');
+    const size=bounds.getSize(new THREE.Vector3());
+    if(![size.x,size.y,size.z].every(Number.isFinite))
+      throw new Error('Las dimensiones de la malla no son válidas.');
+    const center=bounds.getCenter(new THREE.Vector3());
+    const radius=Math.max(size.length()/2,0.005);
+    const cam=this.camera.clone();cam.aspect=1;
+    const dist=Math.max(radius/Math.sin(THREE.MathUtils.degToRad(cam.fov)/2)*1.4,0.04);
+    cam.near=Math.max(dist/3000,0.000001);cam.far=Math.max(dist*100,1);
+    cam.updateProjectionMatrix();
+    const edge=288;
+    const canvas=document.createElement('canvas');
+    canvas.width=edge*2;canvas.height=edge+30;
+    const ctx=canvas.getContext('2d',{willReadFrequently:false});
+    if(!ctx)throw new Error('El navegador no permite capturar la malla.');
+    const target=new THREE.WebGLRenderTarget(edge,edge,{depthBuffer:true});
+    target.texture.colorSpace=THREE.SRGBColorSpace;
+    const previousTarget=this.renderer.getRenderTarget();
+    const gridVisible=this.grid.visible,skeletonVisible=this.skeleton?.visible;
+    try{
+      const selected=new Set(meshes);
+      for(const {node} of visibility)node.visible=selected.has(node);
+      this.grid.visible=false;
+      if(this.skeleton)this.skeleton.visible=false;
+      const pixels=new Uint8Array(edge*edge*4);
+      for(let view=0;view<2;view++){
+        const angle=view===0?0:Math.PI/2;
+        cam.position.copy(center).add(new THREE.Vector3(
+          Math.sin(angle)*dist,dist*0.15,Math.cos(angle)*dist));
+        cam.lookAt(center);cam.updateMatrixWorld(true);
+        this.renderer.setRenderTarget(target);
+        this.renderer.clear();
+        this.renderer.render(this.scene,cam);
+        this.renderer.readRenderTargetPixels(target,0,0,edge,edge,pixels);
+        const img=ctx.createImageData(edge,edge);
+        for(let y=0;y<edge;y++){
+          const src=(edge-1-y)*edge*4;
+          img.data.set(pixels.subarray(src,src+edge*4),y*edge*4);
+        }
+        ctx.putImageData(img,view*edge,0);
+        ctx.fillStyle='#142438';ctx.fillRect(view*edge,edge,edge,30);
+        ctx.font='bold 13px sans-serif';ctx.fillStyle='#ffffff';
+        ctx.fillText(view===0?'Vista frontal aproximada':'Vista lateral aproximada',view*edge+10,edge+20);
+      }
+      return canvas.toDataURL('image/jpeg',0.78);
+    }finally{
+      this.renderer.setRenderTarget(previousTarget);
+      for(const {node,visible} of visibility)node.visible=visible;
+      this.grid.visible=gridVisible;
+      if(this.skeleton)this.skeleton.visible=skeletonVisible;
+      target.dispose();
+    }
+  }
   getTextureMaterials(){return this.model?catalogMaterials(this.model):[];}
   async attachTextureFile(file,materialId,channel,{batch=false}={}) {
     if(!this.model)throw new Error('Primero carga un personaje.');
