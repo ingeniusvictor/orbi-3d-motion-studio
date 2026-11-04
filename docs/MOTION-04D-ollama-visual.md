@@ -4,7 +4,7 @@
 
 ## Función
 
-ORBI permite seleccionar una pieza/material existente, aislarla en dos vistas mediante renderizado local a WebGLRenderTarget y preparar una lámina con hasta 8 imágenes candidatas (PNG/JPG/WebP y DDS convertidas previamente). Estas dos imágenes se envían directamente del **navegador del usuario a su propia instancia Ollama** en \`http://127.0.0.1:11434/api/chat\`, usando el modelo visual \`qwen3.5:0.8b\`.
+ORBI permite seleccionar una pieza/material existente, aislarla en dos vistas mediante renderizado local a WebGLRenderTarget y preparar una lámina con hasta 8 imágenes candidatas (PNG/JPG/WebP y DDS convertidas previamente). Estas dos imágenes se envían directamente del **navegador del usuario a su propia instancia Ollama** en `http://127.0.0.1:11434/api/chat`, usando el modelo visual `qwen3.5:0.8b`.
 
 **No hay proxy ORBI/Vercel, ni base de datos, ni servidor remoto:** las imágenes no se envían a Gemini u otra API de pago. La conexión a Ollama es local y solo inicia al pulsar el botón; se puede cancelar. El modelo no recibe los archivos FBX/VRM originales ni sus animaciones; solo imágenes reducidas de las mallas y texturas. Ollama debe estar instalado y ejecutándose en el mismo equipo donde se abre ORBI.
 
@@ -13,22 +13,22 @@ ORBI permite seleccionar una pieza/material existente, aislarla en dos vistas me
 ## Puesta en marcha, Windows + PowerShell
 
 1. Verifica que Ollama está abierto y el modelo está instalado:
-   \`\`\`powershell
+   ```powershell
    ollama list
    ollama run qwen3.5:0.8b
-   \`\`\`
-   Si ya está descargado, NO hace falta volver a descargarlo. Comprueba que el nombre del tag corresponda al que figura en \`ollama list\`. Sal del chat interactivo con \`/bye\`.
+   ```
+   Si ya está descargado, NO hace falta volver a descargarlo. Comprueba que el nombre del tag corresponda al que figura en `ollama list`. Sal del chat interactivo con `/bye`.
 2. Comprueba el servicio local desde PowerShell:
-   \`\`\`powershell
+   ```powershell
    Invoke-RestMethod http://localhost:11434/api/tags | Select-Object -ExpandProperty models
-   \`\`\`
-3. Al abrir ORBI desde Vercel, el navegador tiene un **origen web distinto** de Ollama. Por seguridad, Ollama bloquea ese origen salvo que esté autorizado mediante \`OLLAMA_ORIGINS\`. En la propia interfaz abre «Ayuda de conexión en Windows» y copia el comando que contiene **exactamente el origen de la página que tienes abierta**. No utilices \`OLLAMA_ORIGINS=*\`, no publiques el puerto local y no ejecutes Ollama en \`0.0.0.0\` para esta integración.
-4. En Windows, cierra Ollama desde el ícono de la bandeja (Salir/Quit), configura \`OLLAMA_ORIGINS\` como variable de entorno de usuario, y abre de nuevo Ollama. No basta cerrar PowerShell si Ollama continúa abierto.
-5. Desde «Texturas inteligentes» carga tu FBX y su carpeta/ZIP de texturas. En «Qwen Visual · Ollama local» pulsa **Conectar Ollama**. La interfaz consulta \`GET /api/tags\` y solo muestra modelos instalados.
+   ```
+3. Al abrir ORBI desde Vercel, el navegador tiene un **origen web distinto** de Ollama. Por seguridad, Ollama bloquea ese origen salvo que esté autorizado mediante `OLLAMA_ORIGINS`. En la propia interfaz abre «Ayuda de conexión en Windows» y copia el comando que contiene **exactamente el origen de la página que tienes abierta**. No utilices `OLLAMA_ORIGINS=*`, no publiques el puerto local y no ejecutes Ollama en `0.0.0.0` para esta integración.
+4. En Windows, cierra Ollama desde el ícono de la bandeja (Salir/Quit), configura `OLLAMA_ORIGINS` como variable de entorno de usuario, y abre de nuevo Ollama. No basta cerrar PowerShell si Ollama continúa abierto.
+5. Desde «Texturas inteligentes» carga tu FBX y su carpeta/ZIP de texturas. En «Qwen Visual · Ollama local» pulsa **Conectar Ollama**. La interfaz consulta `GET /api/tags` y solo muestra modelos instalados.
 6. Selecciona el material/pieza y de 1 a 8 posibles texturas de color; pulsa **Analizar con Qwen**. Si la imagen es DDS, ORBI la descomprime y prepara una imagen liviana para la IA.
 7. Comprueba la sugerencia, confirma o descártala. La asignación continúa siendo **revisada**, nunca automática. Utiliza «Deshacer lote» si deseas volver al aspecto anterior.
 
-**Atención:** los navegadores actuales pueden requerir permiso para red local o impedir ciertas conexiones de una web HTTPS con servicios en HTTP local. Si aparece el mensaje de red/CORS pese a configurar el origen, prueba ORBI localmente en \`http://localhost:5173\` con \`npm install && npm run dev\`, manteniendo Ollama en \`http://127.0.0.1:11434\`. No se debe intentar resolver un bloqueo desprotegiendo el servidor Ollama.
+**Atención:** los navegadores actuales pueden requerir permiso para red local o impedir ciertas conexiones de una web HTTPS con servicios en HTTP local. Si aparece el mensaje de red/CORS pese a configurar el origen, prueba ORBI localmente en `http://localhost:5173` con `npm install && npm run dev`, manteniendo Ollama en `http://127.0.0.1:11434`. No se debe intentar resolver un bloqueo desprotegiendo el servidor Ollama.
 
 ## Alcance del piloto
 
