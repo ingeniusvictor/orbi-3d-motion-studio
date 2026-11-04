@@ -161,6 +161,19 @@ Guía completa: [`docs/MOTION-04D-ollama-visual.md`](docs/MOTION-04D-ollama-visu
 
 ## Próxima etapa — MOTION-04E · Autoasignación visual global de texturas
 
-**Estado: especificación completa, implementación pendiente.** A diferencia de MOTION-04D, que pide elegir un material y un grupo de imágenes, MOTION-04E permitirá cargar el personaje y el paquete completo para analizar todas las unidades de material con Qwen local mediante una cola secuencial. Primero se implementará solo albedo/color, con matriz global de compatibilidad, conflictos, revisión humana y aplicación transaccional. Se preservarán huesos, mallas, animaciones, VRM/MToon y el estado de la rama `main`.
+**Estado: MOTION-04E1/E2 implementados en beta en la rama de desarrollo; MOTION-04E3/E4 pendientes.** A diferencia de MOTION-04D, que pide elegir un material y un grupo de imágenes, MOTION-04E permitirá cargar el personaje y el paquete completo para analizar todas las unidades de material con Qwen local mediante una cola secuencial. Primero se implementará solo albedo/color, con matriz global de compatibilidad, conflictos, revisión humana y aplicación transaccional. Se preservarán huesos, mallas, animaciones, VRM/MToon y el estado de la rama `main`.
 
 Plan por fases MOTION-04E1–04E4, arquitectura, seguridad y criterios de certificación: [docs/MOTION-04E-autoasignacion-visual-global-spec.md](docs/MOTION-04E-autoasignacion-visual-global-spec.md).
+
+### MOTION-04E1/E2 — Piloto de análisis visual de personaje completo
+
+- Panel **Qwen Visual → MOTION-04E · Personaje completo**: un botón analiza todas las unidades de material del personaje sin elegir cada malla manualmente, usando la carpeta/ZIP ya cargada.
+- Inventario puro: materiales compartidos entre mallas, materiales sin UV, mapas de color existentes, familias de imágenes y exclusión de mapas normales/roughness/metallic/ORM/especulares durante esta fase.
+- Cola local Ollama: `qwen3.5:0.8b` o `qwen3.5:2b-q4_K_M`, **una petición a la vez**, hasta ocho miniaturas por petición. Si hay más imágenes, se reparten en rondas y se comparan finalistas. Hay un límite preventivo de 100 materiales y 160 consultas iniciales; se informa antes de iniciar en vez de omitir imágenes silenciosamente.
+- Progreso, cancelación y resultados parciales, errores visibles por material o por falta de conexión.
+- Tabla global con recomendaciones de Qwen, sin propuesta, sin UV y ya texturizados. **Ninguna asignación basada exclusivamente en IA es considerada segura**. El usuario puede marcar varias recomendaciones y confirmarlas en lote con la reversión transaccional de MOTION-04C; conflictos por reutilizar la misma imagen requieren revisión.
+- Conserva el análisis manual por material de MOTION-04D, bajo sección opcional. Capturas actuales: dos vistas aisladas de la pieza; la vista contextual adicional y el optimizador completo se mantienen pendientes para MOTION-04E3.
+- Sin subida del modelo original a servicios remotos; imágenes de análisis pequeñas enviadas solo al Ollama local del navegador.
+- Validación automatizada actual: inventario/materiales/canales/rondas en `tests/globalTextureInventory.test.js`, regresiones existentes, build y CI. La precisión visual real, cancelación bajo latencia y GLB reimportado requieren pruebas del usuario.
+
+**Probar:** cargar modelo → importar carpeta/ZIP → Conectar Ollama → seleccionar Qwen instalado → **Analizar personaje completo** → revisar tabla → marcar y confirmar solo las propuestas visualmente correctas → deshacer si es necesario. Como cada despliegue preview tiene una dirección nueva, esta debe figurar exactamente en `OLLAMA_ORIGINS` y Ollama necesita reiniciarse tras modificar la variable.

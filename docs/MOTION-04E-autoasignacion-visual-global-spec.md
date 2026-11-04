@@ -1,7 +1,7 @@
 # CONTINUIDAD OFICIAL — ORBI 3D MOTION STUDIO
 ## MOTION-04E · Autoasignación visual global de texturas por personaje completo
 **Versión:** Especificación funcional y técnica v1.0 · 03-11-2026  
-**Estado:** APROBADA PARA IMPLEMENTACIÓN; **NO IMPLEMENTADA**  
+**Estado:** MOTION-04E1/E2 IMPLEMENTADOS EN BETA; MOTION-04E3/E4 PENDIENTES  
 **Repositorio:** https://github.com/ingeniusvictor/orbi-3d-motion-studio  
 **Rama de desarrollo:** `feat/motion-01-viewer-inspector` · `main` protegida · PR #1 draft
 
@@ -152,3 +152,12 @@ Construir una matriz `materialSlot × textureFamily` con puntuación reproducibl
 No generar nuevas texturas ni UV automáticos, no pintar texturas, no refactorizar pesos/esqueleto, no retargeting ni conversiones avanzadas spec/gloss, no exportar VRM/VRMA nativos, no transferir modelos completos a la nube, no prometer identificación perfecta con IA pequeña.
 
 **Decisión:** avanzar con arquitectura híbrida **nombres/referencias + visión local + optimizador global + validación humana**, conservando la fiabilidad del importador. La experiencia final debe ser **«una sola orden para analizar todo el personaje, una sola acción para aplicar las coincidencias seguras y revisión únicamente de las excepciones»**.
+
+### Actualización de ejecución — 03-11-2026
+
+- E1: `src/lib/globalTextureInventory.js` inventaría materiales, mallas compartidas, mapas de albedo, imágenes no-color y familias; genera rondas completas de candidatas con límites preventivos.
+- E2: `src/lib/globalVisionQueue.js` ejecuta el análisis visual local de forma secuencial, con cancelación, timeout, comparación de finalistas, resultados parciales y rechazo visible cuando Ollama no responde.
+- UI: `src/GlobalTextureAI.jsx`, integrada en `src/OllamaTextureAI.jsx`, expone «Analizar personaje completo», progreso, tabla y aprobación humana en lote; el modo individual anterior sigue disponible.
+- Seguridad: se utiliza la aplicación transaccional MOTION-04C. No se autoaplican texturas elegidas exclusivamente por IA.
+- Verificación: GitHub Actions 2/2 PASS, Vercel preview READY; validación manual con FBX + carpeta/DDS real sigue pendiente. Las capturas disponibles aún son las dos vistas aisladas de MOTION-04D; vista contextual/UV más avanzada aplazada para E3.
+- Esta actualización NO implica que MOTION-04E3/04E4 estén terminados. `main` sigue protegida y PR #1 en borrador.
