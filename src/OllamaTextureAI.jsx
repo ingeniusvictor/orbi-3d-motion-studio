@@ -3,6 +3,7 @@ import { Brain,CheckCircle2,Image,ShieldCheck,RefreshCcw,AlertTriangle } from 'l
 import { getInstalledOllamaModels,askOllamaVisual,OLLAMA_MODEL,ollamaOriginHelp } from './lib/ollamaVision.js';
 import { textureContactSheet } from './lib/visionImages.js';
 import { inferTextureChannel,isTextureFile } from './lib/textureStudio.js';
+import GlobalTextureAI from './GlobalTextureAI.jsx';
 
 const selectStyle={width:'100%',padding:8,borderRadius:7,background:'#17273b',
  color:'#e0f2ff',border:'1px solid #315064'};
@@ -15,6 +16,7 @@ export default function OllamaTextureAI({model,materials,files,busy,onCapture,on
   const [result,setResult]=useState(null);
   const [error,setError]=useState('');
   const [processing,setProcessing]=useState(false);
+  const [globalBusy,setGlobalBusy]=useState(false);
   const [replace,setReplace]=useState(false);
   const control=useRef(null);
   const eligible=useMemo(()=>files.map((file,index)=>({file,index}))
@@ -102,7 +104,7 @@ export default function OllamaTextureAI({model,materials,files,busy,onCapture,on
     Las sugerencias requieren tu aprobación; la IA no verifica UV ni aplica cambios sola.
    </p>
    <div style={{display:'flex',gap:8,alignItems:'center',margin:'6px 0 10px'}}>
-    <button type="button" className="outline-btn" onClick={connect} disabled={Boolean(busy)||processing}
+    <button type="button" className="outline-btn" onClick={connect} disabled={Boolean(busy)||processing||globalBusy}
       style={{display:'flex',alignItems:'center',gap:5,flex:1}}>
      <RefreshCcw size={14}/> {status==='connected'?'Actualizar conexión':'Conectar Ollama'}
     </button>
@@ -116,6 +118,14 @@ export default function OllamaTextureAI({model,materials,files,busy,onCapture,on
       {models.map(name=><option value={name} key={name}>{name}</option>)}
     </select>
    </label>}
+   {status==='connected'&&model&&models.length>0&&
+      <GlobalTextureAI model={model} materials={materials} files={files} modelName={modelName}
+        busy={Boolean(busy)||processing} onCapture={onCapture} onBatch={onBatch}
+        onActiveChange={setGlobalBusy}/>}
+   <details style={{margin:'10px 0',borderTop:'1px solid #355166',paddingTop:9}}>
+     <summary style={{cursor:'pointer',fontSize:12,color:'#c5d7e8'}}>
+       Modo individual anterior (opcional)
+     </summary>
    {status==='connected'&&model&&models.length>0&&<>
      <label style={{fontSize:11,color:'#c5d7e8',display:'grid',gap:5,marginTop:8}}>
       Pieza o material para analizar
@@ -140,13 +150,14 @@ export default function OllamaTextureAI({model,materials,files,busy,onCapture,on
       </div>
      </details>
      <div style={{display:'flex',gap:7}}>
-      <button type="button" className="export-btn" disabled={Boolean(busy)||processing||!material?.hasUV||!candidateIds.length}
+      <button type="button" className="export-btn" disabled={Boolean(busy)||processing||globalBusy||!material?.hasUV||!candidateIds.length}
        onClick={analyze} style={{flex:1,display:'flex',gap:6,alignItems:'center',justifyContent:'center'}}>
        <Image size={15}/> Analizar con Qwen
       </button>
       {processing&&<button type="button" className="outline-btn" onClick={stop}>Cancelar</button>}
      </div>
    </>}
+   </details>
    {error&&<p role="alert" style={{fontSize:11,color:'#ffb4a7',lineHeight:1.6}}>
      <AlertTriangle size={13}/> {error}
    </p>}
