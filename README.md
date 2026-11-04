@@ -1,7 +1,179 @@
 # ORBI 3D Motion Studio
 
-Visualizador e inspector 3D local-first del ecosistema ORBI.
+Tu espacio para visualizar, inspeccionar y reproducir modelos 3D gratuitamente.
 
-Estado: inicio del desarrollo MOTION-01. La implementación se realiza en una rama de trabajo mediante Pull Request, antes de incorporar cambios a `main`.
+Sitio: https://orbi-3d-motion-studio.vercel.app/
+Repositorio: https://github.com/ingeniusvictor/orbi-3d-motion-studio
 
-Objetivo: abrir modelos 3D estáticos o animados, inspeccionar su composición, reproducir clips y, en una etapa posterior, integrar solamente animaciones de esqueletos compatibles. Sin rigging ni retargeting.
+## Funciones (MOTION-01 beta)
+- Importación GLB, glTF (+ recursos), FBX
+- Cámara orbital, esqueleto, cuadrícula y wireframe
+- Estadísticas y estructura 3D
+- Biblioteca de animaciones con controles
+- Importación de FBX de un esqueleto estrictamente compatible (experimental)
+- Exportación de GLB con verificación de lectura
+
+## Desarrollo
+npm install
+npm run dev
+npm test
+npm run build
+
+No efectúa rigging, ni retargeting. Solo integra movimientos basados en la misma estructura y nombres de huesos. Comprueba siempre visualmente el resultado.
+
+Los archivos se procesan en tu navegador y no se suben a servidores ORBI. Se mantiene el modelo original intacto.
+
+Proyecto ORBI Ecosystem · 2026.
+
+
+## MOTION-02A — Corrección FBX y visualización VRM
+
+- FBX a escala de centímetros: se eliminó la niebla a distancia fija que los podía ocultar y se mejoró el encuadre automático con FOV horizontal y vertical.
+- FBX «Without Skin»: son **animaciones sin malla**. El visor explica por qué no aparece el personaje y recomienda cargar el personaje «With Skin» antes de agregar los movimientos.
+- VRM 0.x / 1.0: visor dedicado mediante `@pixiv/three-vrm`; se preserva la lógica de materiales MToon, expresiones y simulación VRM durante la reproducción.
+- Por seguridad, exportación e integración FBX **no disponibles** sobre VRM hasta poder conservar correctamente sus metadatos; sí se pueden abrir e inspeccionar y reproducir clips existentes.
+- Solo el cliente procesa los modelos, sin almacenarlos en servidores.
+
+Validación: ejecutar `npm install`, `npm test` y `npm run build`. Después comprobar visualmente con un FBX *With Skin* real de Mixamo, un FBX *Without Skin* y archivos VRM 0.x y 1.0.
+
+## MOTION-02B — Compatibilidad de importación Mixamo (corrección)
+
+- Un FBX descargado **Without Skin** puede importarse como fuente de movimiento sin requerir geometría.
+- La opción «Abrir modelo» continúa exigiendo malla visible: si se abre directamente un FBX solo de animación, informa qué hacer.
+- La integración sigue limitada a huesos y jerarquías estrictamente compatibles. No realiza retargeting.
+- Los objetos temporales de los FBX importados se liberan al finalizar cada importación.
+- Los archivos VRM continúan disponibles solo para inspección y visualización; **no** se convierten ni fusionan con FBX.
+
+Prueba manual pendiente: abrir personaje Mixamo **With Skin** (o su GLB), importar FBX **Without Skin** del mismo rig, reproducir movimientos y reabrir el GLB exportado.
+
+## MOTION-02C — Rig de Mixamo con raíz auxiliar (validación prudente)
+
+- Algunos FBX incluyen un hueso envolvente `root` o `armature` que puede no estar en otro FBX del mismo personaje.
+- Si la raíz es neutra, envuelve todo el rig y **el resto de huesos coincide completamente**, se permite importar la animación sin retargeting.
+- Las pistas neutras de esa raíz se omiten, y la interfaz advierte que debe revisarse la reproducción antes de exportar.
+- Si cambia la jerarquía real, faltan huesos, la raíz tiene transformaciones propias o pistas animadas, el integrador rechaza el FBX por seguridad.
+- Reporte original: personaje Thinking.fbx + movimiento Idle.fbx rechazado por hueso `root`. Sin ambos archivos originales no se puede certificar que ese par sea exactamente compatible.
+- Pruebas automatizadas de raíz neutra, raíz animada, esqueleto ajeno y escala no neutra. Pendiente prueba manual de ese par de FBX concreto.
+
+
+## MOTION-02E — Previsualización VRM desde Mixamo
+- FBX a FBX/GLB: admite animaciones sobre objetos nombrados y transformaciones compatibles, además de huesos.
+- VRM: adaptador experimental de animaciones de Mixamo basado en el ejemplo oficial three-vrm humanoidAnimation. Permite nombres estándar Mixamo o coincidencia con nombres crudos del VRM.
+- Mapea caderas, columna, cabeza, brazos y piernas a huesos normalizados de VRM. No cubre cualquier rig ni garantiza movimientos idénticos.
+- Nunca exporta desde VRM: sus metadatos y expresiones necesitan tratamiento específico.
+- Verificar visualmente con archivos reales; la interfaz informa pistas omitidas y fallos.
+
+
+## MOTION-02F — FBX con movimiento de malla y vista VRM aproximada
+- Un FBX With Skin puede traer pistas de `SkinnedMesh` o del grupo que la contiene (por ejemplo `LUMIA_FULL_SKIN_1.position`). El rig VRM normalizado no tiene un equivalente directo de dichas transformaciones.
+- La previsualización del VRM puede transferir únicamente las pistas humanoides y omitir pistas de movimiento de la malla FBX, **con advertencia explícita**. No debe interpretarse como integración fiel ni ofrecerse exportación VRM.
+- Solo se permite esta omisión de forma automática para un objeto identificable como malla skinned o grupo que la contiene, con al menos una animación humanoide válida. Las pistas animadas de otros objetos externos siguen produciendo error.
+- Confirmar la postura y el desplazamiento con modelos reales; esta fase no realiza exportación ni conserva movimientos externos desconocidos.
+
+
+## MOTION-02G — Exportación VRM → GLB animado (beta)
+- Convierte la animación previsualizada sobre huesos normalizados VRM a pistas muestreadas en huesos reales del skin; clona el modelo y convierte materiales MToon a una aproximación PBR.
+- Exporta **GLB estándar**, nunca un archivo VRM equivalente. No se conservan necesariamente materiales MToon, expresiones, físicas spring-bones ni extensiones/metadatos VRM.
+- La exportación exige consentimiento explícito sobre posibles pérdidas y valida con reimportación las animaciones y la presencia de un SkinnedMesh.
+- Las pistas de movimiento de malla omitidas durante la previsualización NO se restituyen al exportar. Original local intacto; limitar cantidad de clips para no agotar memoria.
+- Beta, pendiente prueba manual con VRM de LUMIA y sus clips FBX reales.
+
+
+## MOTION-03A — Preparación ligera del mismo rig para Mixamo
+
+- El panel **Preparar versión ligera para Mixamo** permite elegir qué mallas corporales conservar. Exporta GLB local sin texturas, sin morph targets, sin animaciones, con una malla skinned válida y nombres de huesos originales. Mantiene el modelo cargado intacto.
+- Verifica mediante GLTFLoader el número de huesos del skin después del export (el número puede variar según el modelo, no se impone 155).
+- Botón para descargar el script de Blender para convertir cualquier GLB ligero/final a FBX binario. Mixamo exige FBX para personajes riggeados (no acepta GLB directamente).
+- La conversión FBX requiere Blender local; el navegador no promete generar FBX nativo y no se añade un backend de pago.
+- Formato final: GLB directo; FBX con el script gratuito tras exportar GLB; VRM final nativo pendiente por necesidad de metadatos/extensiones, expresiones y restricciones propias de VRM.
+- Tutorial de nueve pasos integrado; no se modifica la visualización o la integración ya verificadas.
+
+**Conversión FBX final:** el script acepta `--with-animations` después del GLB para solicitar a Blender exportar acciones animadas. Para el FBX ligero de Mixamo NO debe indicarse. La exportación de varios clips puede variar según la versión de Blender, por lo que el usuario debe volver a importar el FBX final y comprobar todos los movimientos.
+
+### Aclaración VRM 1.0 y VRMA
+La especificación VRM 1.0 no contempla almacenar un banco de animaciones integrado en el VRM; para animación humanoide reutilizable se define un archivo separado .vrma. El resultado VRM + VRMA podría implementarse posteriormente, pero no está habilitado hoy. Fuente: https://vrm.dev/en/vrma/ y https://github.com/vrm-c/vrm-specification/tree/master/specification/VRMC_vrm_animation-1.0.
+
+## MOTION-03B · Modo ultraligero y FBX directo (beta)
+
+- Selección conservadora: por defecto se excluyen mallas identificadas como vestido, falda, pantalones, cabello, zapatos u otros accesorios, aunque también tengan «Skin» en su nombre. Mallas sin identificación segura requieren selección manual.
+- Vista previa corporal: alterna entre el modelo original y las mallas seleccionadas antes de exportar.
+- Dos salidas ligeras: **GLB** y **FBX binario directo**. La biblioteca MIT `three-js-fbx-exporter` realiza la conversión local sin ejecutar Blender; se reimporta el FBX con `FBXLoader` y se verifica el mismo número de huesos del skin. Si no coincide, se bloquea la descarga.
+- FBX animado final también está en beta, y se bloquea si el exportador duplica huesos (puede ocurrir con múltiples skinned meshes). El respaldo es GLB y conversión mediante el script de Blender.
+- Importante: Mixamo puede reconocer un FBX pre-riggeado y mapear su esqueleto, pero no garantiza que todos los VRM sean aceptados, ni que sus archivos devueltos mantengan exactamente 155 huesos.
+- Si ropa y cuerpo están combinados en una sola malla, no se pueden separar de forma fiable mediante nombres; se requiere Blender u otro editor.
+
+
+## MOTION-04A — Texturas externas y materiales (beta, noviembre 2026)
+
+**Problema:** los modelos gratuitos FBX suelen descargar las mallas, el rig y los clips por separado de las imágenes de textura. Ahora se pueden asociar después de cargar el personaje.
+
+- Panel **Texturas externas**: importa varios archivos PNG, JPG, JPEG o WebP locales y lista materiales reales encontrados en las mallas. No requiere servidor ni cuenta.
+- Selector manual de material, imagen y canal (albedo/color, normal, rugosidad, metalizado, emisión, oclusión AO, transparencia y ORM combinado).
+- **Asociación sugerida por nombres** de imágenes, materiales y mallas, únicamente cuando es inequívoca; no decide en silencio sobre coincidencias ambiguas.
+- UV: si la malla no contiene coordenadas UV, informa que es necesario mapear el personaje antes de aplicarle imágenes.
+- Material FBX de tipo Phong/Lambert: conversión local a PBR estándar cuando se necesita un canal PBR no soportado. Los materiales especiales VRM no se convierten automáticamente.
+- Botón **Exportar GLB con materiales**: disponible incluso para personajes estáticos sin animaciones. Las texturas quedan empaquetadas en el GLB; el archivo se reimporta antes de descargarlo y se comprueba que tenga imágenes.
+- El personaje original, su armature y sus huesos no se modifican en el archivo de origen. Las texturas se mantienen en memoria y se eliminan al cargar otro modelo.
+- **Límites de esta fase:** imágenes PNG/JPG/WebP, máximo 50 MB cada una. ZIP/TGA/PSD/DDS requieren extraer o convertir primero a formato aceptado; no hace UV unwrapping ni edición de atlas.
+- La exportación **FBX binaria** sigue siendo beta y puede referenciar imágenes externas; **para conservarlas en un archivo autocontenido utiliza GLB**.
+- La conversión desde VRM a GLB sigue siendo aproximada y no replica necesariamente las extensiones, expresiones o físicas del VRM.
+
+### Tutorial de usuario
+1. Carga el modelo FBX (o GLB/VRM).
+2. Abre el panel «Texturas externas» y carga las imágenes suministradas con el personaje. Si están dentro de un ZIP, extráelas primero.
+3. Usa «Asociar imágenes sugeridas» si los nombres coinciden; para los demás, elige material, canal e imagen y pulsa «Aplicar al personaje».
+4. Gira y acerca la cámara, comprueba colores, ojos, ropa y orientación de mapas de normales. No modifiques el rig.
+5. Si tiene animaciones, añádelas como antes. Si no tiene, igual puedes exportarlo como GLB estático.
+6. Elige GLB y pulsa exportar. Vuelve a abrir el resultado en ORBI para comprobar que incluye sus materiales/texturas.
+
+
+## MOTION-04B — Importación directa de DDS (noviembre 2026)
+- El panel Texturas externas admite ahora PNG, JPG, WebP **y DDS**.
+- El navegador decodifica DDS de forma local, incluyendo compresiones BC1/DXT1, BC2/DXT3, BC3/DXT5, BC4, BC5 y BC7 más RGB/RGBA comunes, cuando la librería puede interpretarlas. No todos los DDS existentes son compatibles.
+- Conversión de textura a canvas RGBA antes de asignar a materiales: permite inspeccionarla en Three.js y exportarla en un GLB estándar autocontenido. No depende de soporte de compresión BCn de la GPU.
+- Bloquea archivos corruptos, cubemaps, texturas-array y mapas con más de 4096×4096 píxeles. Límite de archivo 50 MB. En esos casos explica cómo convertir a PNG en un editor.
+- Preserva el rig y las animaciones; no hace UV mapping ni modifica el FBX/VRM original en disco.
+- La exportación de FBX binario continúa experimental y no garantiza texturas empacadas. Se recomienda GLB para compartir un único archivo.
+- Pendiente verificar con archivo DDS real del usuario; las pruebas automatizadas cubren encabezados, conversión y errores.
+
+
+## MOTION-04C — Autoaplicación inteligente de texturas (implementación beta · noviembre 2026)
+
+**Estado:** disponible en preview de la rama \`feat/motion-01-viewer-inspector\`, pendiente validación visual con archivos reales.
+
+- Panel **Texturas inteligentes**: escoger imágenes, carpetas (\`webkitdirectory\`), importar ZIP y arrastrar archivos/carpetas compatibles. ZIP descomprimidos localmente con \`fflate\`, validación previa del directorio central, rutas inseguras, archivos encriptados, tamaños exagerados y compresiones inesperadas.
+- Motor determinista \`src/lib/textureAuto.js\`: coincidencias por referencia de textura, material, malla y subcarpeta; análisis sin cambios de escena; nivel de confianza 0–100, motivos legibles y prevención de conflictos por material/canal.
+- Tres resultados: **Seguras** (aplicables en un clic), **Revisión** (confirmación individual y elección manual del material), **Sin relación** (no tocar).
+- Bloqueos explícitos: material sin UV, conflicto por varias imágenes para el mismo canal, textura existente, mapa \`NormalDX\`, gloss/spec/bump sin transformación, mapa especial PBR no compatible.
+- \`src/lib/textureBatch.js\` + \`viewer.applyTextureBatch\`: respaldo de los materiales antes de aplicar, recuperación atómica si alguna textura falla, botón **Deshacer último lote** y liberación de texturas/Blob URLs creadas.
+- Compatible con carga DDS MOTION-04B; no transforma ni modifica el rig, la geometría, blendshapes, clips o el archivo original.
+- Exportación GLB con mapas integrados disponible (sin necesitar clips); FBX binario sigue siendo experimental respecto a inclusión de texturas y VRM exportado es una conversión parcial.
+- Tests \`textureAuto.test.js\`, \`textureBatch.test.js\`, \`texturePackage.test.js\`: matching, conflictos, ambiguos, UV, mapa de datos incompatibles, ZIP, revertir originales y conservar rig. Mantener PR draft y \`main\` sin cambios.
+
+**Prueba manual:** cargar FBX con materiales Body/Hair/Eyes, seleccionar carpeta o ZIP con albedo/normal/roughness (incluyendo DDS), analizar, aplicar solo seguras, revisar visualmente, deshacer/repetir si hace falta, exportar GLB y reabrirlo para confirmar que las imágenes se integraron.
+
+
+## MOTION-04D1 — Qwen3.5 local con Ollama (piloto de visión)
+
+Se añadió un panel experimental al importador de texturas. Conecta al Ollama de la laptop en `http://127.0.0.1:11434`, detecta los modelos instalados y presenta al modelo Qwen dos láminas: capturas aisladas del material y hasta ocho texturas candidatas. La IA solo recomienda una correspondencia para revisión; **no realiza asignaciones automáticas**. El usuario puede confirmar con la opción de deshacer de MOTION-04C. Requiere autorización del origen exacto mediante `OLLAMA_ORIGINS` cuando la app se abre desde Vercel.
+
+Guía completa: [`docs/MOTION-04D-ollama-visual.md`](docs/MOTION-04D-ollama-visual.md).
+
+## Próxima etapa — MOTION-04E · Autoasignación visual global de texturas
+
+**Estado: MOTION-04E1/E2 implementados en beta en la rama de desarrollo; MOTION-04E3/E4 pendientes.** A diferencia de MOTION-04D, que pide elegir un material y un grupo de imágenes, MOTION-04E permitirá cargar el personaje y el paquete completo para analizar todas las unidades de material con Qwen local mediante una cola secuencial. Primero se implementará solo albedo/color, con matriz global de compatibilidad, conflictos, revisión humana y aplicación transaccional. Se preservarán huesos, mallas, animaciones, VRM/MToon y el estado de la rama `main`.
+
+Plan por fases MOTION-04E1–04E4, arquitectura, seguridad y criterios de certificación: [docs/MOTION-04E-autoasignacion-visual-global-spec.md](docs/MOTION-04E-autoasignacion-visual-global-spec.md).
+
+### MOTION-04E1/E2 — Piloto de análisis visual de personaje completo
+
+- Panel **Qwen Visual → MOTION-04E · Personaje completo**: un botón analiza todas las unidades de material del personaje sin elegir cada malla manualmente, usando la carpeta/ZIP ya cargada.
+- Inventario puro: materiales compartidos entre mallas, materiales sin UV, mapas de color existentes, familias de imágenes y exclusión de mapas normales/roughness/metallic/ORM/especulares durante esta fase.
+- Cola local Ollama: `qwen3.5:0.8b` o `qwen3.5:2b-q4_K_M`, **una petición a la vez**, hasta ocho miniaturas por petición. Si hay más imágenes, se reparten en rondas y se comparan finalistas. Hay un límite preventivo de 100 materiales y 160 consultas iniciales; se informa antes de iniciar en vez de omitir imágenes silenciosamente.
+- Progreso, cancelación y resultados parciales, errores visibles por material o por falta de conexión.
+- Tabla global con recomendaciones de Qwen, sin propuesta, sin UV y ya texturizados. **Ninguna asignación basada exclusivamente en IA es considerada segura**. El usuario puede marcar varias recomendaciones y confirmarlas en lote con la reversión transaccional de MOTION-04C; conflictos por reutilizar la misma imagen requieren revisión.
+- Conserva el análisis manual por material de MOTION-04D, bajo sección opcional. Capturas actuales: dos vistas aisladas de la pieza; la vista contextual adicional y el optimizador completo se mantienen pendientes para MOTION-04E3.
+- Sin subida del modelo original a servicios remotos; imágenes de análisis pequeñas enviadas solo al Ollama local del navegador.
+- Validación automatizada actual: inventario/materiales/canales/rondas en `tests/globalTextureInventory.test.js`, regresiones existentes, build y CI. La precisión visual real, cancelación bajo latencia y GLB reimportado requieren pruebas del usuario.
+
+**Probar:** cargar modelo → importar carpeta/ZIP → Conectar Ollama → seleccionar Qwen instalado → **Analizar personaje completo** → revisar tabla → marcar y confirmar solo las propuestas visualmente correctas → deshacer si es necesario. Como cada despliegue preview tiene una dirección nueva, esta debe figurar exactamente en `OLLAMA_ORIGINS` y Ollama necesita reiniciarse tras modificar la variable.
