@@ -8,11 +8,14 @@ const shade={review:'#ffd7a8',none:'#9fb4c5',error:'#ffb5a5',
 export default function GlobalTextureAI({
  model,materials,files,modelName,onCapture,onBatch,busy,onActiveChange
 }){
+ const [includeTextured,setIncludeTextured]=useState(true);
+ const [confirmReplacement,setConfirmReplacement]=useState(false);
+ const [appliedCount,setAppliedCount]=useState(0);
  const inventory=useMemo(()=>buildGlobalTextureInventory(materials,files),[materials,files]);
  const plan=useMemo(()=>{
-   try{return {...planGlobalVisionTasks(inventory),error:null};}
+   try{return {...planGlobalVisionTasks(inventory,{includeTextured}),error:null};}
    catch(error){return {error:error.message,tasks:[],skipped:[],requests:0};}
- },[inventory]);
+ },[inventory,includeTextured]);
  const [running,setRunning]=useState(false);
  const [progress,setProgress]=useState({stage:'pendiente',completed:0,total:0,material:null});
  const [rows,setRows]=useState([]);
@@ -27,14 +30,14 @@ export default function GlobalTextureAI({
  useEffect(()=>{
    controller.current?.abort();
    controller.current=null;
-   setRunning(false);setRows([]);setApproved([]);
+   setRunning(false);setRows([]);setApproved([]);setConfirmReplacement(false);setAppliedCount(0);
    setError('');setProgress({stage:'pendiente',completed:0,total:0,material:null});
- },[inventory,modelName,model]);
+ },[inventory,modelName,model,includeTextured]);
  useEffect(()=>()=>controller.current?.abort(),[]);
  const run=async()=>{
    if(running||plan.error||!model||!plan.requests)return;
    const ctrl=new AbortController();controller.current=ctrl;
-   setRunning(true);onActiveChange?.(true);setRows([]);setApproved([]);setError('');
+   setRunning(true);onActiveChange?.(true);setRows([]);setApproved([]);setError('');setConfirmReplacement(false);setAppliedCount(0);
    setModelUsed(modelName);
    setProgress({stage:'inventario',completed:0,total:plan.requests,material:null});
    try{
@@ -61,19 +64,21 @@ export default function GlobalTextureAI({
  const cancel=()=>controller.current?.abort();
  const review=rows.filter(x=>x.status==='review'&&x.fileIndex!==null);
  const approvedRows=review.filter(x=>approved.includes(x.materialId));
+ const replaceRows=approvedRows.filter(x=>x.hadColor);
  const repeated=new Set(),reuses=[];
  for(const row of approvedRows){
    if(repeated.has(row.fileIndex))reuses.push(row.filename);
    repeated.add(row.fileIndex);
  }
  const applyReviewed=async()=>{
-   if(!approvedRows.length||reuses.length)return;
+   if(!approvedRows.length||reuses.length||replaceRows.length&&!confirmReplacement)return;
    setError('');
    try{
-     await onBatch(approvedRows.map(row=>({
+     const outcome=await onBatch(approvedRows.map(row=>({
        file:files[row.fileIndex],materialId:row.materialId,channel:'map'
      })));
-     setApproved([]);
+     setAppliedCount(outcome?.length||approvedRows.length);
+     setApproved([]);setConfirmReplacement(false);
    }catch(e){setError('No se pudieron aplicar las seleccionadas: '+(e.message||e));}
  };
  const display=[...rows].sort((a,b)=>
@@ -102,10 +107,22 @@ export default function GlobalTextureAI({
      {inventory.families.length} familias de imágenes · {inventory.counts.withoutUV} materiales sin UV ·
      {' '}{inventory.counts.existing} materiales con color existente
    </p>
+   <label style={{display:'flex',alignItems:'flex-start',gap:8,fontSize:11,
+     lineHeight:1.55,color:'#d5e5df',margin:'9px 0',padding:'9px 8px',
+     border:'1px solid #35665f',borderRadius:7}}>
+     <input type="checkbox" checked={includeTextured} disabled={working}
+       onChange={e=>setIncludeTextured(e.target.checked)}/>
+     <span>Analizar también los {inventory.counts.existing} materiales con color existente.
+       <span style={{display:'block',color:'#95bfb8'}}>Qwen podrá compararlos, pero
+         no se reemplazará ninguna textura sin tu autorización posterior.</span>
+     </span>
+   </label>
    <p style={{fontSize:11,color:'#94bdc4',margin:'5px 0 10px'}}>
      {plan.error?'No se puede iniciar esta sesión':
        plan.requests+' consultas iniciales planificadas · '+(plan.skipped?.length||0)+' materiales sin consulta'}
      {plan.requests>1?' · Comparación adicional de finalistas cuando corresponda':''}
+     {plan.requests===0&&inventory.counts.images>0&&inventory.counts.existing>0&&!includeTextured?
+       ' · Activa la opción superior para analizar los materiales ya texturizados.':''}
    </p>
    {plan.error&&<p role="alert" style={{color:'#ffb4a7',fontSize:11}}>{plan.error}</p>}
    <div style={{display:'flex',gap:7,flexWrap:'wrap',marginBottom:7}}>
@@ -130,6 +147,9 @@ export default function GlobalTextureAI({
    {error&&<p role="alert" style={{color:'#ffb4a7',fontSize:11,lineHeight:1.5}}>
      <AlertTriangle size={13}/> {error}
    </p>}
+   {appliedCount>0&&<p role="status" style={{fontSize:11,color:'#8de5bd'}}>
+      Aplicación solicitada: {appliedCount} textura(s). Verifica el personaje y utiliza «Deshacer lote» si es necesario.
+    </p>}
    {rows.length>0&&<>
      <div style={{fontSize:11,color:'#b5d7d1',margin:'10px 0'}}>
        {totals.review} sugerencias por revisar · {totals.none} sin propuesta ·
@@ -152,6 +172,10 @@ export default function GlobalTextureAI({
                row.status==='existing'?'Ya texturizado':row.status==='blocked'?'Sin UV':'Error'}
             </span>
           </div>
+          {row.status==='review'&&row.hadColor&&
+            <div style={{fontSize:10,color:'#ffcf9e',marginTop:5}}>
+              Requiere reemplazar la textura de color que ya tiene este material
+            </div>}
           {row.filename&&<div style={{color:'#d9eaf1',fontSize:11,marginTop:3,overflowWrap:'anywhere'}}>
             {row.filename} {row.aiConfidence?'· confianza declarada: '+row.aiConfidence:''}
           </div>}
@@ -160,12 +184,23 @@ export default function GlobalTextureAI({
           </div>
         </div>)}
      </div>
+     {replaceRows.length>0&&<label style={{display:'flex',gap:8,alignItems:'flex-start',
+        margin:'10px 0',fontSize:11,color:'#ffd7aa',lineHeight:1.5}}>
+       <input type="checkbox" checked={confirmReplacement}
+         disabled={working} onChange={e=>setConfirmReplacement(e.target.checked)}/>
+       Autorizo reemplazar las texturas actuales de los {replaceRows.length}
+       materiales seleccionados. Podré deshacer el último lote.
+     </label>}
      <button type="button" className="outline-btn" onClick={applyReviewed}
-       disabled={working||!approvedRows.length||reuses.length>0}
+       disabled={working||!approvedRows.length||reuses.length>0||replaceRows.length>0&&!confirmReplacement}
        style={{width:'100%',display:'flex',gap:7,alignItems:'center',
          justifyContent:'center',marginTop:9}}>
         <CheckCircle2 size={15}/> Confirmar y aplicar {approvedRows.length} revisadas
      </button>
+     {review.length>0&&!approvedRows.length&&
+       <p style={{fontSize:11,color:'#a5c3c2'}}>
+         Marca las propuestas correctas de la tabla para habilitar su aplicación.
+       </p>}
      {reuses.length>0&&<p style={{fontSize:11,color:'#ffcf9e',lineHeight:1.5}}>
        Se detectó una textura propuesta para distintos materiales ({[...new Set(reuses)].join(', ')}).
        Revisa el posible atlas compartido antes de aplicar; selecciona una asignación por ahora.
