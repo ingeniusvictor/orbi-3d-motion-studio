@@ -4,13 +4,14 @@ import { ImagePlus,Images,WandSparkles,ShieldCheck,FolderOpen,Archive,
 import { TEXTURE_CHANNELS,isTextureFile } from './lib/textureStudio.js';
 import { buildTexturePlan,summarizeTexturePlan,normalizedPath } from './lib/textureAuto.js';
 import { extractTextureZip,validateTexturePackage,filesFromDrop } from './lib/texturePackage.js';
+import OllamaTextureAI from './OllamaTextureAI.jsx';
 
 const selectStyle={width:'100%',minWidth:0,background:'#17273b',color:'#deedf9',
   border:'1px solid #315064',borderRadius:7,padding:9,fontSize:12};
 const buttonStyle={display:'flex',alignItems:'center',gap:7,justifyContent:'center'};
 const labelColor={high:'#69ddca',medium:'#ffcd8a',low:'#a9bdcb'};
 
-export default function TextureStudio({model,materials,busy,onApply,onBatch,onUndo,canUndo}) {
+export default function TextureStudio({model,materials,busy,onApply,onBatch,onUndo,canUndo,onCapture}) {
  const [files,setFiles]=useState([]);
  const [materialId,setMaterialId]=useState('');
  const [channel,setChannel]=useState('map');
@@ -203,6 +204,7 @@ export default function TextureStudio({model,materials,busy,onApply,onBatch,onUn
    {plan.length>24&&<button className="outline-btn" type="button"
      onClick={()=>setShowMore(v=>!v)}>{showMore?'Ver menos':'Ver todas las '+plan.length+' imágenes'}</button>}
   </>}
+  <OllamaTextureAI model={model} materials={materials} files={files} busy={busy} onCapture={onCapture} onBatch={onBatch}/>
   <details style={{marginTop:12,fontSize:12,color:'#b6cada'}}>
    <summary style={{cursor:'pointer',fontWeight:650}}>Asignación manual y tutorial</summary>
    <div style={{display:'grid',gap:8,marginTop:10}}>
