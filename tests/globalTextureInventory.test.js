@@ -44,8 +44,24 @@ test('04E1: material with existing albedo or no UV is skipped',()=>{
  const inv=buildGlobalTextureInventory([
   mat(1,{hasUV:false}),mat(2,{channels:['Color / Albedo']}),mat(3)
  ],[file('Material3_Albedo.png')]);
- const p=planGlobalVisionTasks(inv);
+ const p=planGlobalVisionTasks(inv,{includeTextured:false});
  assert.deepEqual(p.skipped.map(x=>x.status),['blocked','existing']);
  assert.equal(p.requests,1);
  assert.throws(()=>planGlobalVisionTasks(inv,{maxTasks:0}),/consultas/);
+});
+
+test('04E: global mode analyzes ALL previously textured materials without replacing anything',()=>{
+ const tinted=Array.from({length:11},(_,i)=>mat(i,{channels:['Color / Albedo']}));
+ const images=Array.from({length:7},(_,i)=>file('Texture'+i+'.png'));
+ const inv=buildGlobalTextureInventory(tinted,images);
+ const plan=planGlobalVisionTasks(inv);
+ assert.equal(inv.counts.existing,11);
+ assert.equal(inv.counts.images,7);
+ assert.equal(plan.requests,11);
+ assert.equal(plan.skipped.length,0);
+ assert.ok(plan.tasks.every(t=>t.hadColor===true));
+ assert.equal(plan.tasks[0].candidates.length,7);
+ const optional=planGlobalVisionTasks(inv,{includeTextured:false});
+ assert.equal(optional.requests,0);
+ assert.equal(optional.skipped.length,11);
 });

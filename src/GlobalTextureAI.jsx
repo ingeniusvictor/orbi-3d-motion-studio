@@ -31,7 +31,7 @@ export default function GlobalTextureAI({
  useEffect(()=>{
    controller.current?.abort();
    controller.current=null;
-   setRunning(false);setRows([]);setApproved([]);setConfirmReplacement(false);setAllowReuse(false);setAllowReuse(false);setAppliedCount(0);
+   setRunning(false);setRows([]);setApproved([]);setConfirmReplacement(false);setAllowReuse(false);setAppliedCount(0);
    setError('');setProgress({stage:'pendiente',completed:0,total:0,material:null});
  },[inventory,modelName,model,includeTextured]);
  useEffect(()=>()=>controller.current?.abort(),[]);
@@ -79,7 +79,7 @@ export default function GlobalTextureAI({
        file:files[row.fileIndex],materialId:row.materialId,channel:'map'
      })));
      setAppliedCount(outcome?.length||approvedRows.length);
-     setApproved([]);setConfirmReplacement(false);
+     setApproved([]);setConfirmReplacement(false);setAllowReuse(false);
    }catch(e){setError('No se pudieron aplicar las seleccionadas: '+(e.message||e));}
  };
  const display=[...rows].sort((a,b)=>
