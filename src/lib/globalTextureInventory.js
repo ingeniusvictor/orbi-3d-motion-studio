@@ -83,7 +83,7 @@ export function rankGlobalCandidates(slot,images){
 /** Every color candidate is considered. If the session is too large, reject
  * it explicitly instead of silently ignoring unreviewed images.
  */
-export function planGlobalVisionTasks(inventory,{perRequest=8,maxTasks=160}={}){
+export function planGlobalVisionTasks(inventory,{perRequest=8,maxTasks=160,includeTextured=true}={}){
  if(!Number.isInteger(perRequest)||perRequest<1||perRequest>8)
    throw new Error('Se admiten de 1 a 8 imágenes por consulta.');
  if(inventory.slots.length>100)
@@ -91,12 +91,12 @@ export function planGlobalVisionTasks(inventory,{perRequest=8,maxTasks=160}={}){
  const tasks=[],skipped=[];
  for(const slot of inventory.slots){
    if(!slot.hasUV){skipped.push({materialId:slot.materialId,status:'blocked',reason:'Sin UV'});continue;}
-   if(slot.hasColor){skipped.push({materialId:slot.materialId,status:'existing',reason:'Ya tiene albedo; no se sobrescribe'});continue;}
+   if(slot.hasColor&&!includeTextured){skipped.push({materialId:slot.materialId,status:'existing',reason:'Ya tiene albedo; excluido por elección del usuario'});continue;}
    const candidates=rankGlobalCandidates(slot,inventory.images);
    if(!candidates.length){skipped.push({materialId:slot.materialId,status:'none',reason:'No hay imágenes de color'});continue;}
    for(let i=0;i<candidates.length;i+=perRequest){
      tasks.push({materialId:slot.materialId,materialName:slot.materialName,
-       meshNames:slot.meshNames,round:Math.floor(i/perRequest)+1,
+       meshNames:slot.meshNames,hadColor:slot.hasColor,round:Math.floor(i/perRequest)+1,
        candidates:candidates.slice(i,i+perRequest)});
      if(tasks.length>maxTasks)throw new Error(
        'El paquete requiere más de '+maxTasks+' consultas visuales. Reduce imágenes no relacionadas o divide el paquete antes de iniciar; no se omitirá ninguna silenciosamente.');
