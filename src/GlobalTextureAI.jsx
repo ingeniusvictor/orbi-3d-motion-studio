@@ -10,6 +10,7 @@ export default function GlobalTextureAI({
 }){
  const [includeTextured,setIncludeTextured]=useState(true);
  const [confirmReplacement,setConfirmReplacement]=useState(false);
+ const [allowReuse,setAllowReuse]=useState(false);
  const [appliedCount,setAppliedCount]=useState(0);
  const inventory=useMemo(()=>buildGlobalTextureInventory(materials,files),[materials,files]);
  const plan=useMemo(()=>{
@@ -30,14 +31,14 @@ export default function GlobalTextureAI({
  useEffect(()=>{
    controller.current?.abort();
    controller.current=null;
-   setRunning(false);setRows([]);setApproved([]);setConfirmReplacement(false);setAppliedCount(0);
+   setRunning(false);setRows([]);setApproved([]);setConfirmReplacement(false);setAllowReuse(false);setAllowReuse(false);setAppliedCount(0);
    setError('');setProgress({stage:'pendiente',completed:0,total:0,material:null});
  },[inventory,modelName,model,includeTextured]);
  useEffect(()=>()=>controller.current?.abort(),[]);
  const run=async()=>{
    if(running||plan.error||!model||!plan.requests)return;
    const ctrl=new AbortController();controller.current=ctrl;
-   setRunning(true);onActiveChange?.(true);setRows([]);setApproved([]);setError('');setConfirmReplacement(false);setAppliedCount(0);
+   setRunning(true);onActiveChange?.(true);setRows([]);setApproved([]);setError('');setConfirmReplacement(false);setAllowReuse(false);setAppliedCount(0);
    setModelUsed(modelName);
    setProgress({stage:'inventario',completed:0,total:plan.requests,material:null});
    try{
@@ -71,7 +72,7 @@ export default function GlobalTextureAI({
    repeated.add(row.fileIndex);
  }
  const applyReviewed=async()=>{
-   if(!approvedRows.length||reuses.length||replaceRows.length&&!confirmReplacement)return;
+   if(!approvedRows.length||reuses.length&&!allowReuse||replaceRows.length&&!confirmReplacement)return;
    setError('');
    try{
      const outcome=await onBatch(approvedRows.map(row=>({
@@ -192,7 +193,7 @@ export default function GlobalTextureAI({
        materiales seleccionados. Podré deshacer el último lote.
      </label>}
      <button type="button" className="outline-btn" onClick={applyReviewed}
-       disabled={working||!approvedRows.length||reuses.length>0||replaceRows.length>0&&!confirmReplacement}
+       disabled={working||!approvedRows.length||reuses.length>0&&!allowReuse||replaceRows.length>0&&!confirmReplacement}
        style={{width:'100%',display:'flex',gap:7,alignItems:'center',
          justifyContent:'center',marginTop:9}}>
         <CheckCircle2 size={15}/> Confirmar y aplicar {approvedRows.length} revisadas
@@ -201,10 +202,16 @@ export default function GlobalTextureAI({
        <p style={{fontSize:11,color:'#a5c3c2'}}>
          Marca las propuestas correctas de la tabla para habilitar su aplicación.
        </p>}
-     {reuses.length>0&&<p style={{fontSize:11,color:'#ffcf9e',lineHeight:1.5}}>
-       Se detectó una textura propuesta para distintos materiales ({[...new Set(reuses)].join(', ')}).
-       Revisa el posible atlas compartido antes de aplicar; selecciona una asignación por ahora.
-     </p>}
+     {reuses.length>0&&<div style={{fontSize:11,color:'#ffcf9e',lineHeight:1.5,marginTop:8}}>
+       La misma imagen fue recomendada para varios materiales:
+       {' '}{[...new Set(reuses)].join(', ')}.
+       <label style={{display:'flex',gap:8,alignItems:'flex-start',marginTop:6}}>
+         <input type="checkbox" checked={allowReuse} disabled={working}
+           onChange={e=>setAllowReuse(e.target.checked)}/>
+         Autorizo reutilizar esas imágenes en varios materiales porque he revisado
+         que son atlas compartidos. Si no estoy seguro, aplicaré las propuestas por separado.
+       </label>
+     </div>}
    </>}
    <p style={{fontSize:10,lineHeight:1.6,color:'#9bbdb8',margin:'9px 0 0'}}>
      Seguridad: ninguna sugerencia exclusivamente visual se considera «segura» automáticamente.
