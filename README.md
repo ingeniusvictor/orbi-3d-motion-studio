@@ -151,3 +151,10 @@ La especificación VRM 1.0 no contempla almacenar un banco de animaciones integr
 - Tests \`textureAuto.test.js\`, \`textureBatch.test.js\`, \`texturePackage.test.js\`: matching, conflictos, ambiguos, UV, mapa de datos incompatibles, ZIP, revertir originales y conservar rig. Mantener PR draft y \`main\` sin cambios.
 
 **Prueba manual:** cargar FBX con materiales Body/Hair/Eyes, seleccionar carpeta o ZIP con albedo/normal/roughness (incluyendo DDS), analizar, aplicar solo seguras, revisar visualmente, deshacer/repetir si hace falta, exportar GLB y reabrirlo para confirmar que las imágenes se integraron.
+
+
+## MOTION-04D1 — Qwen3.5 local con Ollama (piloto de visión)
+
+Se añadió un panel experimental al importador de texturas. Conecta al Ollama de la laptop en `http://127.0.0.1:11434`, detecta los modelos instalados y presenta al modelo Qwen dos láminas: capturas aisladas del material y hasta ocho texturas candidatas. La IA solo recomienda una correspondencia para revisión; **no realiza asignaciones automáticas**. El usuario puede confirmar con la opción de deshacer de MOTION-04C. Requiere autorización del origen exacto mediante `OLLAMA_ORIGINS` cuando la app se abre desde Vercel.
+
+Guía completa: [`docs/MOTION-04D-ollama-visual.md`](docs/MOTION-04D-ollama-visual.md).
