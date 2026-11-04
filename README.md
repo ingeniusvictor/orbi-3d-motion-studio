@@ -158,3 +158,9 @@ La especificación VRM 1.0 no contempla almacenar un banco de animaciones integr
 Se añadió un panel experimental al importador de texturas. Conecta al Ollama de la laptop en `http://127.0.0.1:11434`, detecta los modelos instalados y presenta al modelo Qwen dos láminas: capturas aisladas del material y hasta ocho texturas candidatas. La IA solo recomienda una correspondencia para revisión; **no realiza asignaciones automáticas**. El usuario puede confirmar con la opción de deshacer de MOTION-04C. Requiere autorización del origen exacto mediante `OLLAMA_ORIGINS` cuando la app se abre desde Vercel.
 
 Guía completa: [`docs/MOTION-04D-ollama-visual.md`](docs/MOTION-04D-ollama-visual.md).
+
+## Próxima etapa — MOTION-04E · Autoasignación visual global de texturas
+
+**Estado: especificación completa, implementación pendiente.** A diferencia de MOTION-04D, que pide elegir un material y un grupo de imágenes, MOTION-04E permitirá cargar el personaje y el paquete completo para analizar todas las unidades de material con Qwen local mediante una cola secuencial. Primero se implementará solo albedo/color, con matriz global de compatibilidad, conflictos, revisión humana y aplicación transaccional. Se preservarán huesos, mallas, animaciones, VRM/MToon y el estado de la rama `main`.
+
+Plan por fases MOTION-04E1–04E4, arquitectura, seguridad y criterios de certificación: [docs/MOTION-04E-autoasignacion-visual-global-spec.md](docs/MOTION-04E-autoasignacion-visual-global-spec.md).
