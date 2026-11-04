@@ -1,7 +1,7 @@
 import { ddsToCanvas } from './ddsTexture.js';
 
 /** Prepares a bounded contact sheet, locally, for a small 0.8B vision model. */
-export async function textureContactSheet(files,{size=150,columns=3}={}){
+export async function textureContactSheet(files,{size=150,columns=3,strict=false}={}){
   if(!Array.isArray(files)||!files.length||files.length>8)
     throw new Error('Se admiten de una a ocho texturas en una comparativa.');
   const rows=Math.ceil(files.length/columns),height=rows*(size+38)+20;
@@ -22,7 +22,8 @@ export async function textureContactSheet(files,{size=150,columns=3}={}){
       }
       const w=image.width,h=image.height,r=Math.min(size/w,size/h);
       ctx.drawImage(image,x+(size-w*r)/2,y+(size-h*r)/2,w*r,h*r);
-    }catch{
+    }catch(error){
+      if(strict)throw new Error('Imagen no decodificable '+file.name+': '+(error.message||error));
       ctx.fillStyle='#e5ad83';ctx.font='12px sans-serif';ctx.fillText('No legible',x+12,y+size/2);
     }finally{close?.();}
     ctx.fillStyle='#0b1320';ctx.fillRect(x,y+size-24,size,24);

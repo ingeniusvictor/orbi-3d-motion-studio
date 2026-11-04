@@ -6,7 +6,7 @@ import { runGlobalVision,summarizeGlobalResults } from './lib/globalVisionQueue.
 const shade={review:'#ffd7a8',none:'#9fb4c5',error:'#ffb5a5',
   existing:'#9adbcf',blocked:'#f2b2af'};
 export default function GlobalTextureAI({
- model,materials,files,modelName,onCapture,onBatch,busy
+ model,materials,files,modelName,onCapture,onBatch,busy,onActiveChange
 }){
  const inventory=useMemo(()=>buildGlobalTextureInventory(materials,files),[materials,files]);
  const plan=useMemo(()=>{
@@ -34,7 +34,7 @@ export default function GlobalTextureAI({
  const run=async()=>{
    if(running||plan.error||!model||!plan.requests)return;
    const ctrl=new AbortController();controller.current=ctrl;
-   setRunning(true);setRows([]);setApproved([]);setError('');
+   setRunning(true);onActiveChange?.(true);setRows([]);setApproved([]);setError('');
    setModelUsed(modelName);
    setProgress({stage:'inventario',completed:0,total:plan.requests,material:null});
    try{
@@ -55,7 +55,7 @@ export default function GlobalTextureAI({
      }
    }finally{
      if(controller.current===ctrl)controller.current=null;
-     setRunning(false);
+     setRunning(false);onActiveChange?.(false);
    }
  };
  const cancel=()=>controller.current?.abort();
