@@ -69,7 +69,7 @@ export async function runGlobalVision({
    let meshImage;
    try{meshImage=await capture(materialId);}
    catch(error){
-     const row={materialId,materialName:first.materialName,status:'error',
+     const row={materialId,materialName:first.materialName,hadColor:Boolean(first.hadColor),status:'error',
        reason:'No se pudo capturar esta malla: '+(error.message||error),fileIndex:null};
      rows.set(materialId,row);onRow(row);
      finished+=tasks.length;
@@ -105,7 +105,7 @@ export async function runGlobalVision({
      }
    }
    if(failedNetwork){
-     const row={materialId,materialName:first.materialName,status:'error',
+     const row={materialId,materialName:first.materialName,hadColor:Boolean(first.hadColor),status:'error',
        reason:failedNetwork.message,fileIndex:null};
      rows.set(materialId,row);onRow(row);break;
    }
@@ -141,7 +141,7 @@ export async function runGlobalVision({
    }
    if(failedNetwork)break;
    const winner=finalists[0];
-   const row={materialId,materialName:first.materialName,
+   const row={materialId,materialName:first.materialName,hadColor:Boolean(first.hadColor),
      status:winner?'review':problem?'error':'none',
      fileIndex:winner?.candidate.fileIndex??null,
      filename:winner?.candidate.name??null,
