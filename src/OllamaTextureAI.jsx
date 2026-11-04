@@ -37,12 +37,13 @@ export default function OllamaTextureAI({model,materials,files,busy,onCapture,on
     const ctrl=new AbortController();control.current=ctrl;
     try{
       const list=await getInstalledOllamaModels({signal:ctrl.signal});
-      setModels(list);setStatus('connected');
-      if(!list.includes(modelName)){
-        const preferred=list.find(m=>m.toLowerCase().startsWith('qwen3.5:0.8b'));
-        setModelName(preferred||list[0]||OLLAMA_MODEL);
+      const vision=list.filter(name=>/^qwen3\.5(?::|$)/i.test(name));
+      setModels(vision);setStatus('connected');
+      if(!vision.includes(modelName)){
+        const preferred=vision.find(m=>m.toLowerCase().startsWith('qwen3.5:0.8b'));
+        setModelName(preferred||vision[0]||OLLAMA_MODEL);
       }
-      if(!list.length)setError('Ollama respondió, pero no aparecen modelos instalados. Comprueba «ollama list» en PowerShell.');
+      if(!vision.length)setError('Ollama está conectado, pero no encontró Qwen3.5 instalado. Verifica «ollama list» en PowerShell.');
     }catch(e){setStatus('disconnected');setError(e.message||String(e));}
     finally{setProcessing(false);control.current=null;}
   };
@@ -115,7 +116,7 @@ export default function OllamaTextureAI({model,materials,files,busy,onCapture,on
       {models.map(name=><option value={name} key={name}>{name}</option>)}
     </select>
    </label>}
-   {status==='connected'&&model&&<>
+   {status==='connected'&&model&&models.length>0&&<>
      <label style={{fontSize:11,color:'#c5d7e8',display:'grid',gap:5,marginTop:8}}>
       Pieza o material para analizar
       <select style={selectStyle} value={materialId} onChange={e=>setMaterialId(e.target.value)}>

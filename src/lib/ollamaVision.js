@@ -7,7 +7,7 @@ export const OLLAMA_LOCAL='http://127.0.0.1:11434';
 export const OLLAMA_MODEL='qwen3.5:0.8b';
 export function ollamaOriginHelp(origin){
   if(!/^https?:\/\/[A-Za-z0-9.:_-]+$/.test(origin||''))return '';
-  return '$env:OLLAMA_ORIGINS="'+origin+'"; [Environment]::SetEnvironmentVariable("OLLAMA_ORIGINS",$env:OLLAMA_ORIGINS,"User")';
+  return '$orbiOrigin="'+origin+'"; $existing=[Environment]::GetEnvironmentVariable("OLLAMA_ORIGINS","User"); $allowed=((@($existing -split ",")+@($orbiOrigin)) | Where-Object { $_ } | Select-Object -Unique) -join ","; [Environment]::SetEnvironmentVariable("OLLAMA_ORIGINS",$allowed,"User")';
 }
 function failureMessage(error){
   if(error?.name==='AbortError')return 'Se canceló o agotó la conexión con Ollama.';
