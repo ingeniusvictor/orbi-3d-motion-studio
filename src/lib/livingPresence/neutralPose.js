@@ -40,7 +40,29 @@ export function buildRelaxedArmOffsets(vrm, maximumDropDegrees = 72) {
     // Convert world-space correction to the bone's local post-multiply offset.
     const localDelta = worldRest.clone().invert().multiply(worldDelta).multiply(worldRest).normalize();
     offsets.set(role, localDelta);
-    diagnostics.push(side + ': postura calibrada; descenso objetivo ' + Math.round(THREE.MathUtils.radToDeg(rotation)) + '°.');
+    diagnostics.push(side + ': descenso de brazo ' + Math.round(THREE.MathUtils.radToDeg(rotation)) + '°.');
+    // A small forward elbow flex prevents a rigid straight-arm A-pose.
+    // Determine the bend direction from the avatar-facing local +Z instead of
+    // assuming identical bone local axes on VRM 0.x and 1.0.
+    const wrist = humanoid.getNormalizedBoneNode(side + 'Hand');
+    if (wrist) {
+      const forearm = wrist.getWorldPosition(new THREE.Vector3())
+        .sub(lower.getWorldPosition(new THREE.Vector3()));
+      const face = new THREE.Vector3(0, 0, 1)
+        .applyQuaternion(vrm.scene.getWorldQuaternion(new THREE.Quaternion())).normalize();
+      if (forearm.lengthSq() > 1e-10) {
+        forearm.normalize();
+        const axisFlex = new THREE.Vector3().crossVectors(forearm, face);
+        const angleFlex = Math.min(THREE.MathUtils.degToRad(13), forearm.angleTo(face));
+        if (axisFlex.lengthSq() > 1e-10 && angleFlex > 1e-6) {
+          const worldBend = new THREE.Quaternion().setFromAxisAngle(axisFlex.normalize(), angleFlex);
+          const lowerWorld = lower.getWorldQuaternion(new THREE.Quaternion());
+          const lowerOffset = lowerWorld.clone().invert().multiply(worldBend).multiply(lowerWorld).normalize();
+          offsets.set(side + 'LowerArm', lowerOffset);
+          diagnostics.push(side + ': flexión ligera de codo ' + Math.round(THREE.MathUtils.radToDeg(angleFlex)) + '°.');
+        }
+      }
+    }
   }
   return { offsets, diagnostics };
 }
