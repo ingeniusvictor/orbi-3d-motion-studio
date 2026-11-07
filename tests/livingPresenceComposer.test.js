@@ -77,7 +77,7 @@ test('LP-02C.1 quaternion detection ignores q/-q double cover',()=>{
 });
 test('LP-02C.1 conservative role authority protects dynamic hands and lower body',()=>{
   const vrm=syntheticVrm(),composer=new MotionComposer(vrm);
-  composer.selectClip(makeIdleClip());
+  composer.selectClip(makeIdleClip(),{source:'VRM / Mixamo (experimental)'});
   assert.equal(composer.getStatus().eligible,true);
   assert.equal(composer.getStatus().fingerTracks.static,1);
   assert.equal(composer.getStatus().fingerTracks.animated,1);
@@ -90,9 +90,12 @@ test('LP-02C.1 conservative role authority protects dynamic hands and lower body
   assert.equal(composer.weightForRole('leftUpperLeg'),0);
   assert.equal(composer.weightForRole('rightFoot'),0);
   assert.ok(composer.weightForRole('leftUpperArm')<0.1);
+  composer.selectClip(makeIdleClip(),{source:'Original'});
+  assert.equal(composer.eligible,false,'embedded raw VRM clips must remain exclusive');
+  composer.selectClip(makeIdleClip(),{source:'VRM / Mixamo (experimental)'});
   composer.setIntensity(0);
   assert.equal(composer.active,false);
-  composer.selectClip(new AnimationClip('Walking',1,[]));
+  composer.selectClip(new AnimationClip('Walking',1,[]),{source:'VRM / Mixamo (experimental)'});
   composer.setIntensity(1);composer.setEnabled(true);
   assert.equal(composer.active,false);
   assert.equal(composer.weightForRole('leftIndexProximal'),0);
@@ -100,7 +103,7 @@ test('LP-02C.1 conservative role authority protects dynamic hands and lower body
 test('LP-02C.1 real mixer: frozen fingers gain life, arm and root retain authored motion',()=>{
   const vrm=syntheticVrm(),clip=makeIdleClip(),mixer=new AnimationMixer(vrm.scene);
   const action=mixer.clipAction(clip);action.play();
-  const composer=new MotionComposer(vrm);composer.selectClip(clip);
+  const composer=new MotionComposer(vrm);composer.selectClip(clip,{source:'VRM / Mixamo (experimental)'});
   const presence=new LivingPresence(vrm,{sourceName:'Vita.vrm',randomSeed:42});
   presence.setEnabled(true);
   composer.setEnabled(true);
@@ -130,7 +133,7 @@ test('LP-02C.1 real mixer: frozen fingers gain life, arm and root retain authore
 test('LP-02C.1 paused FBX can overlay then undo without changing the frozen pose',()=>{
   const vrm=syntheticVrm(),clip=makeIdleClip(),mixer=new AnimationMixer(vrm.scene);
   mixer.clipAction(clip).play();mixer.update(0.35);
-  const composer=new MotionComposer(vrm);composer.selectClip(clip);
+  const composer=new MotionComposer(vrm);composer.selectClip(clip,{source:'VRM / Mixamo (experimental)'});
   composer.setEnabled(true);
   const motor=new LivingPresence(vrm,{sourceName:'Vita.vrm',randomSeed:12});
   motor.setEnabled(true);
@@ -151,7 +154,7 @@ test('LP-02C.1 action clips stay fully under mixer authority even when user opte
       new Quaternion().setFromAxisAngle(new Vector3(1,0,0),0.36)),
   ]);
   const mixer=new AnimationMixer(vrm.scene);mixer.clipAction(clip).play();
-  const composer=new MotionComposer(vrm);composer.selectClip(clip);composer.setEnabled(true);
+  const composer=new MotionComposer(vrm);composer.selectClip(clip,{source:'VRM / Mixamo (experimental)'});composer.setEnabled(true);
   const motor=new LivingPresence(vrm,{sourceName:'Vita.vrm',randomSeed:1});motor.setEnabled(true);
   for(let i=0;i<120;i++){
     motor.beforeFrame();mixer.update(1/60);
