@@ -268,6 +268,8 @@ export class MotionViewer {
   setLivingPresenceIntensity(value) { this.presence?.setIntensity(value); }
   setLivingPosture(value) { this.presence?.setPosture(value); }
   setLivingHandRelaxation(value) { this.presence?.setHandRelaxation(value); }
+  setLivingLegIntensity(value) { this.presence?.setLegIntensity(value); }
+  getLivingLegDiagnostics() { return this.presence?.getLegDiagnostics() || null; }
   setLivingFingerDirection(side, reversed) { this.presence?.setFingerDirection(side, reversed); }
   setLivingFingerOverride(side, finger, reversed) { return this.presence?.setFingerOverride(side, finger, reversed) ?? false; }
   getLivingFingerCalibration() { return this.presence?.getFingerCalibrationState() || null; }
