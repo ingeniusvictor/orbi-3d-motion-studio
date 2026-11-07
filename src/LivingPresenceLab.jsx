@@ -4,8 +4,10 @@ import {Activity,HeartPulse,ShieldCheck} from 'lucide-react';
 const FINGERS=[['Thumb','Pulgar'],['Index','Índice'],['Middle','Medio'],['Ring','Anular'],['Little','Meñique']];
 
 // LP-01: all model analysis and motion stay on-device; this panel never uploads.
-export default function LivingPresenceLab({model,generation,getViewer}) {
+export default function LivingPresenceLab({model,generation,getViewer,activeClip=null}) {
   const [enabled,setEnabled]=useState(false);
+  const [composerRequested,setComposerRequested]=useState(false);
+  const [composerIntensity,setComposerIntensity]=useState(65);
   const [intensity,setIntensity]=useState(55);
   const [posture,setPosture]=useState(92);
   const [handRelaxation,setHandRelaxation]=useState(88);
@@ -20,6 +22,10 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
   const [options,setOptions]=useState({hands:true,gaze:true,blink:true,head:true,elbows:true,legs:false,diagnostic:false});
   useEffect(()=>{
     setEnabled(false);
+    setComposerRequested(false);
+    setComposerIntensity(65);
+    getViewer()?.setLivingComposerEnabled(false);
+    getViewer()?.setLivingComposerIntensity(0.65);
     setAudit(null);
     setCapabilities(null);
     setOptions({hands:true,gaze:true,blink:true,head:true,elbows:true,legs:false,diagnostic:false});
@@ -34,7 +40,14 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
     setFingerPreset(hands?.preset||'');
     getViewer()?.setLivingPresence(false);
   },[generation,getViewer]);
+  useEffect(()=>{
+    // New clip must be independently approved for procedural composition.
+    setComposerRequested(false);
+    getViewer()?.setLivingComposerEnabled(false);
+  },[activeClip,getViewer]);
   const canUse=Boolean(model?.format==='VRM');
+  const clipComposition=getViewer()?.getLivingComposerStatus()||null;
+  const canCompose=Boolean(canUse&&enabled&&clipComposition?.eligible);
   const inspect=()=>{
     setAudit(getViewer()?.getLivingRigAudit()||null);
     setCalibration(getViewer()?.getLivingPoseDiagnostics()||[]);
@@ -45,6 +58,16 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
     const next=event.target.checked;
     setEnabled(next);
     getViewer()?.setLivingPresence(next);
+  };
+  const changeComposerRequested=event=>{
+    const next=Boolean(event.target.checked);
+    setComposerRequested(next);
+    getViewer()?.setLivingComposerEnabled(next);
+  };
+  const changeComposerIntensity=event=>{
+    const next=Number(event.target.value);
+    setComposerIntensity(next);
+    getViewer()?.setLivingComposerIntensity(next/100);
   };
   const changeIntensity=event=>{
     const next=Number(event.target.value);
@@ -117,6 +140,40 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
         <input type="range" min="0" max="100" step="5" value={intensity}
           disabled={!canUse} onChange={changeIntensity}/>
       </label>
+      <div style={{display:'grid',gap:9,borderTop:'1px solid #284158',paddingTop:12}}>
+        <strong style={{fontSize:12}}>LP-02C.1 · Mixamo + Presencia viva</strong>
+        <small style={{opacity:0.76,lineHeight:1.55}}>
+          Compositor posterior a AnimationMixer: añade respiración, mirada y dedos
+          únicamente cuando eliges un clip identificado como reposo.
+          Caminar, gestos y acciones conservan el control completo del esqueleto.
+        </small>
+        <div style={{fontSize:11,lineHeight:1.6,opacity:0.86}}>
+          <strong>Clip seleccionado:</strong> {clipComposition?.clipName||'Ninguno'}
+          <div>{clipComposition?.reason||'Carga un VRM y una animación FBX.'}</div>
+        </div>
+        <label style={{display:'flex',gap:9,alignItems:'center',fontSize:12}}>
+          <input type="checkbox" checked={composerRequested}
+            disabled={!canCompose} onChange={changeComposerRequested}/>
+          Superponer presencia natural sobre el reposo FBX (A/B)
+        </label>
+        <label style={{display:'grid',gap:5,fontSize:12}}>
+          Intensidad de mezcla procedural: {composerIntensity}%
+          <input type="range" min="0" max="100" step="5" value={composerIntensity}
+            disabled={!canCompose||!composerRequested} onChange={changeComposerIntensity}/>
+        </label>
+        {clipComposition?.clipSelected&&<small style={{opacity:0.72,lineHeight:1.5}}>
+          Pistas de dedos: {clipComposition.fingerTracks.static} estáticas,
+          {' '}{clipComposition.fingerTracks.animated} animadas,
+          {' '}{clipComposition.fingerTracks.missing} sin pista.
+          Las pistas animadas conservan prioridad; caderas, rodillas y pies
+          siguen controlados exclusivamente por el FBX.
+        </small>}
+        <small style={{opacity:0.72,lineHeight:1.5}}>
+          El efecto es solo de vista previa: no modifica los clips originales
+          ni se incluye en archivos exportados. Funciona también en pausa,
+          respetando la pose congelada como base.
+        </small>
+      </div>
       <div style={{display:'grid',gap:7,borderTop:'1px solid #284158',paddingTop:10}}>
         <strong style={{fontSize:12}}>LP-02D · Atención y reajustes vivos</strong>
         <small style={{opacity:0.78,lineHeight:1.5}}>
@@ -197,12 +254,10 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
         {calibration.map((item,i)=><div key={i}>{item}</div>)}
       </div>}
       <small style={{lineHeight:1.5,opacity:0.78}}>
-        LP-02D: movimientos espontáneos de ojos, cabeza, codos y piernas,
-        manteniendo las manos relajadas. Acerca la cámara a rostro, codos y pies
-        para evaluarlos por separado. El modo ampliado es solo de diagnóstico.
-        El corrector de pies no es equilibrio físico completo ni permite caminar;
-        se inhibe cuando un FBX tiene prioridad. El sistema de gestos ligados
-        al habla y las colisiones siguen pendientes.
+        LP-02C.1: el reposo FBX puede combinarse con microgestos mediante un
+        compositor opt-in. Al utilizar clips, nunca se modifican caderas,
+        rodillas, pies o la raíz. La cinemática corporal completa, las colisiones
+        y la actuación ligada a la voz siguen pendientes.
       </small>
       {!canUse&&<small>Carga un VRM para habilitar este laboratorio.</small>}
     </div>
