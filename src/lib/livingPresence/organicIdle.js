@@ -13,7 +13,7 @@ function seeded(seed) {
   };
 }
 export class SparseMotionLane {
-  constructor(seed, {gap=[1,4],duration=[0.8,2.5],attack=0.24,release=0.36}={}) {
+  constructor(seed, {gap=[1,4],duration=[0.8,2.5],attack=0.78,release=0.86}={}) {
     this.random=seeded(seed);
     this.gap=gap;this.duration=duration;
     this.attack=attack;this.release=release;
