@@ -306,6 +306,10 @@ export class MotionViewer {
   }
   setLivingSwayIntensity(value){this.presence?.setSwayIntensity(value);}
   setLivingSwaySpeed(value){this.presence?.setSwaySpeed(value);}
+  setLivingMotorCoordination(value){this.presence?.setMotorCoordination(value);}
+  setLivingMotorIntensity(value){this.presence?.setMotorIntensity(value);}
+  setLivingMotorMode(value){return this.presence?.setMotorMode(value)??false;}
+  getLivingMotorStatus(){return this.presence?.getMotorStatus()||null;}
   getLivingRigAudit() { return this.vrm ? auditVrmRig(this.vrm) : null; }
   setLivingPresence(enabled) {
     if(!this.presence)return false;
