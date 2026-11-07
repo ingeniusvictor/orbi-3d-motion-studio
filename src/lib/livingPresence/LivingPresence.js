@@ -225,10 +225,13 @@ export class LivingPresence {
       .addScaledVector(right,x).addScaledVector(up,y);
     this.gazeTarget.updateMatrixWorld(true);
   }
-  update(deltaSeconds,{clipPlaying=false}={}){
+  update(deltaSeconds,{clipPlaying=false,composition=null}={}){
     const dt=Math.max(0,Math.min(0.1,Number(deltaSeconds)||0));
     this.time+=dt;
-    if(clipPlaying){this.resetOverlay();return;} // including paused imported clips
+    // A clip owns the whole humanoid unless the user EXPLICITLY opts into
+    // a recognized idle's post-mixer overlay. Paused clips obey the same rule.
+    const composing=Boolean(clipPlaying&&composition?.active);
+    if(clipPlaying&&!composing){this.resetOverlay();return;}
     this.fade=springStep(this.fade,this.enabled?1:0,dt,0.85);
     const blend=clamp01(this.fade.x);
     if(blend<0.00001){this.releaseGaze();return;}
@@ -298,6 +301,8 @@ export class LivingPresence {
     for(const role of roles){
       const node=this.vrm?.humanoid?.getNormalizedBoneNode?.(role);
       if(!node)continue;
+      const authority=composing?composition.weightForRole(role):1;
+      if(authority<=0)continue;
       const angles=micro[role]||[0,0,0];
       const channels=this.states.get(role)||[{x:0,v:0},{x:0,v:0},{x:0,v:0}];
       for(let axis=0;axis<3;axis++)channels[axis]=springStep(channels[axis],angles[axis],dt,2.4);
@@ -305,27 +310,32 @@ export class LivingPresence {
       const [x,y,z]=channels.map(c=>c.x);
       this.euler.set(x,y,z);
       this.offset.setFromEuler(this.euler);
+      if(composing)this.offset.slerp(this.identity,1-authority);
       const base=node.quaternion.clone();
       const resting=this.calibration.offsets.get(role);
-      if(resting){
+      // A Mixamo clip already provides the arm pose. NEVER apply the 72-degree
+      // standing T-to-A offset on top of an authored animation.
+      if(resting && !composing){
         this.restOffset.copy(this.identity).slerp(resting,blend*this.posture);
         node.quaternion.multiply(this.restOffset);
-        if(this.elbowActivity && (role==='leftLowerArm'||role==='rightLowerArm')){
-          const side=role.startsWith('left')?'left':'right';
-          this.extraElbow.copy(this.identity).slerp(resting,
-            Math.min(0.6,0.58*this.elbowMotor[side].x));
-          node.quaternion.multiply(this.extraElbow);
-        }
+      }
+      if(resting && this.elbowActivity && (role==='leftLowerArm'||role==='rightLowerArm')){
+        const side=role.startsWith('left')?'left':'right';
+        const bend=Math.min(0.6,0.58*this.elbowMotor[side].x);
+        this.extraElbow.copy(this.identity).slerp(resting,composing?bend*authority:bend);
+        node.quaternion.multiply(this.extraElbow);
       }
       const curl=this.fingerCalibration.axes.get(role);
       if(curl&&fingerAngles.has(role)){
-        this.fingerOffset.setFromAxisAngle(curl,fingerAngles.get(role));
+        this.fingerOffset.setFromAxisAngle(curl,fingerAngles.get(role)*authority);
         node.quaternion.multiply(this.fingerOffset);
       }
       node.quaternion.multiply(this.offset).normalize();
       this.applied.set(role,{node,base,applied:node.quaternion.clone()});
     }
-    if(this.legActivity && this.plantedLegs.enabled && blend>0.01){
+    // During FBX preview, preserve all hips/legs/feet and every root-motion
+    // channel exactly as supplied by the clip; IK cannot own the same bones.
+    if(!composing && this.legActivity && this.plantedLegs.enabled && blend>0.01){
       this.plantedLegs.apply({
         bend:Math.min(1,Math.abs(score.lowerBodyBend)*this.legIntensity*activity),
         lift:Math.min(1,Math.abs(score.footLift)*this.legIntensity*activity),
