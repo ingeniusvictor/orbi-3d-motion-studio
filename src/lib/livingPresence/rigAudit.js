@@ -33,6 +33,8 @@ export function auditVrmRig(vrm) {
   });
   const mapped=STANDARD_ROLES.filter(role => Boolean(vrm.humanoid.getNormalizedBoneNode(role)));
   const missingCritical=CRITICAL_ROLES.filter(role => !mapped.includes(role));
+  const missingOptional=OPTIONAL_ROLES.filter(role => !mapped.includes(role));
+  const missingFingerRoles=FINGER_ROLES.filter(role => !mapped.includes(role));
   const duplicateNames=[...counts].filter(([name,n])=>n>1).map(([name])=>name);
   const warnings=[];
   if (missingCritical.length) warnings.push('Faltan roles humanoides esenciales: '+missingCritical.join(', '));
@@ -45,6 +47,8 @@ export function auditVrmRig(vrm) {
     supportedRoleCount:STANDARD_ROLES.length,
     fingerRoles:mapped.filter(role=>FINGER_ROLES.includes(role)).length,
     missingCritical,
+    missingOptional,
+    missingFingerRoles,
     duplicateNames,
     skinnedMeshes,
     morphSlots,
