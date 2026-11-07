@@ -334,7 +334,16 @@ export class MotionViewer {
   }
   getLightMeshes() { return this.model ? skinnedMeshes(this.model) : []; }
   getLightBoneCount() { return this.model ? skinBoneCount(this.model) : 0; }
+  // Preview-only overlays must not leak into downloaded GLB/FBX geometry.
+  // Freeze LivingPresence while model preparation/export runs asynchronously.
+  async withPresenceSuspended(operation){
+    this.presenceSuspendCount++;
+    if(this.presenceSuspendCount===1)this.presence?.resetOverlay();
+    try{return await operation();}
+    finally{this.presenceSuspendCount=Math.max(0,this.presenceSuspendCount-1);}
+  }
   async exportLightweight(ids) {
+    return this.withPresenceSuspended(async()=>{
     if(!this.model)throw new Error('Primero carga un personaje.');
     const result=await exportLightweightGLB(this.model,ids);
     const filename=(this.lastFilename||'personaje').replace(/\.[^.]+$/,'')+'-orbi-mixamo.glb';
@@ -343,8 +352,10 @@ export class MotionViewer {
     document.body.append(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(url),5000);
     return {...result,filename,size:formatBytes(result.bytes)};
+    });
   }
   async exportLightweightFBX(ids) {
+    return this.withPresenceSuspended(async()=>{
     if(!this.model)throw new Error('Carga primero un personaje.');
     const result=lightweightBinaryFBX(this.model,ids);
     const filename=(this.lastFilename||'personaje').replace(/\.[^.]+$/,'')+'-orbi-mixamo.fbx';
@@ -353,8 +364,10 @@ export class MotionViewer {
     document.body.append(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(url),5000);
     return {...result,filename,size:formatBytes(result.bytesLength)};
+    });
   }
   async exportAnimatedFBX({allowApproximateVRM=false}={}) {
+    return this.withPresenceSuspended(async()=>{
     if(!this.model)throw new Error('Carga primero un personaje.');
     if(!this.clips.length)throw new Error('Agrega al menos una animación.');
     if(this.vrm && !allowApproximateVRM)
@@ -371,6 +384,7 @@ export class MotionViewer {
       animations:this.clips.length,
       warning:['FBX binario beta: revisa los clips en Blender y Mixamo.',
        ...result.warnings].join(' ')};
+    });
   }
   /**
    * Local visual evidence for a material: two isolated views, no scene edits
@@ -563,6 +577,7 @@ export class MotionViewer {
     return result;
   }
   async exportGLB({allowApproximateVRM=false}={}) {
+    return this.withPresenceSuspended(async()=>{
     if(!this.model) throw new Error('Primero carga un modelo.');
     // GLB can contain a static textured model without any animation clips.
     if(this.vrm && !allowApproximateVRM) {
@@ -611,6 +626,7 @@ export class MotionViewer {
         ? 'GLB estándar (no VRM): materiales MToon aproximados; física, expresiones y metadatos VRM no incluidos. Los movimientos omitidos en la previsualización tampoco se recuperan al exportar.'
         : null,
     };
+    });
   }
   dispose() {
     this.disposed=true;
