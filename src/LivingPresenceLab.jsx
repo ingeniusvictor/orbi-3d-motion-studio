@@ -6,6 +6,8 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
   const [enabled,setEnabled]=useState(false);
   const [intensity,setIntensity]=useState(55);
   const [posture,setPosture]=useState(92);
+  const [handRelaxation,setHandRelaxation]=useState(88);
+  const [reverseCurl,setReverseCurl]=useState({left:false,right:false});
   const [calibration,setCalibration]=useState([]);
   const [audit,setAudit]=useState(null);
   const [capabilities,setCapabilities]=useState(null);
@@ -17,6 +19,8 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
     setOptions({hands:true,gaze:true,blink:true,diagnostic:false});
     setCalibration([]);
     setPosture(92);
+    setHandRelaxation(88);
+    setReverseCurl({left:false,right:false});
     getViewer()?.setLivingPresence(false);
   },[generation,getViewer]);
   const canUse=Boolean(model?.format==='VRM');
@@ -39,6 +43,15 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
     const next={...options,[name]:checked};
     setOptions(next);
     getViewer()?.setLivingOptions(next);
+  };
+  const changeHandRelaxation=event=>{
+    const next=Number(event.target.value);
+    setHandRelaxation(next);
+    getViewer()?.setLivingHandRelaxation(next/100);
+  };
+  const changeCurlDirection=(side,checked)=>{
+    setReverseCurl(current=>({...current,[side]:checked}));
+    getViewer()?.setLivingFingerDirection(side,checked);
   };
   const changePosture=event=>{
     const next=Number(event.target.value);
@@ -84,7 +97,27 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
           disabled={!canUse} onChange={changeIntensity}/>
       </label>
       <div style={{display:'grid',gap:7,borderTop:'1px solid #284158',paddingTop:10}}>
-        <strong style={{fontSize:12}}>LP-02B · Vida en reposo</strong>
+        <strong style={{fontSize:12}}>LP-02B.1 · Manos vivas en reposo</strong>
+        <label style={{display:'grid',gap:5,fontSize:12}}>
+          Curvatura natural de los dedos: {handRelaxation}%
+          <input type="range" min="0" max="100" step="5" value={handRelaxation}
+            disabled={!canUse} onChange={changeHandRelaxation}/>
+        </label>
+        <small style={{opacity:0.76,lineHeight:1.5}}>
+          Los dedos descansan ligeramente curvados, no extendidos.
+          Es diferente a la intensidad de los microgestos.
+        </small>
+        <details style={{fontSize:12}}>
+          <summary style={{cursor:'pointer'}}>Calibrar el sentido de flexión</summary>
+          <div style={{display:'grid',gap:7,paddingTop:9}}>
+            {[['left','Invertir mano izquierda'],['right','Invertir mano derecha']].map(([side,label])=><label key={side}
+              style={{display:'flex',gap:7,alignItems:'center'}}>
+              <input type="checkbox" checked={reverseCurl[side]} disabled={!canUse}
+                onChange={e=>changeCurlDirection(side,e.target.checked)}/>{label}
+            </label>)}
+            <small>Utiliza estas opciones solamente si los dedos se arquean hacia fuera de la palma.</small>
+          </div>
+        </details>
         {[
           ['hands','Manos, muñecas, codos y dedos'],
           ['gaze','Microcambios de mirada'],
@@ -103,8 +136,8 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
         {calibration.map((item,i)=><div key={i}>{item}</div>)}
       </div>}
       <small style={{lineHeight:1.5,opacity:0.78}}>
-        LP-02B: postura relajada, microrreajustes espaciados, dedos independientes,
-        parpadeo variable y mirada. Para comprobarlos, acerca la cámara a manos y rostro.
+        LP-02B.1: mano relajada con nudillos y falanges flexionados de forma diferenciada,
+        movimientos independientes, parpadeo variable y mirada. Acerca la cámara a las manos.
         El modo de inspección es deliberadamente amplificado; no está destinado
         a la versión final. Con un FBX seleccionado, la prioridad es del clip.
         Equilibrio físico, foot IK y gestos ligados al habla aún están pendientes.
