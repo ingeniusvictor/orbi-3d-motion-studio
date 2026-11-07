@@ -136,3 +136,40 @@ test('LP-03A A/B toggle does not drift after repeated cycles',()=>{
   }
   motor.dispose();
 });
+
+test('LP-03A remains compatible with opt-in Mixamo idle and preserves root motion',()=>{
+  const rig=skeleton();
+  const clip=new AnimationClip('Standing Idle',1,[
+    new QuaternionKeyframeTrack('chest.quaternion',[0,1],[
+      0,0,0,1,0,Math.sin(0.07),0,Math.cos(0.07),
+    ]),
+  ]);
+  const mixer=new AnimationMixer(rig.scene);mixer.clipAction(clip).play();
+  const composer=new MotionComposer(rig);
+  composer.selectClip(clip,{source:'VRM / Mixamo (experimental)'});
+  composer.setEnabled(true);
+  const presence=new LivingPresence(rig,{sourceName:'Vita.vrm',randomSeed:130});
+  presence.setEnabled(true);
+  presence.setMotorCoordination(true);
+  presence.setMotorMode('attentive');
+  const root=rig.nodes.get('hips').position.clone();
+  const leftFoot=rig.nodes.get('leftFoot').quaternion.clone();
+  let altered=false;
+  for(let i=0;i<400;i++){
+    presence.beforeFrame();
+    mixer.update(1/60);
+    const authoredChest=rig.nodes.get('chest').quaternion.clone();
+    presence.update(1/60,{clipPlaying:true,composition:composer});
+    if(rig.nodes.get('chest').quaternion.angleTo(authoredChest)>rad(0.06))altered=true;
+    assert.ok(rig.nodes.get('hips').position.equals(root));
+    assert.ok(rig.nodes.get('leftFoot').quaternion.equals(leftFoot));
+  }
+  assert.equal(altered,true,'post-mixer coordination should add subtle upper-body response');
+  composer.setEnabled(false);
+  presence.beforeFrame();
+  mixer.update(0);
+  const authored=rig.nodes.get('chest').quaternion.clone();
+  presence.update(1/60,{clipPlaying:true,composition:composer});
+  assert.ok(rig.nodes.get('chest').quaternion.equals(authored));
+  presence.dispose();composer.dispose();
+});
