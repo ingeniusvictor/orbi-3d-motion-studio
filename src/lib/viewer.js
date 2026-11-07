@@ -164,8 +164,14 @@ export class MotionViewer {
       const delta = Math.min(this.clock.getDelta(),0.1);
       // Ownership order: remove prior overlay → FBX mixer → masked procedural
       // deltas → VRM constraints/expressions/springbones → render.
-      if(!this.presenceSuspendCount)this.presence?.beforeFrame();
-      if (this.mixer && this.playing) this.mixer.update(delta);
+      if(!this.presenceSuspendCount){
+        // Undo in reverse overlay order: LivingPresence → FBX softener.
+        this.presence?.beforeFrame();
+        this.motionComposer?.beforeFrame();
+      }
+      if (!this.presenceSuspendCount && this.mixer && this.playing) this.mixer.update(delta);
+      if(!this.presenceSuspendCount&&this.presence?.enabled)
+        this.motionComposer?.applyTorsoSoftening(delta);
       if(!this.presenceSuspendCount)this.presence?.update(delta,{
         clipPlaying:Boolean(this.mixer && this.current !== null),
         composition:this.motionComposer,
@@ -238,6 +244,7 @@ export class MotionViewer {
     return {...info, filename:loaded.name, bytes:loaded.bytes, format:loaded.format};
   }
   clearModel() {
+    this.presence?.resetOverlay();
     this.motionComposer?.dispose();
     this.motionComposer=null;
     this.presenceSuspendCount=0;
@@ -262,11 +269,12 @@ export class MotionViewer {
   }
   play(index) {
     if (!this.mixer || !this.clips[index]) return false;
+    this.presence?.resetOverlay();
+    this.motionComposer?.beforeFrame();
     this.mixer.stopAllAction();
     this.current = index;
     const clip = this.clips[index].clip;
     this.motionComposer?.selectClip(clip,{source:this.clips[index].source});
-    this.presence?.resetOverlay();
     const action = this.mixer.clipAction(clip);
     action.reset();
     action.setLoop(THREE.LoopRepeat,Infinity);
@@ -280,8 +288,9 @@ export class MotionViewer {
   getLivingComposerStatus() { return this.motionComposer?.getStatus() || null; }
   setLivingComposerEnabled(value) {
     if(!this.motionComposer)return false;
-    this.motionComposer.setEnabled(value);
     this.presence?.resetOverlay();
+    this.motionComposer.beforeFrame();
+    this.motionComposer.setEnabled(value);
     return true;
   }
   setLivingComposerIntensity(value) {
@@ -289,8 +298,21 @@ export class MotionViewer {
     this.motionComposer.setIntensity(value);
     if(!this.motionComposer.active)this.presence?.resetOverlay();
   }
+  setLivingTorsoSoftening(value){this.motionComposer?.setTorsoSoftening(value);}
+  setLivingTorsoSofteningEnabled(value){
+    this.presence?.resetOverlay();
+    this.motionComposer?.beforeFrame();
+    this.motionComposer?.setTorsoSofteningEnabled(value);
+  }
+  setLivingSwayIntensity(value){this.presence?.setSwayIntensity(value);}
+  setLivingSwaySpeed(value){this.presence?.setSwaySpeed(value);}
   getLivingRigAudit() { return this.vrm ? auditVrmRig(this.vrm) : null; }
-  setLivingPresence(enabled) { if (!this.presence) return false; this.presence.setEnabled(enabled); return true; }
+  setLivingPresence(enabled) {
+    if(!this.presence)return false;
+    this.presence.setEnabled(enabled);
+    if(!enabled)this.motionComposer?.beforeFrame();
+    return true;
+  }
   setLivingPresenceIntensity(value) { this.presence?.setIntensity(value); }
   setLivingPosture(value) { this.presence?.setPosture(value); }
   setLivingHandRelaxation(value) { this.presence?.setHandRelaxation(value); }
@@ -340,6 +362,7 @@ export class MotionViewer {
     this.presenceSuspendCount++;
     if(this.presenceSuspendCount===1){
       this.presence?.resetOverlay();
+      this.motionComposer?.beforeFrame();
       // Three-VRM copies normalized humanoid bones to raw bones during update.
       // Synchronize once BEFORE cloning/exporting the raw skinned model.
       this.vrm?.update(0);
