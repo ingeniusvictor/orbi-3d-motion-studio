@@ -75,3 +75,21 @@ Después del LP-02C.2, el usuario aprobó visualmente la combinación del nuevo 
 - LP-03C recomendado: contrato de motor-intent para Qwen local y coordinación con la voz efectivamente reproducida, sin consultar a la IA por fotograma.
 
 **Regla de seguridad:** mantener `main` protegida, cambios solo en rama experimental; preservar archivos privados VRM/FBX y exportaciones.
+
+
+## LP-03A.1 — Dependencia de la mirada frente a Mixamo y mejora de interfaz
+
+**Observación del usuario:** al activar LP-03A con un FBX Idle seleccionado, no aparecían movimientos oculares hasta habilitar también la superposición LP-02C.1.
+
+**Diagnóstico comprobado en código:** `LivingPresence.update()` sale mediante `resetOverlay(); return;` siempre que existe un FBX seleccionado y `composition?.active` es falso. Por tanto, el controlador de fijaciones LP-02D (ojo/parpadeo), la cabeza y el cerebelo LP-03A quedan suspendidos. LP-03A no crea movimientos de ojos por separado: coordina señales motoras generadas por Living Presence. La exclusividad de Mixamo es deliberada, no una pérdida del rig.
+
+**Corrección de UX sin romper las prioridades:**
+- Nuevo `src/lib/livingPresence/activationGate.js`: explica explícitamente si la presencia está disponible (sin FBX, o con FBX Idle y compositor opt-in activo), pendiente de autorización del compositor, inhibida para clips incompatibles, sin VRM, sin presencia general o con mezcla a 0%.
+- El panel LP-03A de `src/LivingPresenceLab.jsx` muestra un estado contextual al haber un FBX seleccionado. Si se trata de un Idle elegible con LP-02C.1 apagado, ofrece el botón **Activar LP-02C.1 para este Idle**. Solo un clic consciente del usuario puede hacerlo; el componente no activa el compositor mediante efectos, cargas ni cambios automáticos.
+- Al elegir una animación incompatible o mantener intensidad 0%, el botón no ofrece una ruta que el motor no admite; explica por qué no aparecen ojos ni coordinación.
+- `tests/livingPresenceActivationGate.test.js`: seis pruebas de esta dependencia y de los bloqueos por acción o mezcla 0%.
+- El comportamiento motor subyacente no se alteró; las animaciones FBX de acción mantienen control exclusivo, y los archivos originales y exportaciones no cambian.
+
+**Orden correcto de prueba con Idle Mixamo:** cargar Vita.vrm → seleccionar el FBX Idle → activar Presencia natural A/B → activar LP-02C.1 explícitamente (botón del panel LP-03A o casilla tradicional) → activar coordinación LP-03A si se desean respuestas motoras enlazadas. La mirada natural viene de LP-02D y se verá al estar habilitada la presencia sobre el clip, incluso si LP-03A está apagado.
+
+**Límite:** se trata de una mejora de claridad y acceso; separar mirada/parpadeo como capa independiente de prioridad facial durante clips de acción sería una evolución distinta y requeriría su propio protocolo de arbitraje con expresiones y eyes del FBX.
