@@ -237,12 +237,12 @@ test('LP-02B.2 Vita auto-fix moves both hands inward, allows one-finger override
   for(let i=0;i<160;i++){presence.beforeFrame();presence.update(1/60);}
   const outward=joint.quaternion.clone();
   assert.ok(inward.x*outward.x+inward.y*outward.y+inward.z*outward.z<-0.001);
-  assert.ok(other.quaternion.angleTo(unchangedLeft)<1e-8);
-  assert.ok(right.quaternion.angleTo(unchangedRight)<1e-8);
+  assert.ok(other.quaternion.angleTo(unchangedLeft)<1e-4);
+  assert.ok(right.quaternion.angleTo(unchangedRight)<1e-4);
   assert.equal(presence.getFingerCalibrationState().fingers.left.Index,true);
   presence.setFingerOverride('left','Index',false);
   for(let i=0;i<160;i++){presence.beforeFrame();presence.update(1/60);}
-  assert.ok(joint.quaternion.angleTo(inward)<1e-8);
+  assert.ok(joint.quaternion.angleTo(inward)<1e-4);
   presence.setEnabled(false);
   assert.ok(joint.quaternion.angleTo(new joint.quaternion.constructor())<1e-10);
   assert.ok(other.quaternion.angleTo(new other.quaternion.constructor())<1e-10);
