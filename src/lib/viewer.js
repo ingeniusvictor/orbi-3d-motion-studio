@@ -7,6 +7,7 @@ import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { adaptFbxToVrm } from './vrmMotion.js';
 import { auditVrmRig } from './livingPresence/rigAudit.js';
 import { LivingPresence } from './livingPresence/LivingPresence.js';
+import { MotionComposer } from './livingPresence/motionComposer.js';
 import { bakeVrmForGlb, convertVrmMaterials } from './vrmExport.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { catalogMaterials, applyTextureToMaterial } from './textureStudio.js';
@@ -151,6 +152,8 @@ export class MotionViewer {
     this.lastTextureBatch = null;
     this.loadSequence = 0;
     this.presence = null;
+    this.motionComposer = null;
+    this.presenceSuspendCount = 0;
     this.disposed = false;
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(mount);
@@ -159,9 +162,14 @@ export class MotionViewer {
       if (this.disposed) return;
       this.raf = requestAnimationFrame(this.animate);
       const delta = Math.min(this.clock.getDelta(),0.1);
-      this.presence?.beforeFrame();
+      // Ownership order: remove prior overlay → FBX mixer → masked procedural
+      // deltas → VRM constraints/expressions/springbones → render.
+      if(!this.presenceSuspendCount)this.presence?.beforeFrame();
       if (this.mixer && this.playing) this.mixer.update(delta);
-      this.presence?.update(delta,{clipPlaying:Boolean(this.mixer && this.current !== null)});
+      if(!this.presenceSuspendCount)this.presence?.update(delta,{
+        clipPlaying:Boolean(this.mixer && this.current !== null),
+        composition:this.motionComposer,
+      });
       // VRM spring bones, constraints and expressions require an update each frame.
       this.vrm?.update(delta);
       this.controls.update();
@@ -214,6 +222,7 @@ export class MotionViewer {
     this.model = loaded.model;
     this.vrm = loaded.vrm;
     this.presence = this.vrm ? new LivingPresence(this.vrm,{sourceName:loaded.name}) : null;
+    this.motionComposer = this.vrm ? new MotionComposer(this.vrm) : null;
     this.model.name ||= loaded.name.replace(/\.[^.]+$/,'');
     this.lastFilename = loaded.name;
     this.lastFormat = loaded.format;
@@ -229,6 +238,9 @@ export class MotionViewer {
     return {...info, filename:loaded.name, bytes:loaded.bytes, format:loaded.format};
   }
   clearModel() {
+    this.motionComposer?.dispose();
+    this.motionComposer=null;
+    this.presenceSuspendCount=0;
     this.presence?.dispose();
     this.presence=null;
     if(this.lightPreviewStates?.size)this.setLightPreview(null);
@@ -253,6 +265,8 @@ export class MotionViewer {
     this.mixer.stopAllAction();
     this.current = index;
     const clip = this.clips[index].clip;
+    this.motionComposer?.selectClip(clip);
+    this.presence?.resetOverlay();
     const action = this.mixer.clipAction(clip);
     action.reset();
     action.setLoop(THREE.LoopRepeat,Infinity);
@@ -263,6 +277,18 @@ export class MotionViewer {
   }
   setPlaying(playing) { if (!this.mixer) return; this.playing = Boolean(playing); this.notify(); }
   setSpeed(speed) { this.speed = Number(speed); if(this.mixer) this.mixer.timeScale=this.speed; }
+  getLivingComposerStatus() { return this.motionComposer?.getStatus() || null; }
+  setLivingComposerEnabled(value) {
+    if(!this.motionComposer)return false;
+    this.motionComposer.setEnabled(value);
+    this.presence?.resetOverlay();
+    return true;
+  }
+  setLivingComposerIntensity(value) {
+    if(!this.motionComposer)return;
+    this.motionComposer.setIntensity(value);
+    if(!this.motionComposer.active)this.presence?.resetOverlay();
+  }
   getLivingRigAudit() { return this.vrm ? auditVrmRig(this.vrm) : null; }
   setLivingPresence(enabled) { if (!this.presence) return false; this.presence.setEnabled(enabled); return true; }
   setLivingPresenceIntensity(value) { this.presence?.setIntensity(value); }
