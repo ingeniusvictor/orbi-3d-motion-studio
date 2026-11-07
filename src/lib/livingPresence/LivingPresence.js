@@ -37,7 +37,9 @@ export class LivingPresence {
   update(deltaSeconds,{clipPlaying=false}={}) {
     const dt=Math.max(0,Math.min(0.1,Number(deltaSeconds)||0));
     this.time += dt;
-    const target = this.enabled && !clipPlaying ? this.intensity : 0;
+    // FBX is the sole owner of skeletal motion while a clip is playing.
+    if (clipPlaying) {this.fade={x:0,v:0};this.states.clear();return;}
+    const target = this.enabled ? this.intensity : 0;
     this.fade = springStep(this.fade,target,dt,1.25);
     if (this.fade.x < 0.00001) return;
     const pose = sampleIdlePose(this.time,Math.max(0,Math.min(1,this.fade.x)));
