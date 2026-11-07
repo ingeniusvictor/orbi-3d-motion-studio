@@ -310,6 +310,16 @@ export class MotionViewer {
   setLivingMotorIntensity(value){this.presence?.setMotorIntensity(value);}
   setLivingMotorMode(value){return this.presence?.setMotorMode(value)??false;}
   getLivingMotorStatus(){return this.presence?.getMotorStatus()||null;}
+  setLivingGestureEnabled(value){this.presence?.setGestureEnabled(value);}
+  setLivingGestureIntensity(value){this.presence?.setGestureIntensity(value);}
+  getLivingGestureStatus(){return this.presence?.getGestureStatus()||null;}
+  triggerLivingGesture(name){
+    if(!this.presence?.enabled)return false;
+    // An FBX selection is never overridden without user-approved idle
+    // composition, even when the imported action is paused.
+    if(this.mixer&&this.current!==null&&!this.motionComposer?.active)return false;
+    return this.presence.triggerGesture(name);
+  }
   getLivingRigAudit() { return this.vrm ? auditVrmRig(this.vrm) : null; }
   setLivingPresence(enabled) {
     if(!this.presence)return false;
