@@ -17,12 +17,12 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
   const [calibration,setCalibration]=useState([]);
   const [audit,setAudit]=useState(null);
   const [capabilities,setCapabilities]=useState(null);
-  const [options,setOptions]=useState({hands:true,gaze:true,blink:true,head:true,elbows:true,legs:true,diagnostic:false});
+  const [options,setOptions]=useState({hands:true,gaze:true,blink:true,head:true,elbows:true,legs:false,diagnostic:false});
   useEffect(()=>{
     setEnabled(false);
     setAudit(null);
     setCapabilities(null);
-    setOptions({hands:true,gaze:true,blink:true,head:true,elbows:true,legs:true,diagnostic:false});
+    setOptions({hands:true,gaze:true,blink:true,head:true,elbows:true,legs:false,diagnostic:false});
     setCalibration([]);
     setPosture(92);
     setHandRelaxation(88);
