@@ -1,5 +1,6 @@
-// LP-02C.1 — conservative post-mixer compositor for PREVIEW of idle clips.
+// LP-02C.2 — conservative post-mixer compositor with gentle torso roll attenuation.
 // No source AnimationClip tracks, bind poses or exported assets are modified.
+import { ClipSwayReducer } from './clipSwayReducer.js';
 const FINGERS=['Thumb','Index','Middle','Ring','Little'];
 const JOINTS={
   Thumb:['Metacarpal','Proximal','Distal'],
@@ -47,7 +48,12 @@ export class MotionComposer {
     this.eligible=false;
     this.roleMotion=new Map();
     this.fingerStats={static:0,animated:0,missing:0};
+    this.swayReducer=new ClipSwayReducer(vrm);
   }
+  beforeFrame(){this.swayReducer.restore();}
+  applyTorsoSoftening(dt){return this.swayReducer.apply(dt,this.active);}
+  setTorsoSofteningEnabled(value){this.swayReducer.setEnabled(value);}
+  setTorsoSoftening(value){this.swayReducer.setStrength(value);}
   setEnabled(value){this.enabled=Boolean(value);}
   setIntensity(value){if(Number.isFinite(Number(value)))this.intensity=clamp01(value);}
   selectClip(clip,{source=''}={}) {
@@ -57,6 +63,7 @@ export class MotionComposer {
     // Strict pilot scope: only FBX imported through the guarded VRM/Mixamo adapter.
     this.eligible=Boolean(clip&&this.clipSource.startsWith('VRM / Mixamo')&&
       classifyIdleClip(this.clipName));
+    this.swayReducer.selectClip(this.eligible?clip:null);
     this.roleMotion.clear();
     this.fingerStats={static:0,animated:0,missing:0};
     if(!clip||!this.vrm?.humanoid?.getNormalizedBoneNode)return;
@@ -107,6 +114,7 @@ export class MotionComposer {
       clipName:this.clipName,clipSource:this.clipSource,clipSelected:Boolean(this.clip),
       intensity:this.intensity,
       fingerTracks:{...this.fingerStats},
+      torsoSoftening:this.swayReducer.getStatus(),
       reason:!this.clip?'Selecciona un clip FBX de reposo.':
         !this.clipSource.startsWith('VRM / Mixamo')?
           'Solo se admite un FBX importado con el adaptador Mixamo → VRM.':
@@ -116,5 +124,5 @@ export class MotionComposer {
         'Mezcla experimental activada sobre el clip de reposo.'
     };
   }
-  dispose(){this.enabled=false;this.clip=null;this.roleMotion.clear();this.vrm=null;}
+  dispose(){this.enabled=false;this.swayReducer.dispose();this.clip=null;this.roleMotion.clear();this.vrm=null;}
 }
