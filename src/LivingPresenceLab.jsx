@@ -9,6 +9,9 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
   const [composerRequested,setComposerRequested]=useState(false);
   const [composerIntensity,setComposerIntensity]=useState(65);
   const [intensity,setIntensity]=useState(55);
+  const [motorEnabled,setMotorEnabled]=useState(false);
+  const [motorIntensity,setMotorIntensity]=useState(42);
+  const [motorMode,setMotorMode]=useState('resting');
   const [posture,setPosture]=useState(92);
   const [handRelaxation,setHandRelaxation]=useState(88);
   const [legIntensity,setLegIntensity]=useState(45);
@@ -26,6 +29,12 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
   const [options,setOptions]=useState({hands:true,gaze:true,blink:true,head:true,elbows:true,legs:false,diagnostic:false});
   useEffect(()=>{
     setEnabled(false);
+    setMotorEnabled(false);
+    setMotorIntensity(42);
+    setMotorMode('resting');
+    getViewer()?.setLivingMotorCoordination(false);
+    getViewer()?.setLivingMotorIntensity(0.42);
+    getViewer()?.setLivingMotorMode('resting');
     setComposerRequested(false);
     setComposerIntensity(65);
     getViewer()?.setLivingComposerEnabled(false);
@@ -86,6 +95,20 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
     const next={...options,[name]:checked};
     setOptions(next);
     getViewer()?.setLivingOptions(next);
+  };
+  const changeMotorEnabled=event=>{
+    const next=Boolean(event.target.checked);
+    setMotorEnabled(next);
+    getViewer()?.setLivingMotorCoordination(next);
+  };
+  const changeMotorIntensity=event=>{
+    const next=Number(event.target.value);
+    setMotorIntensity(next);
+    getViewer()?.setLivingMotorIntensity(next/100);
+  };
+  const changeMotorMode=event=>{
+    const next=event.target.value;
+    if(getViewer()?.setLivingMotorMode(next))setMotorMode(next);
   };
   const changeSwayIntensity=event=>{
     const next=Number(event.target.value);
@@ -168,6 +191,39 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
         <input type="range" min="0" max="100" step="5" value={intensity}
           disabled={!canUse} onChange={changeIntensity}/>
       </label>
+      <div style={{display:'grid',gap:9,borderTop:'1px solid #284158',paddingTop:12}}>
+        <strong style={{fontSize:12}}>LP-03A · Cerebelo motor experimental</strong>
+        <small style={{opacity:0.8,lineHeight:1.5}}>
+          Coordina suavemente cabeza, pecho, hombros, muñecas y codos mediante
+          pequeñas respuestas retrasadas. No añade animaciones repetitivas ni
+          traslada la pelvis o los pies. Desactivado por defecto para proteger
+          el reposo LP-02C.2 que ya funciona.
+        </small>
+        <label style={{display:'flex',gap:8,alignItems:'center',fontSize:12}}>
+          <input type="checkbox" checked={motorEnabled}
+            disabled={!canUse||!enabled} onChange={changeMotorEnabled}/>
+          Coordinar movimientos del cuerpo (A/B)
+        </label>
+        <label style={{display:'grid',gap:5,fontSize:12}}>
+          Intensidad de coordinación: {motorIntensity}%
+          <input type="range" min="0" max="100" step="5" value={motorIntensity}
+            disabled={!canUse||!enabled||!motorEnabled} onChange={changeMotorIntensity}/>
+        </label>
+        <label style={{display:'grid',gap:5,fontSize:12}}>
+          Estado motor de prueba
+          <select value={motorMode} disabled={!canUse||!enabled||!motorEnabled}
+            onChange={changeMotorMode} style={{padding:'7px',borderRadius:6}}>
+            <option value="resting">Reposo</option>
+            <option value="attentive">Escuchando</option>
+            <option value="thinking">Pensando</option>
+            <option value="explaining">Explicando</option>
+          </select>
+        </label>
+        <small style={{opacity:0.72,lineHeight:1.5}}>
+          Estos estados son simulaciones manuales para QA: todavía no están
+          conectados a Qwen ni al audio. Recomendación: 30–45% de coordinación.
+        </small>
+      </div>
       <div style={{display:'grid',gap:9,borderTop:'1px solid #284158',paddingTop:12}}>
         <strong style={{fontSize:12}}>LP-02C.2 · Balanceo corporal vivo</strong>
         <small style={{opacity:0.8,lineHeight:1.5}}>
