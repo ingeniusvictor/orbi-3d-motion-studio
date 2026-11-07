@@ -9,21 +9,25 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
   const [intensity,setIntensity]=useState(55);
   const [posture,setPosture]=useState(92);
   const [handRelaxation,setHandRelaxation]=useState(88);
+  const [legIntensity,setLegIntensity]=useState(45);
+  const [legDiagnostics,setLegDiagnostics]=useState(null);
   const [reverseCurl,setReverseCurl]=useState({left:false,right:false});
   const [fingerOverrides,setFingerOverrides]=useState({left:{},right:{}});
   const [fingerPreset,setFingerPreset]=useState('');
   const [calibration,setCalibration]=useState([]);
   const [audit,setAudit]=useState(null);
   const [capabilities,setCapabilities]=useState(null);
-  const [options,setOptions]=useState({hands:true,gaze:true,blink:true,diagnostic:false});
+  const [options,setOptions]=useState({hands:true,gaze:true,blink:true,head:true,elbows:true,legs:true,diagnostic:false});
   useEffect(()=>{
     setEnabled(false);
     setAudit(null);
     setCapabilities(null);
-    setOptions({hands:true,gaze:true,blink:true,diagnostic:false});
+    setOptions({hands:true,gaze:true,blink:true,head:true,elbows:true,legs:true,diagnostic:false});
     setCalibration([]);
     setPosture(92);
     setHandRelaxation(88);
+    setLegIntensity(45);
+    setLegDiagnostics(getViewer()?.getLivingLegDiagnostics()||null);
     const hands=getViewer()?.getLivingFingerCalibration();
     setReverseCurl({left:hands?.directions?.left===-1,right:hands?.directions?.right===-1});
     setFingerOverrides(hands?.fingers||{left:{},right:{}});
@@ -35,6 +39,7 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
     setAudit(getViewer()?.getLivingRigAudit()||null);
     setCalibration(getViewer()?.getLivingPoseDiagnostics()||[]);
     setCapabilities(getViewer()?.getLivingCapabilities()||null);
+    setLegDiagnostics(getViewer()?.getLivingLegDiagnostics()||null);
   };
   const toggle=event=>{
     const next=event.target.checked;
@@ -50,6 +55,11 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
     const next={...options,[name]:checked};
     setOptions(next);
     getViewer()?.setLivingOptions(next);
+  };
+  const changeLegIntensity=event=>{
+    const next=Number(event.target.value);
+    setLegIntensity(next);
+    getViewer()?.setLivingLegIntensity(next/100);
   };
   const changeHandRelaxation=event=>{
     const next=Number(event.target.value);
@@ -108,7 +118,23 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
           disabled={!canUse} onChange={changeIntensity}/>
       </label>
       <div style={{display:'grid',gap:7,borderTop:'1px solid #284158',paddingTop:10}}>
-        <strong style={{fontSize:12}}>LP-02B.1 · Manos vivas en reposo</strong>
+        <strong style={{fontSize:12}}>LP-02D · Atención y reajustes vivos</strong>
+        <small style={{opacity:0.78,lineHeight:1.5}}>
+          Mirada con fijaciones variables y pequeños giros de cabeza; codos que se reajustan
+          de forma esporádica; una pierna puede flexionarse o levantar mínimamente un pie
+          mientras el otro permanece apoyado.
+        </small>
+        <label style={{display:'grid',gap:5,fontSize:12}}>
+          Intensidad de piernas y pies: {legIntensity}%
+          <input type="range" min="0" max="100" step="5" value={legIntensity}
+            disabled={!canUse||capabilities?.legIK===false} onChange={changeLegIntensity}/>
+        </label>
+        {legDiagnostics&&<small style={{opacity:0.72,lineHeight:1.5}}>
+          Contacto de pies (IK experimental): {legDiagnostics.available?'2 tobillos reconocidos':'no disponible'}.
+          {legDiagnostics.failureReason?' '+legDiagnostics.failureReason:''}
+          {' '}Un pie debe conservar apoyo cuando el otro se reajusta.
+        </small>}
+        <strong style={{fontSize:12,marginTop:8}}>Manos y dedos relajados</strong>
         <label style={{display:'grid',gap:5,fontSize:12}}>
           Curvatura natural de los dedos: {handRelaxation}%
           <input type="range" min="0" max="100" step="5" value={handRelaxation}
@@ -151,9 +177,12 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
           </div>
         </details>
         {[
-          ['hands','Manos, muñecas, codos y dedos'],
-          ['gaze','Microcambios de mirada'],
+          ['hands','Manos, muñecas y dedos'],
+          ['elbows','Semiflexiones de codos'],
+          ['head','Giros suaves de cabeza'],
+          ['gaze','Miradas a objetivos variables'],
           ['blink','Parpadeo natural'],
+          ['legs','Rodillas y pies (IK experimental)'],
           ['diagnostic','Inspección ampliada (×2,4)'],
         ].map(([name,label])=><label key={name}
           style={{display:'flex',gap:9,alignItems:'center',fontSize:12}}>
@@ -168,11 +197,12 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
         {calibration.map((item,i)=><div key={i}>{item}</div>)}
       </div>}
       <small style={{lineHeight:1.5,opacity:0.78}}>
-        LP-02B.1: mano relajada con nudillos y falanges flexionados de forma diferenciada,
-        movimientos independientes, parpadeo variable y mirada. Acerca la cámara a las manos.
-        El modo de inspección es deliberadamente amplificado; no está destinado
-        a la versión final. Con un FBX seleccionado, la prioridad es del clip.
-        Equilibrio físico, foot IK y gestos ligados al habla aún están pendientes.
+        LP-02D: movimientos espontáneos de ojos, cabeza, codos y piernas,
+        manteniendo las manos relajadas. Acerca la cámara a rostro, codos y pies
+        para evaluarlos por separado. El modo ampliado es solo de diagnóstico.
+        El corrector de pies no es equilibrio físico completo ni permite caminar;
+        se inhibe cuando un FBX tiene prioridad. El sistema de gestos ligados
+        al habla y las colisiones siguen pendientes.
       </small>
       {!canUse&&<small>Carga un VRM para habilitar este laboratorio.</small>}
     </div>
