@@ -203,3 +203,49 @@ test('LP-02B.1 hand curl direction can be reversed per side without affecting th
   assert.ok(left.quaternion.angleTo(new left.quaternion.constructor())<1e-4);
   presence.dispose();
 });
+
+test('LP-02B.2 Vita.vrm uses verified inward-bend preset on both hands',async()=>{
+  const {recognizedFingerPreset,fingerCurlSign}=await import('../src/lib/livingPresence/fingerDirectionPolicy.js');
+  const vita=recognizedFingerPreset('C:\\assets\\Vita.vrm');
+  assert.equal(vita.left,-1);
+  assert.equal(vita.right,-1);
+  assert.equal(vita.verifiedBy,'visual-report');
+  assert.equal(recognizedFingerPreset('vItA.VrM').left,-1);
+  assert.equal(recognizedFingerPreset('Other.vrm').verifiedBy,'none');
+  assert.equal(fingerCurlSign('left','Index',{left:-1,right:-1},new Map()),-1);
+  assert.equal(fingerCurlSign('right','Ring',{left:-1,right:-1},new Map([['right:Ring',-1]])),1);
+  assert.equal(fingerCurlSign('left','Unknown',{left:-1,right:-1},new Map()),0);
+});
+test('LP-02B.2 Vita auto-fix moves both hands inward, allows one-finger override and fully restores A/B',()=>{
+  const rig=makeAvatar(),presence=new LivingPresence(rig,{sourceName:'Vita.vrm'});
+  const before=presence.getFingerCalibrationState();
+  assert.equal(before.directions.left,-1);
+  assert.equal(before.directions.right,-1);
+  assert.match(before.preset,/Vita.vrm/);
+  presence.setIntensity(0);
+  presence.setEnabled(true);
+  for(let i=0;i<160;i++){presence.beforeFrame();presence.update(1/60);}
+  const joint=rig.nodes.get('leftIndexProximal');
+  const other=rig.nodes.get('leftMiddleProximal');
+  const right=rig.nodes.get('rightIndexProximal');
+  const inward=joint.quaternion.clone();
+  const unchangedLeft=other.quaternion.clone();
+  const unchangedRight=right.quaternion.clone();
+  assert.ok(inward.angleTo(new inward.constructor())>0.1);
+  assert.equal(presence.setFingerOverride('left','Index',true),true);
+  assert.equal(presence.setFingerOverride('left','NoFinger',true),false);
+  for(let i=0;i<160;i++){presence.beforeFrame();presence.update(1/60);}
+  const outward=joint.quaternion.clone();
+  assert.ok(inward.x*outward.x+inward.y*outward.y+inward.z*outward.z<-0.001);
+  assert.ok(other.quaternion.angleTo(unchangedLeft)<1e-8);
+  assert.ok(right.quaternion.angleTo(unchangedRight)<1e-8);
+  assert.equal(presence.getFingerCalibrationState().fingers.left.Index,true);
+  presence.setFingerOverride('left','Index',false);
+  for(let i=0;i<160;i++){presence.beforeFrame();presence.update(1/60);}
+  assert.ok(joint.quaternion.angleTo(inward)<1e-8);
+  presence.setEnabled(false);
+  assert.ok(joint.quaternion.angleTo(new joint.quaternion.constructor())<1e-10);
+  assert.ok(other.quaternion.angleTo(new other.quaternion.constructor())<1e-10);
+  assert.ok(right.quaternion.angleTo(new right.quaternion.constructor())<1e-10);
+  presence.dispose();
+});
