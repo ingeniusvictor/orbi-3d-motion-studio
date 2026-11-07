@@ -140,7 +140,8 @@ test('LP-02C.1 paused FBX can overlay then undo without changing the frozen pose
   assert.ok(vrm.nodes.get('leftUpperArm').quaternion.angleTo(authored)<0.015);
   composer.setEnabled(false);motor.resetOverlay();
   assert.ok(vrm.nodes.get('leftIndexProximal').quaternion.angleTo(new Quaternion())<1e-8);
-  assert.ok(vrm.nodes.get('leftUpperArm').quaternion.angleTo(authored)<1e-8);
+  assert.ok(vrm.nodes.get('leftUpperArm').quaternion.equals(authored),
+    'paused clip arm quaternion must be restored component-by-component');
   assert.equal(motor.appliedPositions.size,0);
   motor.dispose();
 });
@@ -156,7 +157,8 @@ test('LP-02C.1 action clips stay fully under mixer authority even when user opte
     motor.beforeFrame();mixer.update(1/60);
     const before=vrm.nodes.get('leftIndexProximal').quaternion.clone();
     motor.update(1/60,{clipPlaying:true,composition:composer});
-    assert.ok(vrm.nodes.get('leftIndexProximal').quaternion.angleTo(before)<1e-8);
+    assert.ok(vrm.nodes.get('leftIndexProximal').quaternion.equals(before),
+      'active action clip quaternion must remain byte-identical to mixer output');
   }
   assert.equal(composer.getStatus().eligible,false);
 });
