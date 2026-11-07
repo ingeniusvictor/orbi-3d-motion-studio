@@ -5,6 +5,8 @@ import { buildFingerCurlAxes, FINGER_GROUPS } from './fingerPose.js';
 import { JOINT_NAMES, relaxedFingerAngleDegrees } from './relaxedHandPose.js';
 import { recognizedFingerPreset, fingerCurlSign, SUPPORTED_FINGERS, SIDES } from './fingerDirectionPolicy.js';
 import { OrganicIdleScore, NaturalBlink } from './organicIdle.js';
+import { AttentionDirector } from './attentionDirector.js';
+import { PlantedLegs } from './plantedLegs.js';
 
 const clamp01=x=>Math.max(0,Math.min(1,Number(x)||0));
 const deg=x=>THREE.MathUtils.degToRad(x);
@@ -26,18 +28,28 @@ export class LivingPresence {
     this.fingerStates=new Map();
     this.gazeActivity=true;
     this.blinkActivity=true;
+    this.headActivity=true;
+    this.elbowActivity=true;
+    this.legActivity=true;
+    this.legIntensity=0.45;
     this.diagnostic=false;
     this.time=0;
     this.fade={x:0,v:0};
     this.states=new Map();
     this.applied=new Map();
+    this.appliedPositions=new Map();
+    this.headMotor={yaw:{x:0,v:0},pitch:{x:0,v:0}};
+    this.elbowMotor={left:{x:0,v:0},right:{x:0,v:0}};
     this.calibration=buildRelaxedArmOffsets(vrm);
     this.fingerCalibration=buildFingerCurlAxes(vrm);
     this.score=new OrganicIdleScore();
+    this.attention=new AttentionDirector();
+    this.plantedLegs=new PlantedLegs(vrm);
     this.blink=new NaturalBlink();
     this.euler=new THREE.Euler(0,0,0,'XYZ');
     this.offset=new THREE.Quaternion();
     this.restOffset=new THREE.Quaternion();
+    this.extraElbow=new THREE.Quaternion();
     this.fingerOffset=new THREE.Quaternion();
     this.identity=new THREE.Quaternion();
     this.blinkApplied=null;
@@ -52,7 +64,9 @@ export class LivingPresence {
     this.tmpUp=new THREE.Vector3();
   }
   getDiagnostics(){
-    return [...this.calibration.diagnostics,...this.fingerCalibration.diagnostics];
+    return [...this.calibration.diagnostics,...this.fingerCalibration.diagnostics,
+      this.plantedLegs.enabled?'Pies: dos cadenas IK disponibles para anclaje experimental.':
+        'Pies: IK deshabilitado — '+this.plantedLegs.failureReason];
   }
   getCapabilities(){
     const mgr=this.vrm?.expressionManager;
@@ -61,6 +75,9 @@ export class LivingPresence {
       blinking:Boolean(mgr?.getValue && (mgr.getValue('blink')!==null ||
         (mgr.getValue('blinkLeft')!==null && mgr.getValue('blinkRight')!==null))),
       lookAt:Boolean(this.vrm?.lookAt?.autoUpdate !== false && this.vrm?.lookAt),
+      attention:true,
+      legIK:this.plantedLegs.enabled,
+      footAnchors:this.plantedLegs.legs.size,
     };
   }
   setEnabled(value){
@@ -70,6 +87,8 @@ export class LivingPresence {
   setIntensity(value){if(Number.isFinite(Number(value)))this.intensity=clamp01(value);}
   setPosture(value){if(Number.isFinite(Number(value)))this.posture=clamp01(value);}
   setHandRelaxation(value){if(Number.isFinite(Number(value)))this.handRelaxation=clamp01(value);}
+  setLegIntensity(value){if(Number.isFinite(Number(value)))this.legIntensity=clamp01(value);}
+  getLegDiagnostics(){return this.plantedLegs.getDiagnostics();}
   setFingerDirection(side,reverse){
     if(SIDES.includes(side))this.fingerDirections[side]=reverse?-1:1;
   }
@@ -95,6 +114,9 @@ export class LivingPresence {
     if(typeof opts.hands==='boolean')this.handActivity=opts.hands;
     if(typeof opts.gaze==='boolean')this.gazeActivity=opts.gaze;
     if(typeof opts.blink==='boolean')this.blinkActivity=opts.blink;
+    if(typeof opts.head==='boolean')this.headActivity=opts.head;
+    if(typeof opts.elbows==='boolean')this.elbowActivity=opts.elbows;
+    if(typeof opts.legs==='boolean')this.legActivity=opts.legs;
     if(typeof opts.diagnostic==='boolean')this.diagnostic=opts.diagnostic;
     if(!this.gazeActivity)this.releaseGaze();
     if(!this.blinkActivity)this.restoreBlink();
@@ -131,6 +153,10 @@ export class LivingPresence {
     for(const {node,base,applied} of this.applied.values())
       if(node.quaternion.angleTo(applied)<0.0001)node.quaternion.copy(base);
     this.applied.clear();
+    for(const {node,base,applied} of this.appliedPositions.values()){
+      if(node.position.distanceToSquared(applied)<1e-12)node.position.copy(base);
+    }
+    this.appliedPositions.clear();
     this.restoreBlink();
   }
   resetOverlay(){
@@ -139,6 +165,8 @@ export class LivingPresence {
     this.fade={x:0,v:0};
     this.states.clear();
     this.fingerStates.clear();
+    this.headMotor={yaw:{x:0,v:0},pitch:{x:0,v:0}};
+    this.elbowMotor={left:{x:0,v:0},right:{x:0,v:0}};
   }
   updateBlink(t,scale){
     if(!this.blinkActivity)return;
@@ -160,7 +188,7 @@ export class LivingPresence {
     }
     if(prev.size)this.blinkApplied=prev;
   }
-  updateGaze(score){
+  updateGaze(attention){
     const lookAt=this.vrm?.lookAt;
     if(!this.gazeActivity||!lookAt||lookAt.autoUpdate===false)return;
     if(lookAt.target!=null&&lookAt.target!==this.gazeTarget)return; // external owner
@@ -182,10 +210,14 @@ export class LivingPresence {
     const right=this.tmpRight.set(1,0,0).applyQuaternion(headWorld);
     const up=this.tmpUp.set(0,1,0).applyQuaternion(headWorld);
     const origin=lookAt.getLookAtWorldPosition(this.tmpEye);
-    const factor=this.intensity*(this.diagnostic?2.4:1);
+    // Eye saccades reach a fixation rapidly; the head follows more slowly.
+    const factor=clamp01(this.intensity)*(this.diagnostic?1.4:1);
+    const remainingYaw=attention.yaw-(this.headActivity?this.headMotor.yaw.x:0);
+    const remainingPitch=attention.pitch-(this.headActivity?this.headMotor.pitch.x:0);
+    const x=3.5*Math.tan(THREE.MathUtils.clamp(remainingYaw*factor,-deg(16),deg(16)));
+    const y=3.5*Math.tan(THREE.MathUtils.clamp(remainingPitch*factor,-deg(9),deg(9)));
     this.gazeTarget.position.copy(origin).addScaledVector(forward,3.5)
-      .addScaledVector(right,score.gazeX*0.18*factor)
-      .addScaledVector(up,score.gazeY*0.12*factor);
+      .addScaledVector(right,x).addScaledVector(up,y);
     this.gazeTarget.updateMatrixWorld(true);
   }
   update(deltaSeconds,{clipPlaying=false}={}){
@@ -199,6 +231,7 @@ export class LivingPresence {
     const diagnostic=this.diagnostic?2.4:1;
     const activity=blend*energy*diagnostic;
     const score=this.score.sample(this.time);
+    const attention=this.attention.sample(this.time);
     const micro=sampleIdlePose(this.time,activity);
     // The event lanes stay independent: a wrist may recover while fingers
     // barely move, or the head may hold its pose for multiple seconds.
@@ -208,18 +241,30 @@ export class LivingPresence {
         const shoulder=score[side+'Shoulder'];
         micro[side+'Hand']=[0.017*wrist*activity,0.05*wrist*activity,0.028*wrist*activity];
         const arm=micro[side+'LowerArm']||[0,0,0];
-        micro[side+'LowerArm']=[arm[0]+0.04*elbow*activity,arm[1]+0.012*elbow*activity,arm[2]];
+        // Elbow flex follows the calibrated anatomical hinge, not arbitrary X.
+        micro[side+'LowerArm']=[arm[0],arm[1]+0.006*elbow*activity,arm[2]];
         const clavicle=micro[side+'Shoulder']||[0,0,0];
         micro[side+'Shoulder']=[clavicle[0],clavicle[1]+0.012*shoulder*activity,
           clavicle[2]+0.022*shoulder*activity];
       }
     }
+    // Head follows fixation after the eyes (low-frequency critically-damped).
+    this.headMotor.yaw=springStep(this.headMotor.yaw,
+      this.headActivity?attention.yaw*0.34*activity:0,dt,0.7);
+    this.headMotor.pitch=springStep(this.headMotor.pitch,
+      this.headActivity?attention.pitch*0.34*activity:0,dt,0.66);
     const head=micro.head||[0,0,0];
-    micro.head=[head[0]+0.014*score.headTilt*activity,
-      head[1]+0.045*score.headYaw*activity,
-      head[2]+0.016*score.headTilt*activity];
+    micro.head=[head[0]+this.headMotor.pitch.x*0.76+0.008*score.headTilt*activity,
+      head[1]+this.headMotor.yaw.x*0.76,
+      head[2]+0.012*score.headTilt*activity];
     const neck=micro.neck||[0,0,0];
-    micro.neck=[neck[0]+0.008*score.neck*activity,neck[1]+0.013*score.neck*activity,neck[2]];
+    micro.neck=[neck[0]+this.headMotor.pitch.x*0.24,
+      neck[1]+this.headMotor.yaw.x*0.24+0.009*score.neck*activity,
+      neck[2]];
+    for(const side of [LEFT,RIGHT]){
+      const goal=this.elbowActivity?Math.abs(score[side+'Elbow'])*activity:0;
+      this.elbowMotor[side]=springStep(this.elbowMotor[side],goal,dt,0.85);
+    }
 
     const fingerAngles=new Map();
     if(this.handActivity){
@@ -260,6 +305,12 @@ export class LivingPresence {
       if(resting){
         this.restOffset.copy(this.identity).slerp(resting,blend*this.posture);
         node.quaternion.multiply(this.restOffset);
+        if(this.elbowActivity && (role==='leftLowerArm'||role==='rightLowerArm')){
+          const side=role.startsWith('left')?'left':'right';
+          this.extraElbow.copy(this.identity).slerp(resting,
+            Math.min(0.6,0.58*this.elbowMotor[side].x));
+          node.quaternion.multiply(this.extraElbow);
+        }
       }
       const curl=this.fingerCalibration.axes.get(role);
       if(curl&&fingerAngles.has(role)){
@@ -269,7 +320,15 @@ export class LivingPresence {
       node.quaternion.multiply(this.offset).normalize();
       this.applied.set(role,{node,base,applied:node.quaternion.clone()});
     }
-    this.updateGaze(score);
+    if(this.legActivity && this.plantedLegs.enabled && blend>0.01){
+      this.plantedLegs.apply({
+        bend:Math.min(1,Math.abs(score.lowerBodyBend)*this.legIntensity*activity),
+        lift:Math.min(1,Math.abs(score.footLift)*this.legIntensity*activity),
+        liftSide:score.footLift>=0?'left':'right',
+        blend,
+      },this.applied,this.appliedPositions);
+    }
+    this.updateGaze(attention);
     this.updateBlink(this.time,blend);
   }
   dispose(){
