@@ -34,7 +34,7 @@ export class LivingPresence {
     this.blinkActivity=true;
     this.headActivity=true;
     this.elbowActivity=true;
-    this.legActivity=true;
+    this.legActivity=false; // Enable only after visual knee/ground-contact QA.
     this.legIntensity=0.45;
     this.diagnostic=false;
     this.time=0;
