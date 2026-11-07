@@ -268,6 +268,8 @@ export class MotionViewer {
   setLivingPresenceIntensity(value) { this.presence?.setIntensity(value); }
   setLivingPosture(value) { this.presence?.setPosture(value); }
   getLivingPoseDiagnostics() { return this.presence?.getDiagnostics() || []; }
+  getLivingCapabilities() { return this.presence?.getCapabilities() || null; }
+  setLivingOptions(options) { this.presence?.setOptions(options); }
   setSkeletonVisible(show) {
     this.showBones = Boolean(show);
     if (this.skeleton) {this.scene.remove(this.skeleton);this.skeleton.dispose();this.skeleton=null;}
