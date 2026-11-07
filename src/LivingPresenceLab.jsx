@@ -1,6 +1,8 @@
 import {useEffect,useState} from 'react';
 import {Activity,HeartPulse,ShieldCheck} from 'lucide-react';
 
+const FINGERS=[['Thumb','Pulgar'],['Index','Índice'],['Middle','Medio'],['Ring','Anular'],['Little','Meñique']];
+
 // LP-01: all model analysis and motion stay on-device; this panel never uploads.
 export default function LivingPresenceLab({model,generation,getViewer}) {
   const [enabled,setEnabled]=useState(false);
@@ -8,6 +10,8 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
   const [posture,setPosture]=useState(92);
   const [handRelaxation,setHandRelaxation]=useState(88);
   const [reverseCurl,setReverseCurl]=useState({left:false,right:false});
+  const [fingerOverrides,setFingerOverrides]=useState({left:{},right:{}});
+  const [fingerPreset,setFingerPreset]=useState('');
   const [calibration,setCalibration]=useState([]);
   const [audit,setAudit]=useState(null);
   const [capabilities,setCapabilities]=useState(null);
@@ -20,7 +24,10 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
     setCalibration([]);
     setPosture(92);
     setHandRelaxation(88);
-    setReverseCurl({left:false,right:false});
+    const hands=getViewer()?.getLivingFingerCalibration();
+    setReverseCurl({left:hands?.directions?.left===-1,right:hands?.directions?.right===-1});
+    setFingerOverrides(hands?.fingers||{left:{},right:{}});
+    setFingerPreset(hands?.preset||'');
     getViewer()?.setLivingPresence(false);
   },[generation,getViewer]);
   const canUse=Boolean(model?.format==='VRM');
@@ -52,6 +59,10 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
   const changeCurlDirection=(side,checked)=>{
     setReverseCurl(current=>({...current,[side]:checked}));
     getViewer()?.setLivingFingerDirection(side,checked);
+  };
+  const changeFingerOverride=(side,finger,checked)=>{
+    setFingerOverrides(current=>({...current,[side]:{...current[side],[finger]:checked}}));
+    getViewer()?.setLivingFingerOverride(side,finger,checked);
   };
   const changePosture=event=>{
     const next=Number(event.target.value);
@@ -107,6 +118,10 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
           Los dedos descansan ligeramente curvados, no extendidos.
           Es diferente a la intensidad de los microgestos.
         </small>
+        <div style={{fontSize:11,lineHeight:1.6,opacity:0.83}} role="status">
+          Calibración: {fingerPreset||'carga un VRM para detectar el perfil'}.
+          {fingerPreset.startsWith('Vita.vrm')?' Se invirtieron ambas manos automáticamente para este archivo.':''}
+        </div>
         <details style={{fontSize:12}}>
           <summary style={{cursor:'pointer'}}>Calibrar el sentido de flexión</summary>
           <div style={{display:'grid',gap:7,paddingTop:9}}>
@@ -115,7 +130,24 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
               <input type="checkbox" checked={reverseCurl[side]} disabled={!canUse}
                 onChange={e=>changeCurlDirection(side,e.target.checked)}/>{label}
             </label>)}
-            <small>Utiliza estas opciones solamente si los dedos se arquean hacia fuera de la palma.</small>
+            <small>En Vita las dos manos comienzan invertidas por la prueba visual anterior. Si alguna falange se dobla al revés, cambia solo la mano afectada.</small>
+            <details style={{fontSize:12}}>
+              <summary style={{cursor:'pointer'}}>Corrección individual por dedo</summary>
+              <div style={{display:'grid',gap:11,paddingTop:9}}>
+                {[['left','Izquierda'],['right','Derecha']].map(([side,label])=><div key={side}>
+                  <strong>{label}</strong>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:7,marginTop:6}}>
+                    {FINGERS.map(([finger,name])=><label key={side+finger}
+                      style={{display:'flex',alignItems:'center',gap:6}}>
+                      <input type="checkbox" checked={Boolean(fingerOverrides[side]?.[finger])}
+                        disabled={!canUse} onChange={e=>changeFingerOverride(side,finger,e.target.checked)}/>
+                      Invertir {name.toLowerCase()}
+                    </label>)}
+                  </div>
+                </div>)}
+              </div>
+              <small>Estos cambios invierten cada dedo respecto a la dirección general de su mano. No modifican el VRM original.</small>
+            </details>
           </div>
         </details>
         {[
