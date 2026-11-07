@@ -96,6 +96,7 @@ test('LP-02D integrated motor preserves planted feet and restores original postu
   const rig=simpleRig(),motor=new LivingPresence(rig);
   motor.setIntensity(0.7);
   motor.setLegIntensity(0.65);
+  motor.setOptions({legs:true});
   motor.setEnabled(true);
   const left=point(rig.nodes.get('leftFoot'));
   const right=point(rig.nodes.get('rightFoot'));
@@ -118,6 +119,7 @@ test('LP-02D integrated motor preserves planted feet and restores original postu
 });
 test('LP-02D an imported/paused FBX keeps sole ownership of the legs',()=>{
   const rig=simpleRig(),motor=new LivingPresence(rig);
+  motor.setOptions({legs:true});
   motor.setEnabled(true);
   for(let i=0;i<70;i++){motor.beforeFrame();motor.update(1/60);}
   motor.beforeFrame();motor.update(1/60,{clipPlaying:true});
