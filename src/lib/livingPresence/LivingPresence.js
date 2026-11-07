@@ -7,6 +7,7 @@ import { recognizedFingerPreset, fingerCurlSign, SUPPORTED_FINGERS, SIDES } from
 import { OrganicIdleScore, NaturalBlink } from './organicIdle.js';
 import { AttentionDirector } from './attentionDirector.js';
 import { PlantedLegs } from './plantedLegs.js';
+import { SlowBodySway } from './slowBodySway.js';
 
 const clamp01=x=>Math.max(0,Math.min(1,Number(x)||0));
 const deg=x=>THREE.MathUtils.degToRad(x);
@@ -36,6 +37,9 @@ export class LivingPresence {
     this.elbowActivity=true;
     this.legActivity=false; // Enable only after visual knee/ground-contact QA.
     this.legIntensity=0.45;
+    this.swayActivity=true;
+    this.swayIntensity=0.35;
+    this.swaySpeed=0.65;
     this.diagnostic=false;
     this.time=0;
     this.fade={x:0,v:0};
@@ -49,6 +53,7 @@ export class LivingPresence {
     this.score=new OrganicIdleScore(this.randomSeed);
     this.attention=new AttentionDirector(this.randomSeed ^ 0x35ab127d);
     this.plantedLegs=new PlantedLegs(vrm);
+    this.slowSway=new SlowBodySway(this.randomSeed ^ 0x22446688);
     this.blink=new NaturalBlink(this.randomSeed ^ 0x51c4f00d);
     this.euler=new THREE.Euler(0,0,0,'XYZ');
     this.offset=new THREE.Quaternion();
@@ -93,6 +98,8 @@ export class LivingPresence {
   setPosture(value){if(Number.isFinite(Number(value)))this.posture=clamp01(value);}
   setHandRelaxation(value){if(Number.isFinite(Number(value)))this.handRelaxation=clamp01(value);}
   setLegIntensity(value){if(Number.isFinite(Number(value)))this.legIntensity=clamp01(value);}
+  setSwayIntensity(value){if(Number.isFinite(Number(value)))this.swayIntensity=clamp01(value);}
+  setSwaySpeed(value){if(Number.isFinite(Number(value)))this.swaySpeed=THREE.MathUtils.clamp(Number(value),0.15,1.5);}
   getLegDiagnostics(){return this.plantedLegs.getDiagnostics();}
   setFingerDirection(side,reverse){
     if(SIDES.includes(side))this.fingerDirections[side]=reverse?-1:1;
@@ -122,6 +129,7 @@ export class LivingPresence {
     if(typeof opts.head==='boolean')this.headActivity=opts.head;
     if(typeof opts.elbows==='boolean')this.elbowActivity=opts.elbows;
     if(typeof opts.legs==='boolean')this.legActivity=opts.legs;
+    if(typeof opts.sway==='boolean')this.swayActivity=opts.sway;
     if(typeof opts.diagnostic==='boolean')this.diagnostic=opts.diagnostic;
     if(!this.gazeActivity)this.releaseGaze();
     if(!this.blinkActivity)this.restoreBlink();
@@ -172,6 +180,7 @@ export class LivingPresence {
     this.fingerStates.clear();
     this.headMotor={yaw:{x:0,v:0},pitch:{x:0,v:0}};
     this.elbowMotor={left:{x:0,v:0},right:{x:0,v:0}};
+    this.slowSway.reset();
   }
   updateBlink(t,scale){
     if(!this.blinkActivity)return;
@@ -241,6 +250,20 @@ export class LivingPresence {
     const score=this.score.sample(this.time);
     const attention=this.attention.sample(this.time);
     const micro=sampleIdlePose(this.time,activity);
+    // Independently timed body weight expression: only upper torso/head.
+    // The feet and hips are NEVER translated or rotated by this new layer.
+    const sway=this.slowSway.sample(this.time,dt,{
+      intensity:this.swayActivity?this.swayIntensity*blend:0,
+      speed:this.swaySpeed,
+    });
+    for(const [role,rollFactor,yawFactor] of [
+      ['spine',0.46,0.53],['chest',0.36,0.33],['upperChest',0.18,0.14],
+      ['neck',-0.12,0],['head',-0.10,0],
+    ]){
+      const angles=micro[role]||[0,0,0];
+      micro[role]=[angles[0],angles[1]+sway.yaw*yawFactor,
+        angles[2]+sway.roll*rollFactor];
+    }
     // The event lanes stay independent: a wrist may recover while fingers
     // barely move, or the head may hold its pose for multiple seconds.
     if(this.handActivity) {
