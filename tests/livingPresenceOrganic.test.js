@@ -130,3 +130,19 @@ test('LP-02B does not claim gaze ownership when external target exists',()=>{
   presence.setEnabled(false);
   assert.equal(vrm.lookAt.target,external);
 });
+
+test('LP-02B gaze A/B restores the original lookAt angles',()=>{
+  const vrm=makeAvatar();
+  vrm.lookAt.yaw=4;
+  vrm.lookAt.pitch=-2;
+  const presence=new LivingPresence(vrm);
+  presence.setEnabled(true);
+  for(let i=0;i<140;i++){presence.beforeFrame();presence.update(1/60);}
+  assert.equal(vrm.lookAt.target,presence.gazeTarget);
+  vrm.lookAt.yaw=8;
+  vrm.lookAt.pitch=6;
+  presence.setEnabled(false);
+  assert.equal(vrm.lookAt.target,null);
+  assert.equal(vrm.lookAt.yaw,4);
+  assert.equal(vrm.lookAt.pitch,-2);
+});
