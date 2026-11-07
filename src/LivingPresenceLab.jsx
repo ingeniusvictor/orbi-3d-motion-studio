@@ -13,6 +13,9 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
   const [motorEnabled,setMotorEnabled]=useState(false);
   const [motorIntensity,setMotorIntensity]=useState(42);
   const [motorMode,setMotorMode]=useState('resting');
+  const [gesturesEnabled,setGesturesEnabled]=useState(false);
+  const [gestureIntensity,setGestureIntensity]=useState(58);
+  const [gestureFeedback,setGestureFeedback]=useState('');
   const [posture,setPosture]=useState(92);
   const [handRelaxation,setHandRelaxation]=useState(88);
   const [legIntensity,setLegIntensity]=useState(45);
@@ -33,6 +36,11 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
     setMotorEnabled(false);
     setMotorIntensity(42);
     setMotorMode('resting');
+    setGesturesEnabled(false);
+    setGestureIntensity(58);
+    setGestureFeedback('');
+    getViewer()?.setLivingGestureEnabled(false);
+    getViewer()?.setLivingGestureIntensity(0.58);
     getViewer()?.setLivingMotorCoordination(false);
     getViewer()?.setLivingMotorIntensity(0.42);
     getViewer()?.setLivingMotorMode('resting');
@@ -61,6 +69,7 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
   useEffect(()=>{
     // New clip must be independently approved for procedural composition.
     setComposerRequested(false);
+    setGestureFeedback('');
     getViewer()?.setLivingComposerEnabled(false);
   },[activeClip,getViewer]);
   const canUse=Boolean(model?.format==='VRM');
@@ -110,6 +119,22 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
     const next={...options,[name]:checked};
     setOptions(next);
     getViewer()?.setLivingOptions(next);
+  };
+  const changeGesturesEnabled=event=>{
+    const next=event.target.checked;
+    setGesturesEnabled(next);
+    setGestureFeedback('');
+    getViewer()?.setLivingGestureEnabled(next);
+  };
+  const changeGestureIntensity=event=>{
+    const next=Number(event.target.value);
+    setGestureIntensity(next);
+    getViewer()?.setLivingGestureIntensity(next/100);
+  };
+  const triggerGesture=(name,label)=>{
+    const ok=getViewer()?.triggerLivingGesture(name);
+    setGestureFeedback(ok?`Último gesto solicitado: ${label}.`:
+      'No se inició el gesto: revisa el compositor o espera a que termine el anterior.');
   };
   const changeMotorEnabled=event=>{
     const next=Boolean(event.target.checked);
@@ -206,6 +231,47 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
         <input type="range" min="0" max="100" step="5" value={intensity}
           disabled={!canUse} onChange={changeIntensity}/>
       </label>
+      <div style={{display:'grid',gap:9,borderTop:'1px solid #284158',paddingTop:12}}>
+        <strong style={{fontSize:12}}>LP-03B.1 · Director de gestos naturales</strong>
+        <small style={{opacity:0.8,lineHeight:1.55}}>
+          Prueba acciones breves con anticipación, ejecución, pausa y recuperación.
+          No se repiten automáticamente. Ojos, cabeza y brazos participan de forma
+          discreta, manteniendo el reposo natural como postura base.
+        </small>
+        <label style={{display:'flex',gap:8,alignItems:'center',fontSize:12}}>
+          <input type="checkbox" checked={gesturesEnabled}
+            disabled={!canUse||!enabled||!presenceGate.running}
+            onChange={changeGesturesEnabled}/>
+          Habilitar gestos breves (A/B)
+        </label>
+        <label style={{display:'grid',gap:5,fontSize:12}}>
+          Intensidad de gestos: {gestureIntensity}%
+          <input type="range" min="0" max="100" step="5" value={gestureIntensity}
+            disabled={!canUse||!enabled||!gesturesEnabled||!presenceGate.running}
+            onChange={changeGestureIntensity}/>
+        </label>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+          {[
+            ['acknowledge','Asentir suavemente'],
+            ['curious','Mirar con curiosidad'],
+            ['emphasize','Énfasis discreto'],
+          ].map(([name,label])=><button type="button" className="outline-btn"
+            style={{fontSize:11,padding:'8px 6px'}} key={name}
+            disabled={!canUse||!enabled||!gesturesEnabled||!presenceGate.running}
+            onClick={()=>triggerGesture(name,label)}>{label}</button>)}
+        </div>
+        {gestureFeedback&&<small role="status" style={{opacity:0.85,lineHeight:1.5}}>
+          {gestureFeedback}
+        </small>}
+        {!presenceGate.running&&clipComposition?.clipSelected&&<small style={{opacity:0.73,lineHeight:1.5}}>
+          Los gestos necesitan LP-02C.1 cuando hay un reposo FBX seleccionado.
+          Nunca se ejecutan encima de caminatas o acciones incompatibles.
+        </small>}
+        <small style={{opacity:0.72,lineHeight:1.5}}>
+          Son acciones motoras manuales de inspección; no hay integración con
+          Qwen, ni gestos automáticos durante la conversación en esta fase.
+        </small>
+      </div>
       <div style={{display:'grid',gap:9,borderTop:'1px solid #284158',paddingTop:12}}>
         <strong style={{fontSize:12}}>LP-03A · Cerebelo motor experimental</strong>
         <small style={{opacity:0.8,lineHeight:1.5}}>
