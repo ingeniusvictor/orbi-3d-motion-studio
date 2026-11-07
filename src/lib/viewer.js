@@ -338,7 +338,13 @@ export class MotionViewer {
   // Freeze LivingPresence while model preparation/export runs asynchronously.
   async withPresenceSuspended(operation){
     this.presenceSuspendCount++;
-    if(this.presenceSuspendCount===1)this.presence?.resetOverlay();
+    if(this.presenceSuspendCount===1){
+      this.presence?.resetOverlay();
+      // Three-VRM copies normalized humanoid bones to raw bones during update.
+      // Synchronize once BEFORE cloning/exporting the raw skinned model.
+      this.vrm?.update(0);
+      this.model?.updateWorldMatrix(true,true);
+    }
     try{return await operation();}
     finally{this.presenceSuspendCount=Math.max(0,this.presenceSuspendCount-1);}
   }
