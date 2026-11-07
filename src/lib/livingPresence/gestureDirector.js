@@ -48,7 +48,7 @@ export function gestureEnvelope(elapsed,phases) {
   const t=Number.isFinite(elapsed)?Math.max(0,elapsed):0;
   const [anticipation,action,hold,recovery]=phases;
   const t1=anticipation,t2=t1+action,t3=t2+hold,t4=t3+recovery;
-  if(t<t1)return {phase:'anticipation',weight:-0.12*ease(t/t1)};
+  if(t<t1)return {phase:'anticipation',weight:t===0?0:-0.12*ease(t/t1)};
   if(t<t2)return {phase:'action',weight:-0.12+1.12*ease((t-t1)/action)};
   if(t<t3)return {phase:'hold',weight:1};
   if(t<t4)return {phase:'recovery',weight:1-ease((t-t3)/recovery)};
