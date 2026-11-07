@@ -70,3 +70,20 @@ La capa motora acepta solo acciones y targets de una lista permitida. Duración,
 6. Validar FPS, parpadeo, expresiones, materiales y exportación sin regresiones.
 
 **Reglas:** no subir modelos originales a repos públicos ni a CI, no modificar main, no afirmar realismo certificado hasta probarlo visualmente.
+
+
+## LP-02B.2 — Corrección de dirección de los dedos (QA de Vita.vrm)
+
+**Incidencia detectada visualmente:** con el perfil anterior LP-02B.1, ambas manos de Vita.vrm flexionaban varios dedos hacia el dorso, creando hiperextensión antinatural. No era un error de conteo: el runtime había identificado 30 roles normalizados, pero el cálculo geométrico del eje no determina de forma unívoca el signo anatómico palmar.
+
+**Solución incorporada:**
+- `src/lib/livingPresence/fingerDirectionPolicy.js` reconoce únicamente el archivo `Vita.vrm` (nombre normalizado, mayúsculas y rutas ignoradas), asignando signo de curl **-1 a izquierda y derecha** con procedencia `visual-report`.
+- Otros VRM mantienen el modo sin perfil conocido y exigen revisión. **No afirmar autocalibración universal por nombre o geometría de huesos**.
+- `LivingPresence.js`: combina dirección de mano y corrección específica por dedo; permite invertir solamente pulgar, índice, medio, anular o meñique. El movimiento sigue siendo amortiguado, reversible y sin alterar el archivo fuente.
+- `viewer.js`: pasa el nombre real del archivo al motor y expone setters de calibración granular.
+- `LivingPresenceLab.jsx`: inicializa casillas de inversión para Vita, muestra el perfil aplicado y ofrece un menú desplegable con diez correcciones por dedo, separadas por mano.
+- `tests/livingPresenceOrganic.test.js`: verifica selección del perfil, inversión de ambas manos, cambio aislado de un dedo y reversibilidad A/B. CI completó **108/108 pruebas y compilación correcta** en commit `a5e72344913bf9bb9fad07b7ea27ee1db57fa00f`.
+
+**QA visual todavía necesario:** cargar `Vita.vrm` original, activar Presencia natural, curvatura de dedos al 75-85 %; observar ambas manos desde la cara palmar y lateral. Si solo el pulgar queda invertido, abrir «Calibrar el sentido de flexión» > «Corrección individual por dedo», activar «Invertir pulgar» en la mano correspondiente. Desactivar A/B debe restaurar la pose original sin drift. Si se observa intersección con malla del guante o cuerpo, reducir curvatura y registrar captura. No confundir pruebas automatizadas con certificado de realismo o anatomía.
+
+**Pendiente:** detección geométrica fiable requiere una referencia explícita del lado palmar del rig o una calibración visual guiada; seguimiento futuro LP-02B.3. La corrección no se exporta al VRM original ni altera FBX de Mixamo.
