@@ -2,19 +2,12 @@ import * as THREE from 'three';
 import { sampleIdlePose, springStep } from './motionPrimitives.js';
 import { buildRelaxedArmOffsets } from './neutralPose.js';
 import { buildFingerCurlAxes, FINGER_GROUPS } from './fingerPose.js';
+import { JOINT_NAMES, relaxedFingerAngleDegrees } from './relaxedHandPose.js';
 import { OrganicIdleScore, NaturalBlink } from './organicIdle.js';
 
 const clamp01=x=>Math.max(0,Math.min(1,Number(x)||0));
 const deg=x=>THREE.MathUtils.degToRad(x);
 const LEFT='left',RIGHT='right';
-const FINGER_JOINTS={
-  Thumb:['Metacarpal','Proximal','Distal'],
-  Index:['Proximal','Intermediate','Distal'],
-  Middle:['Proximal','Intermediate','Distal'],
-  Ring:['Proximal','Intermediate','Distal'],
-  Little:['Proximal','Intermediate','Distal'],
-};
-const FINGER_REST={Thumb:6,Index:8,Middle:11,Ring:13,Little:15};
 
 // LP-02B: resting posture + asynchronous micro-actions, fingers, gaze and blinks.
 // Only edits the current rendered pose. No exportable clip, rig or model is changed.
@@ -25,6 +18,9 @@ export class LivingPresence {
     this.intensity=0.55;
     this.posture=0.92;
     this.handActivity=true;
+    this.handRelaxation=0.88;
+    this.fingerDirections={left:1,right:1};
+    this.fingerStates=new Map();
     this.gazeActivity=true;
     this.blinkActivity=true;
     this.diagnostic=false;
@@ -70,6 +66,10 @@ export class LivingPresence {
   }
   setIntensity(value){if(Number.isFinite(Number(value)))this.intensity=clamp01(value);}
   setPosture(value){if(Number.isFinite(Number(value)))this.posture=clamp01(value);}
+  setHandRelaxation(value){if(Number.isFinite(Number(value)))this.handRelaxation=clamp01(value);}
+  setFingerDirection(side,reverse){
+    if(side==='left'||side==='right')this.fingerDirections[side]=reverse?-1:1;
+  }
   setOptions(opts={}){
     if(typeof opts.hands==='boolean')this.handActivity=opts.hands;
     if(typeof opts.gaze==='boolean')this.gazeActivity=opts.gaze;
@@ -117,6 +117,7 @@ export class LivingPresence {
     this.releaseGaze();
     this.fade={x:0,v:0};
     this.states.clear();
+    this.fingerStates.clear();
   }
   updateBlink(t,scale){
     if(!this.blinkActivity)return;
@@ -205,16 +206,19 @@ export class LivingPresence {
         const shared=score[side+'Fingers'];
         for(const finger of FINGER_GROUPS){
           const pulse=score[side+finger];
-          const spread=FINGER_REST[finger];
-          for(const [i,joint] of FINGER_JOINTS[finger].entries()){
+          for(const [i,joint] of JOINT_NAMES[finger].entries()){
             const role=side+finger+joint;
             if(!this.fingerCalibration.axes.has(role))continue;
-            const weight=i===0?0.68:i===1?1:0.52;
-            // A softly flexed rest hand plus isolated actions. Do not tie the
-            // fingers in lockstep with respiration.
-            const relaxed=deg(spread)*blend*this.posture*weight;
-            const motion=deg(5.5)*(pulse*0.74+shared*0.26)*activity*weight;
-            fingerAngles.set(role,Math.max(0,Math.min(deg(23),relaxed+motion)));
+            const degrees=relaxedFingerAngleDegrees({
+              finger,jointIndex:i,relaxation:this.handRelaxation,blend,
+              activity,individualPulse:pulse,sharedPulse:shared,side,
+            });
+            const target=deg(degrees)*this.fingerDirections[side];
+            const previous=this.fingerStates.get(role)||{x:0,v:0};
+            // Muscular tone does not snap instantly when a micro-action begins.
+            const smooth=springStep(previous,target,dt,2.0);
+            this.fingerStates.set(role,smooth);
+            fingerAngles.set(role,smooth.x);
           }
         }
       }
