@@ -267,6 +267,8 @@ export class MotionViewer {
   setLivingPresence(enabled) { if (!this.presence) return false; this.presence.setEnabled(enabled); return true; }
   setLivingPresenceIntensity(value) { this.presence?.setIntensity(value); }
   setLivingPosture(value) { this.presence?.setPosture(value); }
+  setLivingHandRelaxation(value) { this.presence?.setHandRelaxation(value); }
+  setLivingFingerDirection(side, reversed) { this.presence?.setFingerDirection(side, reversed); }
   getLivingPoseDiagnostics() { return this.presence?.getDiagnostics() || []; }
   getLivingCapabilities() { return this.presence?.getCapabilities() || null; }
   setLivingOptions(options) { this.presence?.setOptions(options); }
