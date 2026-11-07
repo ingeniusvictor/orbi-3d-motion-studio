@@ -146,3 +146,60 @@ test('LP-02B gaze A/B restores the original lookAt angles',()=>{
   assert.equal(vrm.lookAt.yaw,4);
   assert.equal(vrm.lookAt.pitch,-2);
 });
+
+test('LP-02B.1 resting human hand has independent MCP, PIP and DIP flexion',async()=>{
+  const {relaxedFingerProfile,relaxedFingerAngleDegrees}=await import('../src/lib/livingPresence/relaxedHandPose.js');
+  const index=relaxedFingerProfile('Index');
+  const ring=relaxedFingerProfile('Ring');
+  assert.ok(index[0]>=18 && index[1]>index[2]);
+  assert.ok(ring[0]>index[0]);
+  for(const finger of ['Thumb','Index','Middle','Ring','Little']){
+    const target=relaxedFingerProfile(finger);
+    assert.equal(target.length,3);
+    for(let i=0;i<3;i++){
+      const rest=relaxedFingerAngleDegrees({finger,jointIndex:i,relaxation:0.88,blend:1});
+      const zero=relaxedFingerAngleDegrees({finger,jointIndex:i,relaxation:0,blend:1});
+      assert.ok(rest>0&&rest<48);
+      assert.equal(zero,0);
+    }
+  }
+});
+test('LP-02B.1 30 joints rest in a natural curve, and A/B restores exactly',()=>{
+  const rig=makeAvatar(),presence=new LivingPresence(rig);
+  presence.setIntensity(0);
+  presence.setHandRelaxation(1);
+  presence.setEnabled(true);
+  for(let i=0;i<150;i++){presence.beforeFrame();presence.update(1/60);}
+  const index=rig.nodes.get('leftIndexProximal');
+  const middle=rig.nodes.get('leftMiddleIntermediate');
+  const little=rig.nodes.get('rightLittleProximal');
+  assert.ok(index.quaternion.angleTo(new index.quaternion.constructor())>0.2);
+  assert.ok(middle.quaternion.angleTo(new middle.quaternion.constructor())>0.3);
+  assert.ok(little.quaternion.angleTo(new little.quaternion.constructor())>0.4);
+  presence.setEnabled(false);
+  assert.ok(index.quaternion.angleTo(new index.quaternion.constructor())<1e-10);
+  assert.ok(middle.quaternion.angleTo(new middle.quaternion.constructor())<1e-10);
+  assert.ok(little.quaternion.angleTo(new little.quaternion.constructor())<1e-10);
+});
+test('LP-02B.1 hand curl direction can be reversed per side without affecting the other',()=>{
+  const vrm=makeAvatar(),presence=new LivingPresence(vrm);
+  presence.setIntensity(0);
+  presence.setEnabled(true);
+  for(let i=0;i<160;i++){presence.beforeFrame();presence.update(1/60);}
+  const left=vrm.nodes.get('leftIndexProximal');
+  const right=vrm.nodes.get('rightIndexProximal');
+  const qLeft=left.quaternion.clone();
+  const qRight=right.quaternion.clone();
+  presence.setFingerDirection('left',true);
+  for(let i=0;i<160;i++){presence.beforeFrame();presence.update(1/60);}
+  const flipped=left.quaternion.clone();
+  const vectorDot=qLeft.x*flipped.x+qLeft.y*flipped.y+qLeft.z*flipped.z;
+  assert.ok(vectorDot<-0.001,'left must turn opposite around the same hinge');
+  assert.ok(right.quaternion.angleTo(qRight)<0.0001,'right hand unchanged');
+  presence.setEnabled(false);
+  presence.setEnabled(true);
+  presence.setHandRelaxation(0);
+  for(let i=0;i<160;i++){presence.beforeFrame();presence.update(1/60);}
+  assert.ok(left.quaternion.angleTo(new left.quaternion.constructor())<1e-4);
+  presence.dispose();
+});
