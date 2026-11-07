@@ -8,6 +8,7 @@ import { OrganicIdleScore, NaturalBlink } from './organicIdle.js';
 import { AttentionDirector } from './attentionDirector.js';
 import { PlantedLegs } from './plantedLegs.js';
 import { SlowBodySway } from './slowBodySway.js';
+import { MotorCoordinator } from './motorCoordinator.js';
 
 const clamp01=x=>Math.max(0,Math.min(1,Number(x)||0));
 const deg=x=>THREE.MathUtils.degToRad(x);
@@ -54,6 +55,7 @@ export class LivingPresence {
     this.attention=new AttentionDirector(this.randomSeed ^ 0x35ab127d);
     this.plantedLegs=new PlantedLegs(vrm);
     this.slowSway=new SlowBodySway(this.randomSeed ^ 0x22446688);
+    this.motorCoordinator=new MotorCoordinator(); // LP-03A is opt-in; prior idle is unchanged.
     this.blink=new NaturalBlink(this.randomSeed ^ 0x51c4f00d);
     this.euler=new THREE.Euler(0,0,0,'XYZ');
     this.offset=new THREE.Quaternion();
@@ -101,6 +103,13 @@ export class LivingPresence {
   setSwayIntensity(value){if(Number.isFinite(Number(value)))this.swayIntensity=clamp01(value);}
   setSwaySpeed(value){if(Number.isFinite(Number(value)))this.swaySpeed=THREE.MathUtils.clamp(Number(value),0.15,1.5);}
   getLegDiagnostics(){return this.plantedLegs.getDiagnostics();}
+  setMotorCoordination(value){
+    this.motorCoordinator.setEnabled(value);
+    if(!value)this.motorCoordinator.reset();
+  }
+  setMotorIntensity(value){this.motorCoordinator.setIntensity(value);}
+  setMotorMode(value){return this.motorCoordinator.setMode(value);}
+  getMotorStatus(){return this.motorCoordinator.getStatus();}
   setFingerDirection(side,reverse){
     if(SIDES.includes(side))this.fingerDirections[side]=reverse?-1:1;
   }
@@ -181,6 +190,7 @@ export class LivingPresence {
     this.headMotor={yaw:{x:0,v:0},pitch:{x:0,v:0}};
     this.elbowMotor={left:{x:0,v:0},right:{x:0,v:0}};
     this.slowSway.reset();
+    this.motorCoordinator.reset();
   }
   updateBlink(t,scale){
     if(!this.blinkActivity)return;
@@ -296,6 +306,22 @@ export class LivingPresence {
       const goal=this.elbowActivity?Math.abs(score[side+'Elbow'])*activity:0;
       this.elbowMotor[side]=springStep(this.elbowMotor[side],goal,dt,0.85);
     }
+    // LP-03A cerebellum: coordinate existing motion events, not another set
+    // of random oscillators. Applies only to upper-body normalized bones.
+    const motor=this.motorCoordinator.update(dt,{
+      roll:sway.roll,
+      yaw:sway.yaw,
+      headYaw:this.headMotor.yaw.x,
+      wristLeft:this.handActivity?score.leftWrist:0,
+      wristRight:this.handActivity?score.rightWrist:0,
+      activity:blend*energy,
+    });
+    if(this.motorCoordinator.enabled){
+      for(const [role,angles] of Object.entries(motor.euler)){
+        const prior=micro[role]||[0,0,0];
+        micro[role]=[prior[0]+angles[0],prior[1]+angles[1],prior[2]+angles[2]];
+      }
+    }
 
     const fingerAngles=new Map();
     if(this.handActivity){
@@ -344,7 +370,9 @@ export class LivingPresence {
       }
       if(resting && this.elbowActivity && (role==='leftLowerArm'||role==='rightLowerArm')){
         const side=role.startsWith('left')?'left':'right';
-        const bend=Math.min(0.6,0.58*this.elbowMotor[side].x);
+        const coupled=this.motorCoordinator.enabled&&this.handActivity?
+          motor.elbow[side]:0;
+        const bend=Math.min(0.6,0.58*this.elbowMotor[side].x+coupled);
         this.extraElbow.copy(this.identity).slerp(resting,composing?bend*authority:bend);
         node.quaternion.multiply(this.extraElbow);
       }
