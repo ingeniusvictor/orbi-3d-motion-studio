@@ -5,6 +5,8 @@ import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { adaptFbxToVrm } from './vrmMotion.js';
+import { auditVrmRig } from './livingPresence/rigAudit.js';
+import { LivingPresence } from './livingPresence/LivingPresence.js';
 import { bakeVrmForGlb, convertVrmMaterials } from './vrmExport.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { catalogMaterials, applyTextureToMaterial } from './textureStudio.js';
@@ -156,7 +158,9 @@ export class MotionViewer {
       if (this.disposed) return;
       this.raf = requestAnimationFrame(this.animate);
       const delta = Math.min(this.clock.getDelta(),0.1);
+      this.presence?.beforeFrame();
       if (this.mixer && this.playing) this.mixer.update(delta);
+      this.presence?.update(delta,{clipPlaying:Boolean(this.mixer && this.playing)});
       // VRM spring bones, constraints and expressions require an update each frame.
       this.vrm?.update(delta);
       this.controls.update();
@@ -208,6 +212,7 @@ export class MotionViewer {
     this.clearModel();
     this.model = loaded.model;
     this.vrm = loaded.vrm;
+    this.presence = this.vrm ? new LivingPresence(this.vrm) : null;
     this.model.name ||= loaded.name.replace(/\.[^.]+$/,'');
     this.lastFilename = loaded.name;
     this.lastFormat = loaded.format;
@@ -223,6 +228,8 @@ export class MotionViewer {
     return {...info, filename:loaded.name, bytes:loaded.bytes, format:loaded.format};
   }
   clearModel() {
+    this.presence?.dispose();
+    this.presence=null;
     if(this.lightPreviewStates?.size)this.setLightPreview(null);
     if (this.mixer) { this.mixer.stopAllAction(); this.mixer.uncacheRoot(this.model); }
     if (this.skeleton) {this.scene.remove(this.skeleton);this.skeleton.dispose(); this.skeleton=null;}
@@ -255,6 +262,9 @@ export class MotionViewer {
   }
   setPlaying(playing) { if (!this.mixer) return; this.playing = Boolean(playing); this.notify(); }
   setSpeed(speed) { this.speed = Number(speed); if(this.mixer) this.mixer.timeScale=this.speed; }
+  getLivingRigAudit() { return this.vrm ? auditVrmRig(this.vrm) : null; }
+  setLivingPresence(enabled) { if (!this.presence) return false; this.presence.setEnabled(enabled); return true; }
+  setLivingPresenceIntensity(value) { this.presence?.setIntensity(value); }
   setSkeletonVisible(show) {
     this.showBones = Boolean(show);
     if (this.skeleton) {this.scene.remove(this.skeleton);this.skeleton.dispose();this.skeleton=null;}
