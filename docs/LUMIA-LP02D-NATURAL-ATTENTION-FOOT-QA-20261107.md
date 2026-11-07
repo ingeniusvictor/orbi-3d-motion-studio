@@ -10,7 +10,7 @@ El propietario confirmó visualmente que el perfil LP-02B.2 dejó la mano de Vit
 
 ### 1. Director de atención — attentionDirector.js
 
-- Selecciona objetivos de mirada seudoaleatorios **reproducibles**, con sostén de fijación de 1,5 a 6,3 segundos y pequeños saltos sacádicos con transiciones de 0,11 a 0,29 s.
+- Selecciona objetivos de mirada seudoaleatorios **reproducibles con semilla** pero **distintos entre cargas** del avatar, con sostén de fijación de 1,5 a 6,3 segundos y pequeños saltos sacádicos con transiciones de 0,11 a 0,29 s.
 - Ángulo horizontal del objetivo acotado a ±12° y vertical a ±6°. Regresa ocasionalmente al centro/cámara.
 - No se mueve constantemente: alterna sacada/fijación/pausa. El reposo no es un único clip periódico.
 - Si la ventana vuelve después de suspensión, no se disparan cientos de fijaciones atrasadas.
@@ -35,6 +35,7 @@ El propietario confirmó visualmente que el perfil LP-02B.2 dejó la mano de Vit
 - Introduce un descenso de pelvis muy pequeño que posibilita una suave flexión de rodilla y resuelve analíticamente la posición de la rodilla aplicando correcciones de cuaterniones.
 - El tobillo de cada pie debe permanecer en su posición mundial de referencia. De manera ocasional, se permite elevar un solo pie una cantidad mínima y volver al apoyo, mientras el otro permanece anclado.
 - Si faltan huesos, existe una configuración degenerada o el IK excede el error permitido, **se cancela el ajuste** en lugar de forzar articulaciones.
+- **Desactivado por defecto** hasta completar QA físico de orientación de rodillas y contacto con suelo. Activarlo expresamente desde el control «Rodillas y pies (IK experimental)».
 - Esto NO es locomoción, balance físico, simulación real de centro de masas ni detector general de contacto con suelo. La posición de ancla es la del VRM cargado.
 - La dirección de flexión de rodilla requiere validación frontal y lateral con **Vita.vrm**; el polo virtual +Z puede no coincidir con rigs no estándar.
 - No garantiza ausencia de colisiones entre ropa, pantorrillas y zapatos; debe revisarse visualmente.
