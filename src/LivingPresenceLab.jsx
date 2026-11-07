@@ -8,9 +8,13 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
   const [posture,setPosture]=useState(92);
   const [calibration,setCalibration]=useState([]);
   const [audit,setAudit]=useState(null);
+  const [capabilities,setCapabilities]=useState(null);
+  const [options,setOptions]=useState({hands:true,gaze:true,blink:true,diagnostic:false});
   useEffect(()=>{
     setEnabled(false);
     setAudit(null);
+    setCapabilities(null);
+    setOptions({hands:true,gaze:true,blink:true,diagnostic:false});
     setCalibration([]);
     setPosture(92);
     getViewer()?.setLivingPresence(false);
@@ -19,6 +23,7 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
   const inspect=()=>{
     setAudit(getViewer()?.getLivingRigAudit()||null);
     setCalibration(getViewer()?.getLivingPoseDiagnostics()||[]);
+    setCapabilities(getViewer()?.getLivingCapabilities()||null);
   };
   const toggle=event=>{
     const next=event.target.checked;
@@ -29,6 +34,11 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
     const next=Number(event.target.value);
     setIntensity(next);
     getViewer()?.setLivingPresenceIntensity(next/100);
+  };
+  const changeOption=(name,checked)=>{
+    const next={...options,[name]:checked};
+    setOptions(next);
+    getViewer()?.setLivingOptions(next);
   };
   const changePosture=event=>{
     const next=Number(event.target.value);
@@ -73,14 +83,31 @@ export default function LivingPresenceLab({model,generation,getViewer}) {
         <input type="range" min="0" max="100" step="5" value={intensity}
           disabled={!canUse} onChange={changeIntensity}/>
       </label>
+      <div style={{display:'grid',gap:7,borderTop:'1px solid #284158',paddingTop:10}}>
+        <strong style={{fontSize:12}}>LP-02B · Vida en reposo</strong>
+        {[
+          ['hands','Manos, muñecas, codos y dedos'],
+          ['gaze','Microcambios de mirada'],
+          ['blink','Parpadeo natural'],
+          ['diagnostic','Inspección ampliada (×2,4)'],
+        ].map(([name,label])=><label key={name}
+          style={{display:'flex',gap:9,alignItems:'center',fontSize:12}}>
+          <input type="checkbox" checked={options[name]} disabled={!canUse}
+            onChange={e=>changeOption(name,e.target.checked)}/>{label}
+        </label>)}
+        <small style={{opacity:0.72,lineHeight:1.5}}>
+          {capabilities?`Articulaciones de dedos calibradas: ${capabilities.calibratedFingers}/30 · Mirada VRM: ${capabilities.lookAt?'sí':'no'} · Parpadeo VRM: ${capabilities.blinking?'sí':'no'}`:'Audita el esqueleto para identificar las capacidades de mirada y dedos.'}
+        </small>
+      </div>
       {calibration.length>0&&<div style={{fontSize:11,opacity:0.75,lineHeight:1.5}}>
         {calibration.map((item,i)=><div key={i}>{item}</div>)}
       </div>}
       <small style={{lineHeight:1.5,opacity:0.78}}>
-        LP-02A: desde pose T hacia reposo de pie, con codos ligeramente flexionados,
-        respiración y variación suave. Desactivar restaura la pose original.
-        Durante un FBX activo o pausado se respeta el clip. El equilibrio físico
-        y el contacto de pies con el suelo siguen pendientes.
+        LP-02B: postura relajada, microrreajustes espaciados, dedos independientes,
+        parpadeo variable y mirada. Para comprobarlos, acerca la cámara a manos y rostro.
+        El modo de inspección es deliberadamente amplificado; no está destinado
+        a la versión final. Con un FBX seleccionado, la prioridad es del clip.
+        Equilibrio físico, foot IK y gestos ligados al habla aún están pendientes.
       </small>
       {!canUse&&<small>Carga un VRM para habilitar este laboratorio.</small>}
     </div>
