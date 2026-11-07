@@ -9,6 +9,7 @@ import { AttentionDirector } from './attentionDirector.js';
 import { PlantedLegs } from './plantedLegs.js';
 import { SlowBodySway } from './slowBodySway.js';
 import { MotorCoordinator } from './motorCoordinator.js';
+import { GestureDirector } from './gestureDirector.js';
 
 const clamp01=x=>Math.max(0,Math.min(1,Number(x)||0));
 const deg=x=>THREE.MathUtils.degToRad(x);
@@ -56,12 +57,14 @@ export class LivingPresence {
     this.plantedLegs=new PlantedLegs(vrm);
     this.slowSway=new SlowBodySway(this.randomSeed ^ 0x22446688);
     this.motorCoordinator=new MotorCoordinator(); // LP-03A is opt-in; prior idle is unchanged.
+    this.gestureDirector=new GestureDirector(); // LP-03B.1 is opt-in and one-shot.
     this.blink=new NaturalBlink(this.randomSeed ^ 0x51c4f00d);
     this.euler=new THREE.Euler(0,0,0,'XYZ');
     this.offset=new THREE.Quaternion();
     this.restOffset=new THREE.Quaternion();
     this.extraElbow=new THREE.Quaternion();
     this.motorOffset=new THREE.Quaternion();
+    this.gestureOffset=new THREE.Quaternion();
     this.fingerOffset=new THREE.Quaternion();
     this.identity=new THREE.Quaternion();
     this.blinkApplied=null;
@@ -114,6 +117,13 @@ export class LivingPresence {
   setMotorIntensity(value){this.motorCoordinator.setIntensity(value);}
   setMotorMode(value){return this.motorCoordinator.setMode(value);}
   getMotorStatus(){return this.motorCoordinator.getStatus();}
+  setGestureEnabled(value){
+    if(!value)this.beforeFrame();
+    this.gestureDirector.setEnabled(value);
+  }
+  setGestureIntensity(value){this.gestureDirector.setIntensity(value);}
+  triggerGesture(name){return this.enabled&&this.gestureDirector.trigger(name);}
+  getGestureStatus(){return this.gestureDirector.getStatus();}
   setFingerDirection(side,reverse){
     if(SIDES.includes(side))this.fingerDirections[side]=reverse?-1:1;
   }
@@ -195,6 +205,7 @@ export class LivingPresence {
     this.elbowMotor={left:{x:0,v:0},right:{x:0,v:0}};
     this.slowSway.reset();
     this.motorCoordinator.reset();
+    this.gestureDirector.reset();
   }
   updateBlink(t,scale){
     if(!this.blinkActivity)return;
@@ -263,6 +274,13 @@ export class LivingPresence {
     const activity=blend*energy*diagnostic;
     const score=this.score.sample(this.time);
     const attention=this.attention.sample(this.time);
+    const gesture=this.gestureDirector.update(dt);
+    // A requested gaze target temporarily leads the eyes. It is released
+    // smoothly back to the underlying independent AttentionDirector.
+    const intentAttention=gesture.lookAt?{
+      yaw:attention.yaw*(1-gesture.lookWeight)+gesture.lookAt.yaw,
+      pitch:attention.pitch*(1-gesture.lookWeight)+gesture.lookAt.pitch,
+    }:attention;
     const micro=sampleIdlePose(this.time,activity);
     // Independently timed body weight expression: only upper torso/head.
     // The feet and hips are NEVER translated or rotated by this new layer.
@@ -295,9 +313,9 @@ export class LivingPresence {
     }
     // Head follows fixation after the eyes (low-frequency critically-damped).
     this.headMotor.yaw=springStep(this.headMotor.yaw,
-      this.headActivity?attention.yaw*0.34*activity:0,dt,0.7);
+      this.headActivity?intentAttention.yaw*0.34*activity:0,dt,0.7);
     this.headMotor.pitch=springStep(this.headMotor.pitch,
-      this.headActivity?attention.pitch*0.34*activity:0,dt,0.66);
+      this.headActivity?intentAttention.pitch*0.34*activity:0,dt,0.66);
     const head=micro.head||[0,0,0];
     micro.head=[head[0]+this.headMotor.pitch.x*0.76+0.008*score.headTilt*activity,
       head[1]+this.headMotor.yaw.x*0.76,
@@ -347,7 +365,8 @@ export class LivingPresence {
       }
     }
     const roles=new Set([...Object.keys(micro),...this.calibration.offsets.keys(),
-      ...fingerAngles.keys(),...(this.motorCoordinator.enabled?Object.keys(motor.euler):[])]);
+      ...fingerAngles.keys(),...(this.motorCoordinator.enabled?Object.keys(motor.euler):[]),
+      ...Object.keys(gesture.pose)]);
     for(const role of roles){
       const node=this.vrm?.humanoid?.getNormalizedBoneNode?.(role);
       if(!node)continue;
@@ -390,6 +409,13 @@ export class LivingPresence {
         if(composing)this.motorOffset.slerp(this.identity,1-authority);
         node.quaternion.multiply(this.motorOffset);
       }
+      if(gesture.pose[role]){
+        const [gx,gy,gz]=gesture.pose[role];
+        this.euler.set(gx,gy,gz);
+        this.gestureOffset.setFromEuler(this.euler);
+        if(composing)this.gestureOffset.slerp(this.identity,1-authority);
+        node.quaternion.multiply(this.gestureOffset);
+      }
       node.quaternion.normalize();
       this.applied.set(role,{node,base,applied:node.quaternion.clone()});
     }
@@ -403,7 +429,7 @@ export class LivingPresence {
         blend,
       },this.applied,this.appliedPositions);
     }
-    this.updateGaze(attention);
+    this.updateGaze(intentAttention);
     this.updateBlink(this.time,blend);
   }
   dispose(){
