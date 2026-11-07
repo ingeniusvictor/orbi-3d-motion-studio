@@ -148,13 +148,13 @@ test('LP-02B gaze A/B restores the original lookAt angles',()=>{
 });
 
 test('LP-02B.1 resting human hand has independent MCP, PIP and DIP flexion',async()=>{
-  const {relaxedFingerProfile,relaxedFingerAngleDegrees}=await import('../src/lib/livingPresence/relaxedHandPose.js');
-  const index=relaxedFingerProfile('Index');
-  const ring=relaxedFingerProfile('Ring');
+  const {relaxedHandProfile,relaxedFingerAngleDegrees}=await import('../src/lib/livingPresence/relaxedHandPose.js');
+  const index=relaxedHandProfile('Index');
+  const ring=relaxedHandProfile('Ring');
   assert.ok(index[0]>=18 && index[1]>index[2]);
   assert.ok(ring[0]>index[0]);
   for(const finger of ['Thumb','Index','Middle','Ring','Little']){
-    const target=relaxedFingerProfile(finger);
+    const target=relaxedHandProfile(finger);
     assert.equal(target.length,3);
     for(let i=0;i<3;i++){
       const rest=relaxedFingerAngleDegrees({finger,jointIndex:i,relaxation:0.88,blend:1});
