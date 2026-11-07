@@ -213,7 +213,7 @@ export class MotionViewer {
     this.clearModel();
     this.model = loaded.model;
     this.vrm = loaded.vrm;
-    this.presence = this.vrm ? new LivingPresence(this.vrm) : null;
+    this.presence = this.vrm ? new LivingPresence(this.vrm,{sourceName:loaded.name}) : null;
     this.model.name ||= loaded.name.replace(/\.[^.]+$/,'');
     this.lastFilename = loaded.name;
     this.lastFormat = loaded.format;
@@ -269,6 +269,8 @@ export class MotionViewer {
   setLivingPosture(value) { this.presence?.setPosture(value); }
   setLivingHandRelaxation(value) { this.presence?.setHandRelaxation(value); }
   setLivingFingerDirection(side, reversed) { this.presence?.setFingerDirection(side, reversed); }
+  setLivingFingerOverride(side, finger, reversed) { return this.presence?.setFingerOverride(side, finger, reversed) ?? false; }
+  getLivingFingerCalibration() { return this.presence?.getFingerCalibrationState() || null; }
   getLivingPoseDiagnostics() { return this.presence?.getDiagnostics() || []; }
   getLivingCapabilities() { return this.presence?.getCapabilities() || null; }
   setLivingOptions(options) { this.presence?.setOptions(options); }
