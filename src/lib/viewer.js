@@ -265,7 +265,7 @@ export class MotionViewer {
     this.mixer.stopAllAction();
     this.current = index;
     const clip = this.clips[index].clip;
-    this.motionComposer?.selectClip(clip);
+    this.motionComposer?.selectClip(clip,{source:this.clips[index].source});
     this.presence?.resetOverlay();
     const action = this.mixer.clipAction(clip);
     action.reset();
