@@ -1,5 +1,6 @@
 import {useEffect,useState} from 'react';
 import {Activity,HeartPulse,ShieldCheck} from 'lucide-react';
+import {describePresenceGate} from './lib/livingPresence/activationGate.js';
 
 const FINGERS=[['Thumb','Pulgar'],['Index','Índice'],['Middle','Medio'],['Ring','Anular'],['Little','Meñique']];
 
@@ -65,6 +66,13 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
   const canUse=Boolean(model?.format==='VRM');
   const clipComposition=getViewer()?.getLivingComposerStatus()||null;
   const canCompose=Boolean(canUse&&enabled&&clipComposition?.eligible);
+  const presenceGate=describePresenceGate({
+    vrmReady:canUse,presenceEnabled:enabled,
+    clipSelected:Boolean(clipComposition?.clipSelected),
+    composerEligible:Boolean(clipComposition?.eligible),
+    composerActive:Boolean(clipComposition?.active),
+    composerEnabled:Boolean(clipComposition?.enabled),
+  });
   const inspect=()=>{
     setAudit(getViewer()?.getLivingRigAudit()||null);
     setCalibration(getViewer()?.getLivingPoseDiagnostics()||[]);
@@ -80,6 +88,13 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
     const next=Boolean(event.target.checked);
     setComposerRequested(next);
     getViewer()?.setLivingComposerEnabled(next);
+  };
+  const activateComposerForMotor=()=>{
+    // Only a direct click can authorize an idle FBX overlay.
+    if(!canCompose||composerIntensity<=0)return;
+    getViewer()?.setLivingComposerIntensity(composerIntensity/100);
+    const accepted=getViewer()?.setLivingComposerEnabled(true);
+    if(accepted)setComposerRequested(true);
   };
   const changeComposerIntensity=event=>{
     const next=Number(event.target.value);
@@ -199,6 +214,23 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
           traslada la pelvis o los pies. Desactivado por defecto para proteger
           el reposo LP-02C.2 que ya funciona.
         </small>
+        <small style={{opacity:0.78,lineHeight:1.55}}>
+          Los ojos y el parpadeo vienen de Living Presence (LP-02D);
+          LP-03A coordina sus respuestas corporales. Cuando hay un FBX
+          seleccionado, LP-02C.1 debe estar activo para permitir ambas capas.
+        </small>
+        {clipComposition?.clipSelected&&<div role="status"
+          style={{display:'grid',gap:7,padding:10,border:'1px solid #31516a',borderRadius:7}}>
+          <small style={{lineHeight:1.55}}>
+            {presenceGate.running
+              ? 'Motor de presencia habilitado sobre el FBX: mirada y coordinación disponibles.'
+              : presenceGate.reason}
+          </small>
+          {presenceGate.needsComposer&&<button type="button" className="outline-btn"
+            disabled={!canCompose||composerIntensity<=0} onClick={activateComposerForMotor}>
+            Activar LP-02C.1 para este Idle
+          </button>}
+        </div>}
         <label style={{display:'flex',gap:8,alignItems:'center',fontSize:12}}>
           <input type="checkbox" checked={motorEnabled}
             disabled={!canUse||!enabled} onChange={changeMotorEnabled}/>
