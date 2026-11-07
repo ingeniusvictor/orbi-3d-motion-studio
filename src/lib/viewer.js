@@ -161,7 +161,7 @@ export class MotionViewer {
       const delta = Math.min(this.clock.getDelta(),0.1);
       this.presence?.beforeFrame();
       if (this.mixer && this.playing) this.mixer.update(delta);
-      this.presence?.update(delta,{clipPlaying:Boolean(this.mixer && this.playing)});
+      this.presence?.update(delta,{clipPlaying:Boolean(this.mixer && this.current !== null)});
       // VRM spring bones, constraints and expressions require an update each frame.
       this.vrm?.update(delta);
       this.controls.update();
@@ -266,6 +266,8 @@ export class MotionViewer {
   getLivingRigAudit() { return this.vrm ? auditVrmRig(this.vrm) : null; }
   setLivingPresence(enabled) { if (!this.presence) return false; this.presence.setEnabled(enabled); return true; }
   setLivingPresenceIntensity(value) { this.presence?.setIntensity(value); }
+  setLivingPosture(value) { this.presence?.setPosture(value); }
+  getLivingPoseDiagnostics() { return this.presence?.getDiagnostics() || []; }
   setSkeletonVisible(show) {
     this.showBones = Boolean(show);
     if (this.skeleton) {this.scene.remove(this.skeleton);this.skeleton.dispose();this.skeleton=null;}
