@@ -12,6 +12,10 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
   const [posture,setPosture]=useState(92);
   const [handRelaxation,setHandRelaxation]=useState(88);
   const [legIntensity,setLegIntensity]=useState(45);
+  const [swayIntensity,setSwayIntensity]=useState(35);
+  const [swaySpeed,setSwaySpeed]=useState(65);
+  const [softenFbX,setSoftenFbx]=useState(true);
+  const [softening,setSoftening]=useState(60);
   const [legDiagnostics,setLegDiagnostics]=useState(null);
   const [reverseCurl,setReverseCurl]=useState({left:false,right:false});
   const [fingerOverrides,setFingerOverrides]=useState({left:{},right:{}});
@@ -33,6 +37,10 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
     setPosture(92);
     setHandRelaxation(88);
     setLegIntensity(45);
+    setSwayIntensity(35);
+    setSwaySpeed(65);
+    setSoftenFbx(true);
+    setSoftening(60);
     setLegDiagnostics(getViewer()?.getLivingLegDiagnostics()||null);
     const hands=getViewer()?.getLivingFingerCalibration();
     setReverseCurl({left:hands?.directions?.left===-1,right:hands?.directions?.right===-1});
@@ -78,6 +86,26 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
     const next={...options,[name]:checked};
     setOptions(next);
     getViewer()?.setLivingOptions(next);
+  };
+  const changeSwayIntensity=event=>{
+    const next=Number(event.target.value);
+    setSwayIntensity(next);
+    getViewer()?.setLivingSwayIntensity(next/100);
+  };
+  const changeSwaySpeed=event=>{
+    const next=Number(event.target.value);
+    setSwaySpeed(next);
+    getViewer()?.setLivingSwaySpeed(next/100);
+  };
+  const changeSoftening=event=>{
+    const next=Number(event.target.value);
+    setSoftening(next);
+    getViewer()?.setLivingTorsoSoftening(next/100);
+  };
+  const changeSoftenFbx=event=>{
+    const next=event.target.checked;
+    setSoftenFbx(next);
+    getViewer()?.setLivingTorsoSofteningEnabled(next);
   };
   const changeLegIntensity=event=>{
     const next=Number(event.target.value);
@@ -141,6 +169,32 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
           disabled={!canUse} onChange={changeIntensity}/>
       </label>
       <div style={{display:'grid',gap:9,borderTop:'1px solid #284158',paddingTop:12}}>
+        <strong style={{fontSize:12}}>LP-02C.2 · Balanceo corporal vivo</strong>
+        <small style={{opacity:0.8,lineHeight:1.5}}>
+          Oscilación lateral lenta e irregular del torso con compensación de cabeza,
+          sin desplazar caderas, raíz ni zapatos. Movimiento intencionalmente discreto.
+        </small>
+        <label style={{display:'flex',gap:8,alignItems:'center',fontSize:12}}>
+          <input type="checkbox" checked={options.sway!==false}
+            disabled={!canUse} onChange={e=>changeOption('sway',e.target.checked)}/>
+          Balanceo natural lento (A/B)
+        </label>
+        <label style={{display:'grid',gap:5,fontSize:12}}>
+          Amplitud del balanceo: {swayIntensity}%
+          <input type="range" min="0" max="100" step="5" value={swayIntensity}
+            disabled={!canUse||options.sway===false} onChange={changeSwayIntensity}/>
+        </label>
+        <label style={{display:'grid',gap:5,fontSize:12}}>
+          Velocidad del balanceo: {swaySpeed}%
+          <input type="range" min="15" max="150" step="5" value={swaySpeed}
+            disabled={!canUse||options.sway===false} onChange={changeSwaySpeed}/>
+        </label>
+        <small style={{opacity:0.72,lineHeight:1.5}}>
+          Sugerencia: amplitud 30–40 %, velocidad 50–70 %. No es una marcha
+          ni movimiento físico de pelvis: es una corrección suave del torso.
+        </small>
+      </div>
+      <div style={{display:'grid',gap:9,borderTop:'1px solid #284158',paddingTop:12}}>
         <strong style={{fontSize:12}}>LP-02C.1 · Mixamo + Presencia viva</strong>
         <small style={{opacity:0.76,lineHeight:1.55}}>
           Compositor posterior a AnimationMixer: añade respiración, mirada y dedos
@@ -161,6 +215,24 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
           <input type="range" min="0" max="100" step="5" value={composerIntensity}
             disabled={!canCompose||!composerRequested} onChange={changeComposerIntensity}/>
         </label>
+        <label style={{display:'flex',gap:8,alignItems:'center',fontSize:12}}>
+          <input type="checkbox" checked={softenFbX}
+            disabled={!canCompose||!composerRequested}
+            onChange={changeSoftenFbx}/>
+          Atenuar inclinación lateral exagerada del FBX
+        </label>
+        <label style={{display:'grid',gap:5,fontSize:12}}>
+          Suavizado de inclinación del clip: {softening}%
+          <input type="range" min="0" max="100" step="5" value={softening}
+            disabled={!canCompose||!composerRequested||!softenFbX}
+            onChange={changeSoftening}/>
+        </label>
+        <small style={{opacity:0.76,lineHeight:1.5}}>
+          Atenúa únicamente el giro lateral de columna y pecho que exista en
+          el FBX, con límites estrictos. No corrige inclinaciones causadas por
+          caderas/raíz. Usa la velocidad del reproductor (por ejemplo, 0,5×)
+          si también deseas ralentizar toda la animación original.
+        </small>
         {clipComposition?.clipSelected&&<small style={{opacity:0.72,lineHeight:1.5}}>
           Pistas de dedos: {clipComposition.fingerTracks.static} estáticas,
           {' '}{clipComposition.fingerTracks.animated} animadas,
