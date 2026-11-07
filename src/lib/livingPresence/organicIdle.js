@@ -63,6 +63,8 @@ export class OrganicIdleScore {
     add('headYaw',73,{gap:[4,10],duration:[2.5,5.5],attack:0.6,release:0.9});
     add('headTilt',79,{gap:[5,12],duration:[2.3,5.6],attack:0.7,release:1.0});
     add('neck',89,{gap:[5,12],duration:[1.8,4.1]});
+    add('lowerBodyBend',315,{gap:[4,10],duration:[2.2,4.7],attack:0.8,release:1.0});
+    add('footLift',319,{gap:[13,26],duration:[1.4,2.5],attack:0.55,release:0.75});
     for(const [side,sideIndex] of [['left',0],['right',1]]){
       add(side+'Fingers',103+sideIndex*211,{gap:[0.5,2.6],duration:[1,3.1]});
       for(let i=0;i<FINGERS.length;i++){
