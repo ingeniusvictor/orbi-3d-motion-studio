@@ -97,8 +97,11 @@ export class NaturalBlink {
     if(!Number.isFinite(this.start))return 0;
     const phase=(t-this.start)/this.duration;
     if(phase>=1){
-      if(this.doublePending){this.doublePending=false;this.next=this.start+this.duration+0.12;}
-      else {
+      if(this.doublePending) {
+        // A rare second closure completed: return to a longer restful interval.
+        this.doublePending=false;
+        this.next=this.start+this.duration+2.3+this.random()*4.9;
+      } else {
         this.doublePending=this.random()<0.12;
         this.next=this.start+this.duration+(this.doublePending?0.13:2.3+this.random()*4.9);
       }
