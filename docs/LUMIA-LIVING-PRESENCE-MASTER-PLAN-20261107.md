@@ -119,3 +119,32 @@ Comandos de certificación de código: npm install, npm test, npm run build. Des
 Repositorio: https://github.com/ingeniusvictor/orbi-3d-motion-studio
 Proyecto objetivo: LUMIA Natural Motion — Living Presence.
 Éxito final: el avatar comunica intención, equilibrio, contacto, reacción y continuidad, no solamente ejecuta más clips. Se utilizará movimiento humano capturado + IA y procedimientos suaves cuando su calidad y licencias estén verificadas.
+
+
+## Actualización LP-02A · Postura natural visible y calibración por avatar
+
+**Motivación de QA (2026-11-07):** El usuario probó \`Vita.vrm\` original, todavía en pose T. El visor identificó 155 huesos, 54/55 roles normalizados y 30 roles de dedos, con spring bones y expresiones; las microanimaciones LP-01 eran apenas perceptibles. No confundir este archivo de referencia con la versión visual final de LUMIA: se debe repetir la certificación cuando cambien rig o mallas.
+
+**Implementado en LP-02A:**
+- \`src/lib/livingPresence/neutralPose.js\`: toma las posiciones mundiales reales de hombro y codo para orientar ambos brazos hacia la gravedad, con descenso límite de 72° y una ligera flexión de antebrazo de hasta 13° usando el frente del avatar. Las correcciones se convierten a cuaterniones locales; no se asumen ejes de rotación iguales para ambos brazos.
+- \`LivingPresence.js\`: combina la nueva postura A con el microidle amortiguado de LP-01; postura e intensidad de microgestos tienen controles independientes. Al desactivar restaura exactamente la pose previa. Los clips seleccionados conservan la propiedad de los huesos tanto reproduciéndose como pausados.
+- \`LivingPresenceLab.jsx\`: selector de postura relajada (predeterminado 92 % del máximo calibrado), intensidad respiratoria y diagnóstico de calibración. La auditoría señala el rol opcional faltante.
+- \`tests/livingPresencePose.test.js\`: cobertura del descenso simétrico, codos, reversibilidad durante cinco ciclos, clip activo/pausado y ausencia de manos opcionales.
+- GitHub Actions **95/95 pruebas y compilación exitosa** en el commit \`5f593dd92746bfb4b558cbe9fd60e5ec3d3be7f4\`. Después de cualquier modificación adicional, usar el nuevo commit/CI.
+
+**No implementado ni certificado:** IK completo, equilibrio con centro de masas, pie plantado, locomoción real o poses de actuación complejas. El descenso automático de brazos es una **postura inicial ajustable**, no una afirmación de realismo humano final. Revisar intersección con vestido/ropa y pelo en cada VRM.
+
+**Prueba local actualizada:**
+\`\`\`powershell
+cd "$env:USERPROFILE\Downloads\ORBI-LIVING-PRESENCE-LAB"
+git pull --ff-only
+npm.cmd test
+npm.cmd run build
+npm.cmd run dev -- --port 5174 --strictPort
+\`\`\`
+
+Si Vite ya está activo en esa consola, detenerlo con Ctrl+C antes de actualizar y volver a iniciarlo. El puerto 5173 queda reservado para el otro proyecto.
+
+**Prueba visual mínima:** abrir \`Vita.vrm\`, auditar, comprobar primero T (A/B off), activar (A/B on) y ajustar **Postura de brazos relajados** entre 70 y 100 %; comprobar descenso visible y flexión suave. Evaluar en vistas frontal/lateral para detectar autocolisión. Validar retorno exacto a T al desactivar. Repetir luego con el VRM definitivo de LUMIA cuando esté disponible.
+
+**Siguiente puerta LP-02B:** corrección de hombros/manos, límites articulares, poses de espera/conversación y análisis del centro de masa; no simular balanceo de caderas que deslice los pies sin foot IK.
