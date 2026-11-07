@@ -15,8 +15,12 @@ const LEFT='left',RIGHT='right';
 // LP-02B: resting posture + asynchronous micro-actions, fingers, gaze and blinks.
 // Only edits the current rendered pose. No exportable clip, rig or model is changed.
 export class LivingPresence {
-  constructor(vrm, {sourceName=''}={}) {
+  constructor(vrm, {sourceName='',randomSeed=null}={}) {
     this.vrm=vrm;
+    // Different uncorrelated sequences on each model load, with an explicit
+    // seed override for reproducible regression tests and field reports.
+    this.randomSeed=Number.isInteger(randomSeed)?randomSeed:
+      Math.floor(Math.random()*0x100000000);
     this.enabled=false;
     this.intensity=0.55;
     this.posture=0.92;
@@ -42,10 +46,10 @@ export class LivingPresence {
     this.elbowMotor={left:{x:0,v:0},right:{x:0,v:0}};
     this.calibration=buildRelaxedArmOffsets(vrm);
     this.fingerCalibration=buildFingerCurlAxes(vrm);
-    this.score=new OrganicIdleScore();
-    this.attention=new AttentionDirector();
+    this.score=new OrganicIdleScore(this.randomSeed);
+    this.attention=new AttentionDirector(this.randomSeed ^ 0x35ab127d);
     this.plantedLegs=new PlantedLegs(vrm);
-    this.blink=new NaturalBlink();
+    this.blink=new NaturalBlink(this.randomSeed ^ 0x51c4f00d);
     this.euler=new THREE.Euler(0,0,0,'XYZ');
     this.offset=new THREE.Quaternion();
     this.restOffset=new THREE.Quaternion();
@@ -76,6 +80,7 @@ export class LivingPresence {
         (mgr.getValue('blinkLeft')!==null && mgr.getValue('blinkRight')!==null))),
       lookAt:Boolean(this.vrm?.lookAt?.autoUpdate !== false && this.vrm?.lookAt),
       attention:true,
+      sessionSeed:this.randomSeed,
       legIK:this.plantedLegs.enabled,
       footAnchors:this.plantedLegs.legs.size,
     };
