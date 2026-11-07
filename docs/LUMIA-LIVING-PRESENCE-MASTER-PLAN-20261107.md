@@ -148,3 +148,36 @@ Si Vite ya está activo en esa consola, detenerlo con Ctrl+C antes de actualizar
 **Prueba visual mínima:** abrir \`Vita.vrm\`, auditar, comprobar primero T (A/B off), activar (A/B on) y ajustar **Postura de brazos relajados** entre 70 y 100 %; comprobar descenso visible y flexión suave. Evaluar en vistas frontal/lateral para detectar autocolisión. Validar retorno exacto a T al desactivar. Repetir luego con el VRM definitivo de LUMIA cuando esté disponible.
 
 **Siguiente puerta LP-02B:** corrección de hombros/manos, límites articulares, poses de espera/conversación y análisis del centro de masa; no simular balanceo de caderas que deslice los pies sin foot IK.
+
+
+## Actualización LP-02B · Organic Living Idle (2026-11-07)
+
+**Motivación:** El usuario comprobó que el modelo \`Vita.vrm\` ya descendía brazos tras LP-02A, pero manos, dedos y mirada seguían pareciendo rígidos. LUMIA R8 también dispone de un FBX Mixamo en reposo, cuyo bucle aislado no transmite una presencia natural suficientemente variada.
+
+**Principio técnico:** Reposo vivo = postura anatómica + respiración + acciones episódicas de varios grados de libertad. No es un único clip en loop ni mover todas las partes continuamente. Las acciones deben incluir inicios suaves, duraciones variables, relajación, pausas y frecuencias asimétricas. En LP-02B los microeventos procedurales son independientes y deterministas para hacer QA reproducible.
+
+**Implementación experimental dentro del Studio:**
+- \`organicIdle.js\`: generador de eventos orgánicos con semillas reproducibles, canales separados para muñecas, codos, hombros, dedos, cabeza, cuello y movimientos de fijación ocular. \`NaturalBlink\` genera parpadeo espaciado y doble parpadeo poco frecuente.
+- \`fingerPose.js\`: calcula ejes de flexión de cada articulación a partir de la palma y cadena de huesos normalizados del VRM. Se evita imponer el mismo eje local fijo a izquierda y derecha. Hasta 30 articulaciones reconocidas, dependiente del avatar cargado.
+- \`LivingPresence.js\`: combina la postura LP-02A, la respiración ya existente y el nuevo score orgánico en la pose de renderizado. Los dedos tienen pequeñas flexiones de descanso y eventos independientes; los brazos y cabeza se reajustan a ritmos diferentes. \`VRMExpressionManager\` gestiona parpadeo cuando existe; \`VRMLookAt\` dirige fijaciones ligeras mediante objeto objetivo temporal no agregado a la escena. **Los valores y poses anteriores se restauran al apagar**.
+- \`viewer.js\` y \`LivingPresenceLab.jsx\`: conmutadores de manos/dedos, mirada y parpadeo; modo de inspección con ganancia ×2,4 para evaluar efectos pequeños en pantalla sin convertirlo en configuración final. La auditoría muestra capacidades reales del VRM.
+- \`tests/livingPresenceOrganic.test.js\`: test de canales no sincronizados, pausas, suavidad, parpadeo, 30 dedos, reversión A/B, clip activo/pausado y preservación de \`lookAt.target\` si otro sistema lo posee.
+
+**Límites explícitos:**
+- LP-02B aplica el motor de idle mientras **no haya un clip importado seleccionado**; cuando existe un FBX seleccionado, incluso pausado, el clip tiene prioridad. La **composición sobre el FBX de reposo de LUMIA R8 no está implementada aún**: requiere resolver las máscaras de huesos, prioridad de expresiones, blending temporal y evitar sobrescritura del Mixamo.
+- La posición de la palma y los ejes de dedos dependen de la geometría real. Validar que dedos flexionen hacia la palma, no atraviesen la mano o la ropa; probar desde vista lateral y lateral de las manos.
+- Ni la apariencia visual de Vita ni el realismo humano final quedan certificados por CI. La mirada necesita \`VRMLookAt\` usable; el parpadeo necesita expresiones \`blink\` o \`blinkLeft/right\`; si faltan, el motor no inventa expresiones.
+- No incluye foot IK, reparto físico del peso, cinemática corporal con colisiones, voice-synced gesturing ni exportación VRMA.
+- El modo de inspección amplificado no se debe usar como valor predeterminado final.
+- Las imágenes, VRM y FBX originales siguen siendo archivos privados y se procesan en navegador sin subirlos al repositorio.
+
+**Protocolo visual LP-02B:**
+1. En la consola de la carpeta ORBI-LIVING-PRESENCE-LAB, detener Vite con Ctrl+C; \`git status --short\` y si está limpio \`git pull --ff-only\`, \`npm.cmd test\`, \`npm.cmd run build\`, \`npm.cmd run dev -- --port 5174 --strictPort\`.
+2. Cargar \`Vita.vrm\`, activar presencia, postura 90-95%, microactividad 55-75%.
+3. **Acercar cámara a manos** (a cuerpo entero no se aprecian variaciones de 2 a 5 grados). Observar 45-90 segundos. Alternar por separado canal de manos/dedos; inspección ×2,4 solo para confirmar dirección, sin juzgar realismo en ese modo.
+4. Acercar a rostro y verificar parpadeos con intervalos variables, y cambios ligeros de fijación. Si el runtime no detecta lookAt o expresiones, revisar auditoría.
+5. Apagar A/B y confirmar pose original exacta. Si manos se deforman, desactivar \`Manos, muñecas, codos y dedos\` y reportar vista frontal/perfil.
+6. Añadir FBX y verificar que el motor procedural cede todo el esqueleto incluso al pausarlo. Cerrar y volver a abrir modelo para detectar estado residual.
+7. Evaluar performance y ausencia de temblores en ASUS física antes de crear política de composición para R8.
+
+**Siguiente milestone: LP-02C — Compositor de base animada + vida procedural**, que permitirá utilizar el FBX Mixamo de reposo como base *sin que el loop controle todos los huesos rígidamente*. Necesita máscaras articuladas, sincronización de movimientos secundarios, compatibilidad de blink/lookAt y capacidad de desactivar por articulación. No debe presumirse implementado.
