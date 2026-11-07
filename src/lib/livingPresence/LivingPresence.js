@@ -3,6 +3,7 @@ import { sampleIdlePose, springStep } from './motionPrimitives.js';
 import { buildRelaxedArmOffsets } from './neutralPose.js';
 import { buildFingerCurlAxes, FINGER_GROUPS } from './fingerPose.js';
 import { JOINT_NAMES, relaxedFingerAngleDegrees } from './relaxedHandPose.js';
+import { recognizedFingerPreset, fingerCurlSign, SUPPORTED_FINGERS, SIDES } from './fingerDirectionPolicy.js';
 import { OrganicIdleScore, NaturalBlink } from './organicIdle.js';
 
 const clamp01=x=>Math.max(0,Math.min(1,Number(x)||0));
@@ -12,14 +13,16 @@ const LEFT='left',RIGHT='right';
 // LP-02B: resting posture + asynchronous micro-actions, fingers, gaze and blinks.
 // Only edits the current rendered pose. No exportable clip, rig or model is changed.
 export class LivingPresence {
-  constructor(vrm) {
+  constructor(vrm, {sourceName=''}={}) {
     this.vrm=vrm;
     this.enabled=false;
     this.intensity=0.55;
     this.posture=0.92;
     this.handActivity=true;
     this.handRelaxation=0.88;
-    this.fingerDirections={left:1,right:1};
+    this.handPreset=recognizedFingerPreset(sourceName);
+    this.fingerDirections={left:this.handPreset.left,right:this.handPreset.right};
+    this.fingerOverrides=new Map();
     this.fingerStates=new Map();
     this.gazeActivity=true;
     this.blinkActivity=true;
@@ -68,7 +71,25 @@ export class LivingPresence {
   setPosture(value){if(Number.isFinite(Number(value)))this.posture=clamp01(value);}
   setHandRelaxation(value){if(Number.isFinite(Number(value)))this.handRelaxation=clamp01(value);}
   setFingerDirection(side,reverse){
-    if(side==='left'||side==='right')this.fingerDirections[side]=reverse?-1:1;
+    if(SIDES.includes(side))this.fingerDirections[side]=reverse?-1:1;
+  }
+  setFingerOverride(side,finger,reverse){
+    if(!SIDES.includes(side)||!SUPPORTED_FINGERS.includes(finger))return false;
+    const key=side+':'+finger;
+    if(reverse)this.fingerOverrides.set(key,-1);
+    else this.fingerOverrides.delete(key);
+    return true;
+  }
+  getFingerCalibrationState(){
+    return {
+      preset:this.handPreset.name,
+      verifiedBy:this.handPreset.verifiedBy,
+      directions:{...this.fingerDirections},
+      fingers:Object.fromEntries(SIDES.map(side=>[side,
+        Object.fromEntries(SUPPORTED_FINGERS.map(finger=>[
+          finger,this.fingerOverrides.get(side+':'+finger)===-1
+        ]))])),
+    };
   }
   setOptions(opts={}){
     if(typeof opts.hands==='boolean')this.handActivity=opts.hands;
@@ -213,7 +234,7 @@ export class LivingPresence {
               finger,jointIndex:i,relaxation:this.handRelaxation,blend,
               activity,individualPulse:pulse,sharedPulse:shared,side,
             });
-            const target=deg(degrees)*this.fingerDirections[side];
+            const target=deg(degrees)*fingerCurlSign(side,finger,this.fingerDirections,this.fingerOverrides);
             const previous=this.fingerStates.get(role)||{x:0,v:0};
             // Muscular tone does not snap instantly when a micro-action begins.
             const smooth=springStep(previous,target,dt,2.0);
