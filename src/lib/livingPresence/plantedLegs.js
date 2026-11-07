@@ -70,13 +70,13 @@ export class PlantedLegs{
       anchoredFeet:this.legs.size,maximumError:this.lastError};
   }
   // Returns false without retaining transformed bones when target cannot be solved.
-  apply({bend=0,lift=0,liftSide='left'}={},trackedRotations,trackedPositions){
+  apply({bend=0,lift=0,liftSide='left',blend=1}={},trackedRotations,trackedPositions){
     if(!this.enabled||!this.hips)return false;
     const strength=clamp(Number(bend)||0,0,1);
     const liftHeight=clamp(Number(lift)||0,0,1);
     const average=[...this.legs.values()].reduce((a,l)=>a+l.length,0)/this.legs.size;
     // 0.45%-0.9% leg length makes space for a slight knee bend.
-    const sink=average*(0.0045+0.0045*strength);
+    const sink=average*(0.0045+0.0045*strength)*clamp(Number(blend)||0,0,1);
     const rootBase=this.hips.position.clone();
     const snapshots=new Map();
     const allBones=[...this.legs.values()].flatMap(l=>[l.upper,l.lower,l.foot]);
