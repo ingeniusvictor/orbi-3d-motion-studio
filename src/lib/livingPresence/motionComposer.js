@@ -1,7 +1,5 @@
 // LP-02C.1 — conservative post-mixer compositor for PREVIEW of idle clips.
 // No source AnimationClip tracks, bind poses or exported assets are modified.
-import * as THREE from 'three';
-
 const FINGERS=['Thumb','Index','Middle','Ring','Little'];
 const JOINTS={
   Thumb:['Metacarpal','Proximal','Distal'],
@@ -45,16 +43,20 @@ export class MotionComposer {
     this.intensity=0.65;
     this.clip=null;
     this.clipName='';
+    this.clipSource='';
     this.eligible=false;
     this.roleMotion=new Map();
     this.fingerStats={static:0,animated:0,missing:0};
   }
   setEnabled(value){this.enabled=Boolean(value);}
   setIntensity(value){if(Number.isFinite(Number(value)))this.intensity=clamp01(value);}
-  selectClip(clip) {
+  selectClip(clip,{source=''}={}) {
     this.clip=clip||null;
     this.clipName=clip?.name||'';
-    this.eligible=Boolean(clip&&classifyIdleClip(this.clipName));
+    this.clipSource=String(source||'');
+    // Strict pilot scope: only FBX imported through the guarded VRM/Mixamo adapter.
+    this.eligible=Boolean(clip&&this.clipSource.startsWith('VRM / Mixamo')&&
+      classifyIdleClip(this.clipName));
     this.roleMotion.clear();
     this.fingerStats={static:0,animated:0,missing:0};
     if(!clip||!this.vrm?.humanoid?.getNormalizedBoneNode)return;
@@ -102,10 +104,12 @@ export class MotionComposer {
   getStatus() {
     return {
       enabled:this.enabled,active:this.active,eligible:this.eligible,
-      clipName:this.clipName,clipSelected:Boolean(this.clip),
+      clipName:this.clipName,clipSource:this.clipSource,clipSelected:Boolean(this.clip),
       intensity:this.intensity,
       fingerTracks:{...this.fingerStats},
       reason:!this.clip?'Selecciona un clip FBX de reposo.':
+        !this.clipSource.startsWith('VRM / Mixamo')?
+          'Solo se admite un FBX importado con el adaptador Mixamo → VRM.':
         !this.eligible?'Clip no identificado como reposo; la composición queda bloqueada.':
         !this.enabled?'La composición está desactivada (modo seguro).':
         this.intensity===0?'Mezcla al 0 %: solo movimiento Mixamo.':
