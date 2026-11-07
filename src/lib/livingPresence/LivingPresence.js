@@ -44,6 +44,7 @@ export class LivingPresence {
     this.blinkApplied=null;
     this.gazeTarget=null;
     this.gazeBaseline=null;
+    this.gazeBaselineAngles=null;
     this.gazeForward=null;
     this.tmpWorldQ=new THREE.Quaternion();
     this.tmpEye=new THREE.Vector3();
@@ -79,10 +80,18 @@ export class LivingPresence {
   }
   releaseGaze(){
     if(this.vrm?.lookAt?.target===this.gazeTarget && this.gazeTarget) {
-      this.vrm.lookAt.target=this.gazeBaseline;
+      const lookAt=this.vrm.lookAt;
+      lookAt.target=this.gazeBaseline;
+      if(this.gazeBaseline==null){
+        if(this.gazeBaselineAngles&&Number.isFinite(this.gazeBaselineAngles.yaw)&&Number.isFinite(this.gazeBaselineAngles.pitch)){
+          lookAt.yaw=this.gazeBaselineAngles.yaw;
+          lookAt.pitch=this.gazeBaselineAngles.pitch;
+        }else lookAt.reset?.();
+      }
     }
     this.gazeTarget=null;
     this.gazeBaseline=null;
+    this.gazeBaselineAngles=null;
     this.gazeForward=null;
   }
   restoreBlink(){
@@ -137,6 +146,7 @@ export class LivingPresence {
     if(!head||typeof lookAt.getLookAtWorldPosition!=='function')return;
     if(!this.gazeTarget){
       this.gazeBaseline=lookAt.target??null;
+      this.gazeBaselineAngles={yaw:lookAt.yaw,pitch:lookAt.pitch};
       this.gazeTarget=new THREE.Object3D(); // detached target: no scene/export pollution
       const direction=typeof lookAt.getLookAtWorldDirection==='function' ?
         lookAt.getLookAtWorldDirection(new THREE.Vector3()) :
