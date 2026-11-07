@@ -61,6 +61,7 @@ export class LivingPresence {
     this.offset=new THREE.Quaternion();
     this.restOffset=new THREE.Quaternion();
     this.extraElbow=new THREE.Quaternion();
+    this.motorOffset=new THREE.Quaternion();
     this.fingerOffset=new THREE.Quaternion();
     this.identity=new THREE.Quaternion();
     this.blinkApplied=null;
@@ -105,7 +106,10 @@ export class LivingPresence {
   getLegDiagnostics(){return this.plantedLegs.getDiagnostics();}
   setMotorCoordination(value){
     this.motorCoordinator.setEnabled(value);
-    if(!value)this.motorCoordinator.reset();
+    if(!value){
+      this.beforeFrame(); // revert the previous coupled delta immediately
+      this.motorCoordinator.reset();
+    }
   }
   setMotorIntensity(value){this.motorCoordinator.setIntensity(value);}
   setMotorMode(value){return this.motorCoordinator.setMode(value);}
@@ -316,12 +320,8 @@ export class LivingPresence {
       wristRight:this.handActivity?score.rightWrist:0,
       activity:blend*energy,
     });
-    if(this.motorCoordinator.enabled){
-      for(const [role,angles] of Object.entries(motor.euler)){
-        const prior=micro[role]||[0,0,0];
-        micro[role]=[prior[0]+angles[0],prior[1]+angles[1],prior[2]+angles[2]];
-      }
-    }
+    // Keep the new coordination as its OWN delta, separate from the base
+    // microgesture springs. A/B off must not leave any smoothed residual.
 
     const fingerAngles=new Map();
     if(this.handActivity){
@@ -346,7 +346,8 @@ export class LivingPresence {
         }
       }
     }
-    const roles=new Set([...Object.keys(micro),...this.calibration.offsets.keys(),...fingerAngles.keys()]);
+    const roles=new Set([...Object.keys(micro),...this.calibration.offsets.keys(),
+      ...fingerAngles.keys(),...(this.motorCoordinator.enabled?Object.keys(motor.euler):[])]);
     for(const role of roles){
       const node=this.vrm?.humanoid?.getNormalizedBoneNode?.(role);
       if(!node)continue;
@@ -381,7 +382,15 @@ export class LivingPresence {
         this.fingerOffset.setFromAxisAngle(curl,fingerAngles.get(role)*authority);
         node.quaternion.multiply(this.fingerOffset);
       }
-      node.quaternion.multiply(this.offset).normalize();
+      node.quaternion.multiply(this.offset);
+      if(this.motorCoordinator.enabled && motor.euler[role]){
+        const angles=motor.euler[role];
+        this.euler.set(angles[0],angles[1],angles[2]);
+        this.motorOffset.setFromEuler(this.euler);
+        if(composing)this.motorOffset.slerp(this.identity,1-authority);
+        node.quaternion.multiply(this.motorOffset);
+      }
+      node.quaternion.normalize();
       this.applied.set(role,{node,base,applied:node.quaternion.clone()});
     }
     // During FBX preview, preserve all hips/legs/feet and every root-motion
