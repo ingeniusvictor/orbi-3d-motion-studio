@@ -46,7 +46,7 @@ export function sampleIdlePose(seconds, intensity = 1) {
   const armR = smoothNoise(t * 0.17, 97);
   const breathPhase = TWO_PI * (t * 0.23 + smoothNoise(t * 0.07, 11) * 0.026);
   const breath = Math.sin(breathPhase);
-  const scale = a => a.map(x => x * gain);
+  const scale = a => gain === 0 ? [0,0,0] : a.map(x => x * gain);
   // Normalized VRM humanoid local Euler offsets (radians). Small on purpose.
   // Weight-shift / foot contact IK is a separate LP milestone; we do not fake it here.
   return {
