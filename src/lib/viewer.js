@@ -150,6 +150,7 @@ export class MotionViewer {
     this.textureAssetUrls = new Set();
     this.lastTextureBatch = null;
     this.loadSequence = 0;
+    this.presence = null;
     this.disposed = false;
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(mount);
