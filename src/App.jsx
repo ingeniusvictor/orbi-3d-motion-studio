@@ -186,6 +186,14 @@ export default function App() {
             result.accessory.preservedAttachments.map(x=>x.name+' → '+x.target)
               .join('; ')+'. '
           :'')+
+        (result.bind?
+          'Pose de bind restaurada: '+result.bind.bones+' huesos, '+
+            result.bind.verticesChecked+' vértices muestreados, '+
+            'desviación máxima '+result.bind.maxBindError+'. '+
+            (result.bind.angleAfter!==null?
+              'Eje cabeza-pelvis '+result.bind.angleAfter+
+              '° respecto de Y; revisa visualmente si está erguido. ':'')
+          :'')+
         (result.warnings?.length?'Avisos de exportación: '+
           result.warnings.join(' ')+'. ':'')+
         'Pose exportada: '+result.pose+'. Reabre el FBX en ORBI antes de probarlo en Mixamo. La aceptación por Mixamo no está garantizada.'});
