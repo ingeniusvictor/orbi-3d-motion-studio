@@ -102,17 +102,21 @@ test('MOTION-05A emits an actual binary FBX with skin, original bone graph and z
     result.bytes.byteOffset,result.bytes.byteOffset+result.bytes.byteLength),'');
   assert.equal(reimported.animations.length,0);
   reimported.updateWorldMatrix(true,true);
-  const reloadedArms={};
-  reimported.traverse(node=>{
-    if(node.isBone&&!reloadedArms[node.name])reloadedArms[node.name]=node;
-  });
+  const reloadedBones=[];
+  reimported.traverse(node=>{if(node.isBone)reloadedBones.push(node);});
+  const normalizedName=node=>node.name.replace(/[^a-z0-9]/gi,'')
+    .toLowerCase().replace(/\\d+$/,'');
   for(const side of ['Left','Right']){
-    const upper=reloadedArms['mixamorig:'+side+'Arm'];
-    const fore=reloadedArms['mixamorig:'+side+'ForeArm'];
-    assert.ok(upper&&fore,'the FBX reader must reconstruct the upper/forearm '+side);
+    // FBXLoader may strip colons, add suffixes or clone a per-skin proxy.
+    const upper=reloadedBones.find(node=>normalizedName(node).endsWith(
+      side.toLowerCase()+'arm'));
+    const fore=reloadedBones.find(node=>normalizedName(node).endsWith(
+      side.toLowerCase()+'forearm'));
+    assert.ok(upper&&fore,'FBX bone list: '+
+      reloadedBones.map(node=>node.name).join(', '));
     const direction=worldSegment(upper,fore);
     assert.ok(Math.abs(direction.y)<0.055,
-      'exported FBX, not just internal clone, must preserve horizontal T arms');
+      'exported FBX must preserve horizontal '+side+' T arm. y='+direction.y);
   }
   assert.equal(f.root.animations.length,1);
   assert.equal(f.hips.rotation.y,before);
