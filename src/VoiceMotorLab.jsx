@@ -47,10 +47,10 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip}){
   const origin=typeof window==='undefined'?'':window.location.origin;
   const lipInfo=lipReadout||getViewer()?.getLivingLipDiagnostics?.()||null;
   useEffect(()=>{
-    if(voiceStatus!=='speaking')return;
+    if(voiceStatus!=='speaking'&&!lipReadout?.preview)return;
     const handle=setInterval(()=>setLipReadout(getViewer()?.getLivingLipDiagnostics?.()||null),250);
     return ()=>clearInterval(handle);
-  },[voiceStatus,getViewer]);
+  },[voiceStatus,lipReadout?.preview,getViewer]);
 
   const stop=(reason='cancelled')=>{
     if(meterFrame.current!==null){
@@ -80,6 +80,7 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip}){
   // Keep already loaded local audio available when only the FBX changes.
   useEffect(()=>{
     stop('model-or-clip-changed');
+    setLipReadout(null);
     setIntent(null);setMessage('');
   },[generation,activeClip,getViewer]);
   // Release object URLs and browser speech only when the component unmounts.
