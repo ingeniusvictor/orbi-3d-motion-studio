@@ -43,6 +43,47 @@ function fixture({includeRight=true}={}){
 const worldSegment=(a,b)=>b.getWorldPosition(new THREE.Vector3())
   .sub(a.getWorldPosition(new THREE.Vector3())).normalize();
 
+test('MOTION-05A.1 supports an unnamed FBX root renamed by the viewer after load',()=>{
+  const f=fixture();
+  f.root.name=''; // FBXLoader sometimes supplies an unnamed top-level Group
+  const reference=captureReferencePose(f.root);
+  assert.equal(reference[0].name,'');
+  // Reproduce the exact old program sequence: the viewer subsequently
+  // assigned the filename, then exported a skeletal clone.
+  f.root.name='character_loaded_from_file';
+  f.hips.rotation.y=0.37; // active clip should never leak into export
+  const restored=cloneAtReferencePose(f.root,reference);
+  assert.equal(restored.name,'character_loaded_from_file');
+  const hips=restored.getObjectByName('mixamorig:Hips');
+  assert.ok(hips);
+  assert.ok(Math.abs(hips.rotation.y)<1e-7);
+  assert.ok(Math.abs(f.hips.rotation.y-0.37)<1e-7);
+  const binary=cleanRiggedMixamoFBX(f.root,reference,{pose:'t'});
+  assert.ok(isBinaryFBX(binary.bytes));
+  assert.equal(binary.animations,0);
+  assert.equal(binary.bones,8);
+});
+
+test('MOTION-05A.1 compares semantic FBX bones/skin instead of display .type',()=>{
+  const f=fixture();
+  // An FBX importer can attach custom runtime type strings. These labels
+  // are NOT guaranteed to survive a SkeletonUtils.clone() round trip.
+  f.root.type='FBXImportedGroup';
+  f.hips.type='FBXLimbNode';
+  f.arms.Left.upper.type='FBXLimbNode';
+  const reference=captureReferencePose(f.root);
+  const restored=cloneAtReferencePose(f.root,reference);
+  const hip=restored.getObjectByName('mixamorig:Hips');
+  assert.ok(hip?.isBone);
+  assert.equal(hip.type,'Bone');
+  assert.equal(skinBoneCount(restored),8);
+  // Still reject semantic changes to node roles; not a bypass of rig safety.
+  const tampered=reference.map(x=>({...x}));
+  const index=tampered.findIndex(x=>x.name==='mixamorig:Hips');
+  tampered[index].kind='mesh';
+  assert.throws(()=>cloneAtReferencePose(f.root,tampered),/tipo estructural/);
+});
+
 test('MOTION-05A a reference pose is captured before mixer alters the original',()=>{
   const {root,hips,arms}=fixture();
   const original=captureReferencePose(root);
