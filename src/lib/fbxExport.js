@@ -4,6 +4,9 @@ import { makeLightweightClone, skinBoneCount, skinnedMeshes } from './lightweigh
 import { readPhysicalFbxRig } from './fbxBoneAudit.js';
 import { reconcilePhysicalRigNames } from './fbxRigIdentity.js';
 import { prepareMixamoRig } from './motionExtraction.js';
+import { orientExportUpright } from './uprightExport.js';
+import { detectBodyUpDirection } from './visibleBounds.js';
+import { auditMeshRoundTrip,auditBodyPreparation } from './meshAudit.js';
 
 const magic=[75,97,121,100,97,114,97,32,70,66,88,32,66,105,110,97,114,121,32,32,0,26,0];
 export function isBinaryFBX(bytes) {
@@ -106,17 +109,34 @@ export function animatedBinaryFBX(model,clips) {
  * MOTION-05: export an existing rigged character in its original reference
  * pose or an explicitly calibrated A/T pose, without clips. Never mutate the model.
  */
-export function cleanRiggedMixamoFBX(source,referencePose,{pose='reference',accessoryHandling='strict'}={}){
+export function cleanRiggedMixamoFBX(source,referencePose,{
+  pose='reference',accessoryHandling='strict',orientation='keep',
+}={}){
   const prepared=prepareMixamoRig(source,referencePose,{pose,accessoryHandling});
+  const bodyPreparation=auditBodyPreparation(source,prepared.model);
+  const oriented=orientExportUpright(prepared.model,{mode:orientation});
   const warnings=[];
-  const bytes=exportFbx(prepared.model,{
+  const bytes=exportFbx(oriented.model,{
     format:'binary',version:7400,target:'threejs',
     animations:[],bakeAnimations:false,
     embedTextures:false,
     onWarning:warning=>warnings.push(String(warning?.message||warning)),
   });
-  const verified=validateBinaryFBX(bytes,prepared.bones,prepared.model);
+  const verified=validateBinaryFBX(bytes,prepared.bones,oriented.model);
   warnings.push(...verified.identity.warnings);
+  // FBXExporter/FBXLoader can preserve the 340-bone hierarchy while losing
+  // a subset of the body surface. Check EVERY mesh and local spatial coverage
+  // against what we actually prepared for export, before downloading.
+  const integrity=auditMeshRoundTrip(oriented.model,verified.model);
+  warnings.push(...integrity.warnings);
+  if(orientation==='upright'){
+    const outputAxis=detectBodyUpDirection(verified.model);
+    if(!outputAxis||outputAxis.angleToWorldY>5)
+      throw new Error('El FBX reimportado volvió a una orientación horizontal '+
+        '(ángulo '+(outputAxis?.angleToWorldY?.toFixed(1)||'?')+
+        '°). Se detuvo para evitar un archivo que no esté realmente erguido.');
+    oriented.report.roundTripAngle=Number(outputAxis.angleToWorldY.toFixed(3));
+  }
   if(verified.model.animations?.length)
     throw new Error('El FBX todavía contiene animaciones. Se canceló la descarga.');
   if(verified.meshes<1)
@@ -146,6 +166,7 @@ export function cleanRiggedMixamoFBX(source,referencePose,{pose='reference',acce
     bytes,bytesLength:bytes.byteLength,bones:verified.bones,
     meshes:verified.meshes,animations:0,pose:prepared.pose,
     adjustments:prepared.adjustments,consolidation:prepared.consolidation,
-    accessory:prepared.accessory,bind:prepared.bind,warnings,
+    accessory:prepared.accessory,bind:prepared.bind,
+    orientation:oriented.report,integrity,bodyPreparation,warnings,
   };
 }
