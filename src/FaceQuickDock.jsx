@@ -1,5 +1,5 @@
 import {useEffect,useState} from 'react';
-import {Eye,ScanFace,Smile,X,Focus,RotateCcw} from 'lucide-react';
+import {Eye,ScanFace,Smile,X,Focus,RotateCcw,Volume2,Square} from 'lucide-react';
 
 const ROWS=Object.freeze([
   {key:'blink',label:'Parpadear',group:'face',feature:'blink'},
@@ -30,7 +30,7 @@ function snapshot(viewer){
     presenceEnabled:Boolean(viewer?.presence?.enabled),
   };
 }
-export default function FaceQuickDock({getViewer,model,open,onClose}){
+export default function FaceQuickDock({getViewer,model,open,onClose,voiceState,onSpeak,onStopVoice}){
   const [tab,setTab]=useState('face');
   const [data,setData]=useState({face:null,lip:null,presenceEnabled:false});
   const [feedback,setFeedback]=useState('');
@@ -74,6 +74,21 @@ export default function FaceQuickDock({getViewer,model,open,onClose}){
         <RotateCcw size={13}/> Vista general
       </button>
     </div>
+    <div className="face-quick-voice">
+      <button type="button" disabled={!voiceState?.ready||voiceState?.status==='speaking'||
+        voiceState?.status==='queued'||voiceState?.status==='paused'}
+        onClick={onSpeak} title="Reproducir la respuesta preparada con Qwen o la demostración">
+        <Volume2 size={13}/> Reproducir respuesta
+      </button>
+      <button type="button" disabled={voiceState?.status==='idle'}
+        onClick={onStopVoice} title="Detener y volver al reposo facial">
+        <Square size={12}/> Detener
+      </button>
+    </div>
+    {!voiceState?.ready&&voiceState?.status==='idle'&&
+      <small className="face-quick-voice-hint">
+        Prepara una respuesta una vez en LP-03C. Después podrás reproducirla aquí.
+      </small>}
     <div className="face-quick-tabs" role="group" aria-label="Categoría de pruebas">
       <button type="button" className={tab==='face'?'selected':''} onClick={()=>setTab('face')}>
         <Eye size={13}/> Ojos y expresiones
