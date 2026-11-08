@@ -1,11 +1,11 @@
 import {useEffect,useState} from 'react';
-import {isKnownMintSplitRig,suggestedAccessoryMode,accessoryModeLabel} from './lib/motionExportModes.js';
+import {isKnownMintSplitRig,suggestedAccessoryMode,suggestedPoseMode,accessoryModeLabel} from './lib/motionExportModes.js';
 import {Download,Film,ShieldCheck} from 'lucide-react';
 
 // MOTION-05A controls remain beside the Animation Library, never in the
 // sprawling right-side inspector. The live rig/clips are never deleted.
 export default function MotionExtractor({model,clips=[],activeClip,busy,onExportRig,onSaveClip,onDownloadRigDiagnostic}){
-  const [pose,setPose]=useState('reference');
+  const [pose,setPose]=useState(()=>suggestedPoseMode(model));
   const [accessoryHandling,setAccessoryHandling]=useState(()=>
     suggestedAccessoryMode(model));
   const knownMint=isKnownMintSplitRig(model);
@@ -13,25 +13,33 @@ export default function MotionExtractor({model,clips=[],activeClip,busy,onExport
     // Initial selection is a *visible recommendation* only, not a mutation.
     // The actual lossy copy is generated solely after pressing Export.
     setAccessoryHandling(suggestedAccessoryMode(model));
+    setPose(suggestedPoseMode(model));
   },[model?.filename,model?.meshes,model?.bones]);
   if(!model)return null;
   const eligible=(model.format==='FBX'||model.format==='GLB'||model.format==='GLTF');
   const rigged=Number(model.bones)>0&&Number(model.meshes)>0;
   return <details className="motion-extractor">
-    <summary><Film size={15}/> MOTION-05B.2 · Extraer animaciones y preparar FBX para Mixamo</summary>
+    <summary><Film size={15}/> MOTION-05D.1 · Extraer animaciones y preparar FBX para Mixamo</summary>
     <div className="motion-extractor-content">
       <p>Genera una <strong>copia FBX riggeada sin animaciones</strong>.
-        La opción recomendada conserva la pose de referencia del archivo:
-        si ya está en A, se mantiene en A sin exigir nombres de brazo.
-        Calibrar A o T es opcional y requiere identificar las articulaciones.</p>
+        Un archivo FBX puede abrir en un fotograma de animación, no en su pose
+        neutral. Para Mint recomendamos reconstruir la <strong>pose de bind</strong>
+        desde las matrices inversas del esqueleto; no se garantiza que sea T/A.
+        Calibrar A o T sigue siendo opcional si el rig permite reconocer brazos.</p>
       <label className="motion-extractor-pose">Pose de exportación
         <select value={pose} onChange={e=>setPose(e.target.value)}
           disabled={Boolean(busy)||!eligible||!rigged}>
-          <option value="reference">Pose original — conserva A/T sin mover huesos (recomendado)</option>
+          <option value="bind">Pose de bind real — restaurar esqueleto antes de extraer (recomendado para Mint)</option>
+          <option value="reference">Pose al abrir el FBX — puede contener un fotograma animado</option>
           <option value="a">Pose A calibrada — brazos 35° hacia abajo</option>
           <option value="t">Pose T calibrada — brazos horizontales</option>
         </select>
       </label>
+      {knownMint&&pose==='reference'&&<p>
+        <strong>Atención:</strong> la captura de Mint mostró una postura
+        acrobática. «Pose al abrir» puede reproducir ese mismo fotograma.
+        Prueba «Pose de bind real» para recuperar el reposo óseo antes de exportar.
+      </p>}
       {knownMint&&<p>
         <strong>Mint Swimsuit detectado: dos rigs reales (cuerpo y lazo ChestBow).</strong>
         {' '}La opción estricta repetirá el error de «root». Para conservar
@@ -89,7 +97,9 @@ export default function MotionExtractor({model,clips=[],activeClip,busy,onExport
         auxiliar cuando pasan la verificación de posición y orientación.
         Los objetos con otros rigs o dependencias desconocidas siguen bloqueados.</small>
       <small><ShieldCheck size={13}/> El archivo FBX limpio conserva el rig y
-        elimina los clips. Si eliges A/T calibrada y el esqueleto no se reconoce,
+        elimina los clips. «Pose de bind» recupera las matrices originales
+        de skin, pero solo será neutral si el FBX dispone de una bind pose
+        neutral. Si eliges A/T calibrada y el esqueleto no se reconoce,
         no se fuerza una postura deformada: usa la pose original.
         El JSON de cada clip conserva sus curvas para futura reimportación ORBI,
         pero no es un FBX de animación que Mixamo acepte.</small>
