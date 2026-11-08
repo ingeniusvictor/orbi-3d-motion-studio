@@ -44,7 +44,9 @@ export function validateBinaryFBX(bytes,expectedBones,reference=null) {
     expectedBones+'. No se descargará.');
   if(reference) {
     const expected=rigSignature(reference);
-    if(expected.size!==expectedBones)throw new Error('La referencia no tiene un rig único que pueda verificarse.');
+    if(expected.size!==expectedBones)throw new Error(
+      'El personaje contiene '+expectedBones+' objetos de hueso vinculados, pero solo '+
+      expected.size+' nombres óseos únicos. Las copias de esqueleto no son equivalentes o no se pudieron consolidar. No se exportó un rig ambiguo.');
     for(const [name,parent] of expected) {
       if(!physicalRig.has(name))throw new Error('El FBX perdió o renombró el hueso físico «'+name+'».');
       if(physicalRig.get(name)!==parent)
@@ -111,9 +113,14 @@ export function cleanRiggedMixamoFBX(source,referencePose,{pose='reference'}={})
     throw new Error('El FBX todavía contiene animaciones. Se canceló la descarga.');
   if(verified.meshes<1)
     throw new Error('El FBX perdió todas las mallas riggeadas.');
+  const physicalRig=readPhysicalFbxRig(bytes);
+  const roots=[...physicalRig.values()].filter(parent=>parent===null);
+  if(roots.length!==1)
+    throw new Error('El FBX limpio tiene '+roots.length+
+      ' raíces óseas distintas. Mixamo necesita un esqueleto principal; no se descargó un personaje multirig como si fuese único.');
   return {
     bytes,bytesLength:bytes.byteLength,bones:verified.bones,
     meshes:verified.meshes,animations:0,pose:prepared.pose,
-    adjustments:prepared.adjustments,warnings,
+    adjustments:prepared.adjustments,consolidation:prepared.consolidation,warnings,
   };
 }
