@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {clone as cloneRig} from 'three/addons/utils/SkeletonUtils.js';
 import {skinBoneCount,skinnedMeshes} from './lightweight.js';
+import {consolidateEquivalentSkinRigs} from './rigCanonicalizer.js';
 
 // MOTION-05A: Reference pose is captured BEFORE AnimationMixer.play().
 // A paused animation is not a bind pose and must never be exported as one.
@@ -179,12 +180,17 @@ export function prepareMixamoRig(root,referencePose,{pose='reference'}={}){
   if(!['t','a','reference'].includes(pose))
     throw new Error('Modo de pose no reconocido.');
   const clone=cloneAtReferencePose(root,referencePose);
+  // FBXLoader can duplicate the same rig as a separate Bone proxy tree
+  // for EACH clothing, hair, body, etc. SkinnedMesh. Collapse only genuinely
+  // identical copies before validating a single physical FBX armature.
+  const consolidation=consolidateEquivalentSkinRigs(clone);
   try{
     const details=pose==='t'?makeCalibratedTPose(clone):
       pose==='a'?makeCalibratedAPose(clone):
       {pose:'Referencia original (sin modificar)',adjustments:[]};
     return {model:clone,pose:details.pose,adjustments:details.adjustments,
-      bones:skinBoneCount(clone),meshes:skinnedMeshes(clone).length};
+      consolidation,bones:skinBoneCount(clone),
+      meshes:skinnedMeshes(clone).length};
   }catch(error){
     throw new Error('No se exportó una pose '+(pose==='a'?'A':'T')+' dudosa. '+error.message);
   }
