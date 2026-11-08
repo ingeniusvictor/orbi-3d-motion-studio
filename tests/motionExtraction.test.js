@@ -96,10 +96,6 @@ test('MOTION-05A.3 rejects duplicate named rigs in different world rest position
 });
 test('MOTION-05A.3 refuses a second independent character rig in a single Mixamo FBX',()=>{
   const f=duplicatedSkinFixture();
-  f.root.traverse(node=>{
-    if(node===f.duplicateHips||node.parent===f.duplicateHips||node.name.includes('AvatarDuplicate'))
-      return;
-  });
   // Give the second skeleton unique names: it is a real SECOND character,
   // not equivalent skin proxy references for clothing.
   f.duplicateHips.traverse(node=>{if(node.isBone)node.name='Second_'+node.name;});
