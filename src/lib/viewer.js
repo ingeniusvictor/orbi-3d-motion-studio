@@ -8,6 +8,7 @@ import { adaptFbxToVrm } from './vrmMotion.js';
 import { auditVrmRig } from './livingPresence/rigAudit.js';
 import { LivingPresence } from './livingPresence/LivingPresence.js';
 import { MotionComposer } from './livingPresence/motionComposer.js';
+import { LipSyncController } from './livingPresence/lipSync.js';
 import { bakeVrmForGlb, convertVrmMaterials } from './vrmExport.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { catalogMaterials, applyTextureToMaterial } from './textureStudio.js';
@@ -153,6 +154,7 @@ export class MotionViewer {
     this.loadSequence = 0;
     this.presence = null;
     this.motionComposer = null;
+    this.lipSync = null;
     this.presenceSuspendCount = 0;
     this.disposed = false;
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -176,6 +178,8 @@ export class MotionViewer {
         clipPlaying:Boolean(this.mixer && this.current !== null),
         composition:this.motionComposer,
       });
+      // Speech mouth expressions are separate from Mixamo bone ownership.
+      if(!this.presenceSuspendCount)this.lipSync?.update(delta);
       // VRM spring bones, constraints and expressions require an update each frame.
       this.vrm?.update(delta);
       this.controls.update();
@@ -229,6 +233,7 @@ export class MotionViewer {
     this.vrm = loaded.vrm;
     this.presence = this.vrm ? new LivingPresence(this.vrm,{sourceName:loaded.name}) : null;
     this.motionComposer = this.vrm ? new MotionComposer(this.vrm) : null;
+    this.lipSync = this.vrm ? new LipSyncController(this.vrm) : null;
     this.model.name ||= loaded.name.replace(/\.[^.]+$/,'');
     this.lastFilename = loaded.name;
     this.lastFormat = loaded.format;
@@ -244,6 +249,8 @@ export class MotionViewer {
     return {...info, filename:loaded.name, bytes:loaded.bytes, format:loaded.format};
   }
   clearModel() {
+    this.lipSync?.dispose();
+    this.lipSync=null;
     this.presence?.resetOverlay();
     this.motionComposer?.dispose();
     this.motionComposer=null;
@@ -306,6 +313,22 @@ export class MotionViewer {
   }
   setLivingSwayIntensity(value){this.presence?.setSwayIntensity(value);}
   setLivingSwaySpeed(value){this.presence?.setSwaySpeed(value);}
+  getLivingLipDiagnostics(){
+    return this.lipSync?.getDiagnostics()||{
+      supported:false,names:[],mapping:{},reason:'Carga un avatar VRM para revisar los visemas.',
+      active:false,opening:0,
+    };
+  }
+  setLivingLipStrength(value){this.lipSync?.setStrength(value);}
+  previewLivingVowel(vowel='a'){return this.lipSync?.preview(vowel)??false;}
+  startLivingLipSync(token,options){return this.lipSync?.start(token,options)??false;}
+  pauseLivingLipSync(token){return this.lipSync?.pause(token)??false;}
+  resumeLivingLipSync(token){return this.lipSync?.resume(token)??false;}
+  boundaryLivingLipSync(token,charIndex){return this.lipSync?.boundary(token,charIndex)??false;}
+  updateLivingLipAudio(token,rms,progress){
+    return this.lipSync?.audioSignal(token,rms,progress)??false;
+  }
+  stopLivingLipSync(token){return this.lipSync?.stop(token)??false;}
   getLivingSpeechMotorAvailability(){
     if(!this.vrm||!this.presence?.enabled)
       return {available:false,reason:'Activa Presencia natural A/B sobre un VRM.'};
@@ -384,13 +407,19 @@ export class MotionViewer {
     if(this.presenceSuspendCount===1){
       this.presence?.resetOverlay();
       this.motionComposer?.beforeFrame();
+      this.lipSync?.release();
       // Three-VRM copies normalized humanoid bones to raw bones during update.
       // Synchronize once BEFORE cloning/exporting the raw skinned model.
       this.vrm?.update(0);
       this.model?.updateWorldMatrix(true,true);
     }
     try{return await operation();}
-    finally{this.presenceSuspendCount=Math.max(0,this.presenceSuspendCount-1);}
+    finally{
+      this.presenceSuspendCount=Math.max(0,this.presenceSuspendCount-1);
+      // If audio is still playing, regain ownership only of mouth expressions.
+      if(this.presenceSuspendCount===0&&this.lipSync?.session)
+        this.lipSync.captureBaseline();
+    }
   }
   async exportLightweight(ids) {
     return this.withPresenceSuspended(async()=>{
