@@ -19,7 +19,7 @@ export default function MotionExtractor({model,clips=[],activeClip,busy,onExport
   const eligible=(model.format==='FBX'||model.format==='GLB'||model.format==='GLTF');
   const rigged=Number(model.bones)>0&&Number(model.meshes)>0;
   return <details className="motion-extractor">
-    <summary><Film size={15}/> MOTION-05D.1 · Extraer animaciones y preparar FBX para Mixamo</summary>
+    <summary><Film size={15}/> MOTION-05D.2 · Extraer animaciones y preparar FBX para Mixamo</summary>
     <div className="motion-extractor-content">
       <p>Genera una <strong>copia FBX riggeada sin animaciones</strong>.
         Un archivo FBX puede abrir en un fotograma de animación, no en su pose
@@ -29,7 +29,7 @@ export default function MotionExtractor({model,clips=[],activeClip,busy,onExport
       <label className="motion-extractor-pose">Pose de exportación
         <select value={pose} onChange={e=>setPose(e.target.value)}
           disabled={Boolean(busy)||!eligible||!rigged}>
-          <option value="bind">Pose de bind real — restaurar esqueleto antes de extraer (recomendado para Mint)</option>
+          <option value="bind">Pose de bind real — compensar transformaciones FBX de padres y recuperar el esqueleto (Mint)</option>
           <option value="reference">Pose al abrir el FBX — puede contener un fotograma animado</option>
           <option value="a">Pose A calibrada — brazos 35° hacia abajo</option>
           <option value="t">Pose T calibrada — brazos horizontales</option>
