@@ -64,3 +64,20 @@ Si `git status --short` muestra modificaciones, **no ejecutar pull** hasta revis
 - **MOTION-05B:** previsualización A/T dentro del visor (sin editar modelo actual), detección anatómica más amplia, rig con eje rotado y normalización segura de escala. Para compatibilidad total, ofrecer salida Blender FBX validada cuando exportador local no se comporte.
 - **MOTION-05C:** importar el clip JSON de vuelta, extraer todos los clips por lotes y exportarlos como FBX solo esqueleto sin malla cuando las pistas físicas sean compatibles.
 - Integrar una biblioteca ORBI de movimientos reusable entre modelos con **firma de rig** en lugar de suponer que personajes del mismo tamaño usan el mismo esqueleto.
+
+
+## MOTION-05A.1 — Corrección de falsa incompatibilidad de jerarquía (2026-11-08)
+
+**Reporte real del usuario:** la extracción de una animación por separado funcionó, pero la exportación del FBX limpio en T falló con `No se exportó una pose T insegura: La jerarquía original no coincide con la copia de exportación.`
+
+**Causa comprobada en código:** `viewer.open()` guardaba `captureReferencePose(this.model)` **antes** de establecer el nombre definitivo `this.model.name ||= loaded.name`. Cuando FBXLoader entregaba una escena raíz sin nombre, la instantánea guardaba `name: ''` y, al ejecutar `SkeletonUtils.clone`, el nodo raíz ya llevaba el nombre asignado por ORBI. Además, se comparaba directamente `Object3D.type`, cuya etiqueta puede normalizarse al clonar una clase importada sin que cambie su función real.
+
+**Corrección:**
+- `viewer.js` asigna nombre al modelo *antes* de capturar la pose de referencia y todavía *antes* del primer fotograma de AnimationMixer.
+- `motionExtraction.js` tolera exclusivamente el cambio de etiqueta del nodo raíz (que no es una identidad ósea) y sustituye las comparaciones de cadenas `.type` por clases semánticas `bone / skinnedMesh / mesh / transform`. En nodos descendientes se mantiene el cotejo estricto de nombre y orden; siempre se exige la misma cantidad de nodos y firma del rig, y no se permiten cambios de función ósea/skinning.
+- Se conserva la exportación de una **copia**, la pose T solo cuando el sistema reconoce los brazos, las verificaciones FBX de mallas, esqueleto, parentesco físico y cero clips; se bloquea cualquier conversión dudosa.
+- `tests/motionExtraction.test.js`: caso real de nodo raíz sin nombre, asignación posterior, animación activa que no debe filtrarse; otro caso de etiquetas `FBXLimbNode` normalizadas por Three.js, con rechazo explícito si cambia la clase semántica del hueso.
+
+**CI:** 191/191 pruebas y build aprobados. [GitHub Actions 42460872733](https://github.com/ingeniusvictor/orbi-3d-motion-studio/actions/runs/42460872733).
+
+**Procedimiento de recuperación:** detener Vite, comprobar `git status --short`, `git pull --ff-only` solo si limpio, ejecutar pruebas/build/servidor; recargar Chrome con Ctrl+Shift+R y **volver a cargar el FBX ORIGINAL** para regenerar la pose de referencia con el nuevo orden. Después usar Biblioteca de animaciones → MOTION-05 → T calibrada → Exportar FBX limpio. Reimportar el archivo y probar en Mixamo. Si aparece un error diferente (brazos, malla o jerarquía ósea), registrar mensaje exacto: la compatibilidad con ese rig real todavía requiere QA visual.
