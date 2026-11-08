@@ -68,22 +68,158 @@ function validateParentedVisual(mesh,referenceWorld,points){
   }
   return maxError;
 }
-function removeUnusedAuxBoneTree(root,auxBones,mainBones){
+// Some FBXLoader scenes hang non-skinned helper Groups or accessory props on
+// auxiliary bones (e.g. Mint's head_adjust). They are NOT part of the 36-bone
+// skin palette. Forcing their deletion was unsafe, but rigid export can retain
+// them as static scene nodes, reparented to a matching body region.
+const linkedBoneDescendants=(node,auxBones)=>{
+  let linked=false;node.traverse(n=>{if(n!==node&&auxBones.has(n))linked=true;});
+  return linked;
+};
+function describeExtraNode(node){
+  return '«'+(node.name||'(sin nombre)')+'» ('+(node.type||'Object3D')+')';
+}
+function validateExtraSubtree(node,auxBones){
+  if(linkedBoneDescendants(node,auxBones))
+    throw new Error('El objeto '+describeExtraNode(node)+
+      ' contiene huesos todavía vinculados al rig del lazo. Se requiere una revisión manual.');
+  node.traverse(n=>{
+    if(n.isSkinnedMesh)
+      throw new Error('El accesorio contiene otra malla riggeada '+describeExtraNode(n)+
+        '. No se puede congelar ni desvincular automáticamente.');
+    if(n.isCamera||n.isLight||n.isAudio||n.isInstancedMesh||n.isLine||n.isPoints||
+      n.isSprite||n.isLOD)
+      throw new Error('El hueso auxiliar contiene un objeto no convertible '+
+        describeExtraNode(n)+'. No se modificó.');
+    if(!n.isBone&&!n.isMesh&&!n.isGroup&&n.type!=='Object3D')
+      throw new Error('Tipo de objeto auxiliar no reconocido '+describeExtraNode(n)+
+        '. No se modificó.');
+    if(n.isMesh&&!n.geometry?.getAttribute?.('position'))
+      throw new Error('La pieza '+describeExtraNode(n)+
+        ' no tiene geometría que se pueda verificar.');
+  });
+}
+// Convert unweighted helper bones to static Groups. No helper bone is part of
+// ANY remaining skin, and the exported FBX intentionally has zero animation.
+// Local transforms, children, names and visual geometry survive on the clone.
+function staticizeHelperBones(node,auxBones,mainBones){
+  for(const child of [...node.children])staticizeHelperBones(child,auxBones,mainBones);
+  if(!node.isBone)return node;
+  if(auxBones.has(node)||mainBones.has(node))
+    throw new Error('Un hueso auxiliar adicional participa en un skin: «'+
+      node.name+'». No se convirtió.');
+  const parent=node.parent;
+  if(!parent)throw new Error('Hueso auxiliar sin padre: «'+node.name+'».');
+  const group=new THREE.Group();
+  group.name=node.name+'_estatico';
+  group.position.copy(node.position);
+  group.quaternion.copy(node.quaternion);
+  group.scale.copy(node.scale);
+  group.visible=node.visible;
+  group.userData={...node.userData};
+  parent.add(group);
+  for(const child of [...node.children])group.add(child);
+  parent.remove(node);
+  return group;
+}
+function mainAttachmentTarget(auxBone,mainBones,defaultTarget){
+  const name=String(auxBone.name||'').toLowerCase();
+  let pattern=null;
+  if(/head/.test(name))pattern=/(?:^|[-_:])head$/i;
+  else if(/neck/.test(name))pattern=/(?:^|[-_:])neck$/i;
+  else if(/pelvis|thigh|hip/.test(name))pattern=/(?:^|[-_:])pelvis$|(?:^|[-_:])hips?$/i;
+  else if(/clavicle/.test(name))pattern=/(?:^|[-_:])clavicle$/i;
+  if(!pattern)return defaultTarget;
+  const matched=[...mainBones].filter(b=>pattern.test(b.name||''));
+  // A left/right clavicle without a reliable side mapping is ambiguous.
+  return matched.length===1?matched[0]:defaultTarget;
+}
+function captureWorldState(node){
+  const snapshots=[];
+  node.updateWorldMatrix(true,true);
+  node.traverse(n=>{
+    const points=[];
+    if(n.isMesh){
+      const position=n.geometry?.getAttribute('position');
+      const value=new THREE.Vector3();
+      // Verify all vertices, not a sparse sample, so tiny props cannot slip.
+      for(let i=0;i<position.count;i++){
+        n.getVertexPosition(i,value);
+        points.push(value.clone().applyMatrix4(n.matrixWorld));
+      }
+    }
+    snapshots.push({node:n,world:n.matrixWorld.clone(),points});
+  });
+  return snapshots;
+}
+function validateWorldState(snapshots){
+  for(const item of snapshots){
+    item.node.updateWorldMatrix(true,false);
+    const previous=item.world;
+    const actual=item.node.matrixWorld;
+    // Reparenting through an imported non-uniform FBX transform can produce
+    // shear that Three.js Object3D.attach cannot preserve. Do not export that.
+    const worldPos=new THREE.Vector3().setFromMatrixPosition(previous);
+    const newPos=new THREE.Vector3().setFromMatrixPosition(actual);
+    const tol=MAX_WORLD_ERROR*Math.max(1,worldPos.length());
+    if(worldPos.distanceTo(newPos)>tol)
+      throw new Error('El objeto '+describeExtraNode(item.node)+
+        ' se desplazó durante el cambio de padre. Se bloqueó la exportación.');
+    if(item.node.isMesh){
+      const point=new THREE.Vector3();
+      for(let i=0;i<item.points.length;i++){
+        item.node.getVertexPosition(i,point);
+        point.applyMatrix4(item.node.matrixWorld);
+        const expected=item.points[i];
+        if(point.distanceTo(expected)>MAX_WORLD_ERROR*Math.max(1,expected.length()))
+          throw new Error('La malla auxiliar '+describeExtraNode(item.node)+
+            ' se deformó al fijarla al rig corporal. Se bloqueó la exportación.');
+      }
+    }
+  }
+}
+function removeUnusedAuxBoneTree(root,auxBones,mainBones,{handling,target}){
+  // Stage 1: inspect ALL attachments before removing anything.
+  const extras=[];
   for(const bone of auxBones){
     if(mainBones.has(bone))
       throw new Error('Los esqueletos comparten objetos Bone reales; no se puede separar este accesorio.');
-    for(const child of bone.children){
+    for(const child of [...bone.children]){
       if(child.isBone&&auxBones.has(child))continue;
-      throw new Error('El hueso auxiliar «'+bone.name+
-        '» contiene objetos adicionales. Se bloqueó para no perder accesorios.');
+      validateExtraSubtree(child,auxBones);
+      extras.push({bone,child});
     }
   }
+  if(extras.length&&handling==='exclude'&&extras.some(({child})=>{
+    let visible=false;child.traverse(n=>{if(n.isMesh&&n.visible)visible=true;});
+    return visible;
+  }))
+    throw new Error('El rig auxiliar contiene '+extras.length+
+      ' objetos adicionales, incluidos elementos visibles. «Solo cuerpo» no los descartará sin revisar; utiliza «Lazo rígido».');
   const topLevel=[...auxBones].filter(b=>!auxBones.has(b.parent));
   if(topLevel.length!==1)
     throw new Error('El accesorio tiene más de una raíz ósea auxiliar.');
   if(!topLevel[0].parent||!root.getObjectById?.(topLevel[0].id))
     throw new Error('La raíz auxiliar no pertenece a la escena.');
+  // Stage 2: preserve inert helper groups and static props on the copy.
+  const preserved=[];
+  for(const {bone,child} of extras){
+    const staticChild=staticizeHelperBones(child,auxBones,mainBones);
+    const snapshots=captureWorldState(staticChild);
+    const attachTo=mainAttachmentTarget(bone,mainBones,target||root);
+    attachTo.attach(staticChild); // Three.js keeps world-space rest pose.
+    root.updateWorldMatrix(true,true);
+    validateWorldState(snapshots);
+    preserved.push({name:staticChild.name||'(sin nombre)',
+      type:staticChild.type,target:attachTo.name||'(escena)'});
+  }
+  // Stage 3: detach only the now-empty auxiliary Bone tree.
+  for(const bone of auxBones)for(const child of bone.children)
+    if(!child.isBone||!auxBones.has(child))
+      throw new Error('Quedaron objetos inesperados bajo «'+bone.name+
+        '». No se desmontó el rig auxiliar.');
   topLevel[0].parent.remove(topLevel[0]);
+  return preserved;
 }
 function inspectIndependentAccessoryRig(root){
   const skins=getSkinMeshes(root);
@@ -162,7 +298,9 @@ export function prepareAuxiliaryRigForMixamo(root,{handling='strict'}={}){
       validateParentedVisual(frozen,oldMatrix,points));
   }
   accessory.parent?.remove(accessory);
-  removeUnusedAuxBoneTree(root,auxBones,mainBones);
+  const preserved=removeUnusedAuxBoneTree(root,auxBones,mainBones,{
+    handling,target,
+  });
   root.updateWorldMatrix(true,true);
   const remaining=getSkinMeshes(root);
   if(remaining.length!==1||remaining[0]!==main)
@@ -170,5 +308,6 @@ export function prepareAuxiliaryRigForMixamo(root,{handling='strict'}={}){
   return {handling,changed:true,
     accessoryName:accessory.name,bodyName:main.name,
     accessoryBones:auxBones.size,bodyBones:mainBones.size,
-    rigidParent:target?.name||null,maxPositionError:maxError};
+    rigidParent:target?.name||null,maxPositionError:maxError,
+    preservedAttachments:preserved};
 }
