@@ -339,6 +339,8 @@ export class MotionViewer {
   previewLivingFace(feature){return this.facial?.previewFeature(feature)??false;}
   previewLivingBlink(){return this.presence?.enabled?
     (this.presence?.previewBlink()??false):false;}
+  previewLivingGaze(direction){return this.presence?.enabled?
+    (this.presence?.previewGaze(direction)??false):false;}
   startLivingFaceSpeech(token,options){return this.facial?.beginSpeech(token,options)??false;}
   stopLivingFaceSpeech(token){return this.facial?.endSpeech(token)??false;}
   getLivingLipDiagnostics(){
