@@ -166,6 +166,18 @@ function validateWorldState(snapshots){
     if(worldPos.distanceTo(newPos)>tol)
       throw new Error('El objeto '+describeExtraNode(item.node)+
         ' se desplazó durante el cambio de padre. Se bloqueó la exportación.');
+    // Verify full orientation/scale as well as position. Empty FBX helper
+    // groups can store important coordinate transforms even without geometry.
+    let matrixError=0,matrixScale=1;
+    for(let i=0;i<16;i++){
+      matrixError=Math.max(matrixError,
+        Math.abs(previous.elements[i]-actual.elements[i]));
+      matrixScale=Math.max(matrixScale,
+        Math.abs(previous.elements[i]),Math.abs(actual.elements[i]));
+    }
+    if(matrixError/matrixScale>1e-4)
+      throw new Error('El nodo auxiliar '+describeExtraNode(item.node)+
+        ' cambió orientación o escala al fijarse al cuerpo. No se exportó.');
     if(item.node.isMesh){
       const point=new THREE.Vector3();
       for(let i=0;i<item.points.length;i++){
