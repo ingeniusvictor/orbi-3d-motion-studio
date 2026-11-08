@@ -8,13 +8,19 @@ const angleDegrees=(a,b)=>THREE.MathUtils.radToDeg(a.angleTo(b));
 const clean=name=>String(name||'').replace(/^mixamorig\d*[:_]?/i,'')
   .replace(/[^a-z0-9]/gi,'').toLowerCase();
 const candidates={
-  leftUpperArm:['leftarm','leftupperarm','upperarml','lupperarm'],
-  leftLowerArm:['leftforearm','leftlowerarm','forearml','lowerarml','llowerarm'],
-  leftHand:['lefthand','handl','lhand'],
-  rightUpperArm:['rightarm','rightupperarm','upperarmr','rupperarm'],
-  rightLowerArm:['rightforearm','rightlowerarm','forearmr','lowerarmr','rlowerarm'],
-  rightHand:['righthand','handr','rhand'],
-  hips:['hips','pelvis'],
+  // Extra aliases for VRM-like, Blender, Unreal and Daz human rigs. Never
+  // assume a shoulder/clavicle is the upper ARM, or a finger is the hand.
+  leftUpperArm:['leftarm','leftupperarm','upperarml','lupperarm',
+    'arml','armleft','jbiplupperarm','bip001lupperarm','lshldrbend'],
+  leftLowerArm:['leftforearm','leftlowerarm','forearml','lowerarml','llowerarm',
+    'lowerarmleft','forearmleft','jbipllowerarm','bip001lforearm','lforearmbend'],
+  leftHand:['lefthand','handl','lhand','jblhand','jbiplhand','bip001lhand'],
+  rightUpperArm:['rightarm','rightupperarm','upperarmr','rupperarm',
+    'armr','armright','jbiprupperarm','bip001rupperarm','rshldrbend'],
+  rightLowerArm:['rightforearm','rightlowerarm','forearmr','lowerarmr','rlowerarm',
+    'lowerarmright','forearmright','jbiprlowerarm','bip001rforearm','rforearmbend'],
+  rightHand:['righthand','handr','rhand','jbiprhand','jbiprhand','bip001rhand'],
+  hips:['hips','pelvis','hip','jbipchips','jbipchips','rootpelvis'],
 };
 function poseNodes(root){
   const out=[];root.traverse(node=>out.push(node));return out;
@@ -96,14 +102,14 @@ function roleBones(root){
 function worldPosition(node){
   return node.getWorldPosition(new THREE.Vector3());
 }
-function alignSegment(bone,child,target,maxDegrees){
+function alignSegment(bone,child,target,maxDegrees,poseLabel='T'){
   bone.updateWorldMatrix(true,true);
   const from=worldPosition(child).sub(worldPosition(bone));
   if(from.lengthSq()<1e-10)throw new Error('La longitud de un brazo es demasiado pequeña para calibrarlo.');
   from.normalize();
   const angle=angleDegrees(from,target);
   if(angle>maxDegrees)
-    throw new Error('La corrección a pose T requiere '+angle.toFixed(1)+
+    throw new Error('La corrección a pose '+poseLabel+' requiere '+angle.toFixed(1)+
       '° en «'+bone.name+'»; supera el límite seguro de '+maxDegrees+'°. Usa Blender para calibrar este rig.');
   if(angle>0.001){
     const world=bone.getWorldQuaternion(new THREE.Quaternion());
@@ -115,19 +121,34 @@ function alignSegment(bone,child,target,maxDegrees){
   }
   const final=worldPosition(child).sub(worldPosition(bone)).normalize();
   if(angleDegrees(final,target)>2.5)
-    throw new Error('La articulación «'+bone.name+'» no quedó horizontal después de la corrección.');
+    throw new Error('La articulación «'+bone.name+'» no alcanzó la orientación de pose '+poseLabel+'.');
   return angle;
 }
-export function makeCalibratedTPose(root,{maxUpperArmDegrees=75,maxForearmDegrees=65}={}){
+function makeCalibratedArmPose(root,{pose='t',maxUpperArmDegrees=75,maxForearmDegrees=65}={}){
+  const label=pose==='a'?'A':'T';
+  const downRadians=THREE.MathUtils.degToRad(pose==='a'?35:0);
   const rig=roleBones(root),adjustments=[];
   for(const side of ['left','right']){
     const upper=rig[side+'UpperArm'];
     const forearm=rig[side+'LowerArm'];
     const hand=rig[side+'Hand'];
     const pelvis=rig.hips;
-    if(!upper||!forearm||!hand||!pelvis)
-      throw new Error('No se pudo reconocer el brazo '+side+
-        ' completo (brazo superior, antebrazo, mano y caderas). Se conserva la pose original, sin generar una T falsa.');
+    if(!upper||!forearm||!hand||!pelvis){
+      const missing=[
+        !upper?'brazo superior':null,!forearm?'antebrazo':null,
+        !hand?'mano':null,!pelvis?'caderas':null,
+      ].filter(Boolean);
+      const known=[];root.traverse(node=>{
+        if(node.isSkinnedMesh)for(const bone of node.skeleton?.bones||[]){
+          if(bone.isBone&&bone.name&&!known.includes(bone.name))known.push(bone.name);
+        }
+      });
+      throw new Error('No se pudo reconocer el brazo '+(side==='left'?'izquierdo':'derecho')+
+        ': faltan '+missing.join(', ')+'. Huesos encontrados: '+
+        (known.slice(0,18).join(', ')||'ninguno')+
+        (known.length>18?'… ('+known.length+' en total)':'')+
+        '. Puedes exportar con «Pose de referencia original», sin forzar A/T.');
+    }
     root.updateWorldMatrix(true,true);
     const shoulder=worldPosition(upper),hip=worldPosition(pelvis);
     const elbow=worldPosition(forearm);
@@ -137,25 +158,35 @@ export function makeCalibratedTPose(root,{maxUpperArmDegrees=75,maxForearmDegree
     if(Math.abs(dx)<1e-4)dx=elbow.x-shoulder.x;
     if(Math.abs(dx)<1e-4)
       throw new Error('No se distingue el eje lateral del brazo '+side+'.');
-    const target=new THREE.Vector3(Math.sign(dx),0,0);
-    const upperAngle=alignSegment(upper,forearm,target,maxUpperArmDegrees);
-    const lowerAngle=alignSegment(forearm,hand,target,maxForearmDegrees);
+    const target=new THREE.Vector3(
+      Math.sign(dx)*Math.cos(downRadians),-Math.sin(downRadians),0,
+    ).normalize();
+    const upperAngle=alignSegment(upper,forearm,target,maxUpperArmDegrees,label);
+    const lowerAngle=alignSegment(forearm,hand,target,maxForearmDegrees,label);
     adjustments.push({side,upperDegrees:upperAngle,forearmDegrees:lowerAngle});
   }
   root.updateWorldMatrix(true,true);
-  return {pose:'T calibrada',adjustments};
+  return {pose:pose==='a'?'A calibrada (35° descendente)':'T calibrada',
+    adjustments};
 }
-export function prepareMixamoRig(root,referencePose,{pose='t'}={}){
-  if(!['t','reference'].includes(pose))
+export function makeCalibratedTPose(root,options={}){
+  return makeCalibratedArmPose(root,{...options,pose:'t'});
+}
+export function makeCalibratedAPose(root,options={}){
+  return makeCalibratedArmPose(root,{...options,pose:'a'});
+}
+export function prepareMixamoRig(root,referencePose,{pose='reference'}={}){
+  if(!['t','a','reference'].includes(pose))
     throw new Error('Modo de pose no reconocido.');
   const clone=cloneAtReferencePose(root,referencePose);
   try{
     const details=pose==='t'?makeCalibratedTPose(clone):
-      {pose:'Referencia original',adjustments:[]};
+      pose==='a'?makeCalibratedAPose(clone):
+      {pose:'Referencia original (sin modificar)',adjustments:[]};
     return {model:clone,pose:details.pose,adjustments:details.adjustments,
       bones:skinBoneCount(clone),meshes:skinnedMeshes(clone).length};
   }catch(error){
-    throw new Error('No se exportó un FBX en T dudoso. '+error.message);
+    throw new Error('No se exportó una pose '+(pose==='a'?'A':'T')+' dudosa. '+error.message);
   }
 }
 export function exportableClipJSON(clip,{rigName='personaje',rigBones=0}={}){
