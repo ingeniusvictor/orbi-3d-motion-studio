@@ -152,12 +152,12 @@ export default function App() {
     } catch(error) {setNotice({type:'error',text:`No se pudo exportar: ${error.message||error}`});}
     finally {setBusy('');}
   };
-  const exportCleanFBX=async ({pose='reference'}={})=>{
+  const exportCleanFBX=async ({pose='reference',accessoryHandling='strict'}={})=>{
     if(!viewer.current||!model)return;
     setBusy('Restaurando pose y verificando FBX riggeado sin animaciones…');
     setNotice(null);
     try{
-      const result=await viewer.current.exportCleanMixamoFBX({pose});
+      const result=await viewer.current.exportCleanMixamoFBX({pose,accessoryHandling});
       const rotations=result.adjustments?.map(a=>a.side+': brazo '+
         a.upperDegrees.toFixed(1)+'°, antebrazo '+a.forearmDegrees.toFixed(1)+'°').join(' | ');
       setNotice({type:'success',text:result.filename+' descargado ('+
@@ -168,6 +168,13 @@ export default function App() {
           ?'Se consolidaron '+result.consolidation.bonesBefore+
            ' referencias de huesos en '+result.consolidation.bonesAfter+
            ' huesos físicos de un solo rig. ':'')+
+        (result.accessory?.changed
+          ?'Accesorio '+result.accessory.accessoryName+': '+
+            (result.accessory.handling==='rigid'
+              ?'conservado como malla rígida vinculada a '+result.accessory.rigidParent+
+                ' (sin movimiento independiente de tela). '
+              :'omitido solo de la copia Mixamo. ')
+          :'')+
         'Pose exportada: '+result.pose+'. Reabre el FBX en ORBI antes de probarlo en Mixamo. La aceptación por Mixamo no está garantizada.'});
     }catch(error){
       setNotice({type:'error',text:'No se exportó el FBX limpio: '+
