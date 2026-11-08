@@ -12,6 +12,7 @@ function allVisualMeshes(root){
   });return meshes;
 }
 function samples(mesh){
+  mesh.updateMatrixWorld(true);
   const vertices=mesh.geometry.getAttribute('position').count;
   const step=Math.max(1,Math.floor(vertices/MAX_VERTEX_SAMPLES));
   const points=[],p=new THREE.Vector3();
@@ -49,14 +50,16 @@ export function orientExportUpright(model,{mode='keep'}={}){
   // Rotate around the apparent body center, not around (0,0,0), which can be
   // very far away in large FBX coordinate systems.
   const translation=pivot.clone().sub(pivot.clone().applyQuaternion(transform));
-  model.updateWorldMatrix(true,true);
+  // updateMatrixWorld invokes SkinnedMesh.updateMatrixWorld, which updates
+  // the attached bindMatrixInverse; updateWorldMatrix alone does NOT.
+  model.updateMatrixWorld(true);
   const meshes=allVisualMeshes(model);
   const before=meshes.map(mesh=>({mesh,points:samples(mesh)}));
   const wrapper=new THREE.Group();wrapper.name='ORBI_MIXAMO_UPRIGHT';
   wrapper.quaternion.copy(transform);
   wrapper.position.copy(translation);
   wrapper.add(model);
-  wrapper.updateWorldMatrix(true,true);
+  wrapper.updateMatrixWorld(true);
   let maxError=0,checked=0;
   for(const {mesh,points} of before){
     const now=new THREE.Vector3();
