@@ -202,6 +202,31 @@ export class MotionViewer {
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width,height,false);
   }
+  focusFace(){
+    if(!this.model||!this.vrm)return false;
+    const head=this.vrm.humanoid?.getNormalizedBoneNode?.('head')||
+      this.vrm.humanoid?.getRawBoneNode?.('head');
+    if(!head)return false;
+    this.model.updateWorldMatrix(true,true);
+    const focus=head.getWorldPosition(new THREE.Vector3());
+    const box=new THREE.Box3().setFromObject(this.model,true);
+    const height=box.getSize(new THREE.Vector3()).y;
+    if(!Number.isFinite(height)||height<=0||
+      ![focus.x,focus.y,focus.z].every(Number.isFinite))return false;
+    const distance=Math.max(height*0.62,0.01);
+    // Preserve the current viewing direction; this is a camera change only,
+    // never a modification to the avatar's head or Mixamo clip.
+    const look=this.camera.position.clone().sub(this.controls.target);
+    if(look.lengthSq()<1e-10)look.set(0,0,1);
+    look.normalize();
+    this.controls.target.copy(focus);
+    this.camera.position.copy(focus).addScaledVector(look,distance);
+    this.camera.near=Math.max(distance/1000,0.00001);
+    this.camera.far=Math.max(distance*120,height*20,1);
+    this.camera.updateProjectionMatrix();
+    this.controls.update();
+    return true;
+  }
   resetCamera() {
     if (!this.model) {
       this.camera.position.set(3,2.5,5);
