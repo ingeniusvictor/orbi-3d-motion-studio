@@ -3,6 +3,7 @@ import {clone as cloneRig} from 'three/addons/utils/SkeletonUtils.js';
 import {skinBoneCount,skinnedMeshes} from './lightweight.js';
 import {consolidateEquivalentSkinRigs} from './rigCanonicalizer.js';
 import {prepareAuxiliaryRigForMixamo} from './auxiliaryRig.js';
+import {restoreSkinnedBindPose} from './bindPose.js';
 
 // MOTION-05A: Reference pose is captured BEFORE AnimationMixer.play().
 // A paused animation is not a bind pose and must never be exported as one.
@@ -178,9 +179,13 @@ export function makeCalibratedAPose(root,options={}){
   return makeCalibratedArmPose(root,{...options,pose:'a'});
 }
 export function prepareMixamoRig(root,referencePose,{pose='reference',accessoryHandling='strict'}={}){
-  if(!['t','a','reference'].includes(pose))
+  if(!['t','a','reference','bind'].includes(pose))
     throw new Error('Modo de pose no reconocido.');
   const clone=cloneAtReferencePose(root,referencePose);
+  // Reconstruct authentic rest/bind pose BEFORE freezing any independent
+  // cloth rig: otherwise Mint's ChestBow gets baked from the animated action
+  // frame, and its static torso attachment cannot follow the recovered pose.
+  const bind=pose==='bind'?restoreSkinnedBindPose(clone):null;
   // Optional, explicitly lossy preparation for an independent clothing rig.
   // Mint ChestBow has 36 bones separate from the body's 340; matching only
   // their root name can NEVER justify skeleton consolidation.
@@ -192,12 +197,15 @@ export function prepareMixamoRig(root,referencePose,{pose='reference',accessoryH
   try{
     const details=pose==='t'?makeCalibratedTPose(clone):
       pose==='a'?makeCalibratedAPose(clone):
-      {pose:'Referencia original (sin modificar)',adjustments:[]};
+      pose==='bind'
+        ?{pose:'Bind pose del esqueleto (sin animación)',adjustments:[]}
+        :{pose:'Referencia original (puede contener fotograma animado)',adjustments:[]};
     return {model:clone,pose:details.pose,adjustments:details.adjustments,
-      consolidation,accessory,bones:skinBoneCount(clone),
+      consolidation,accessory,bind,bones:skinBoneCount(clone),
       meshes:skinnedMeshes(clone).length};
   }catch(error){
-    throw new Error('No se exportó una pose '+(pose==='a'?'A':'T')+' dudosa. '+error.message);
+    throw new Error('No se exportó la pose '+(pose==='a'?'A':pose==='t'?'T':
+      pose==='bind'?'de bind':'original')+' dudosa. '+error.message);
   }
 }
 export function exportableClipJSON(clip,{rigName='personaje',rigBones=0}={}){
