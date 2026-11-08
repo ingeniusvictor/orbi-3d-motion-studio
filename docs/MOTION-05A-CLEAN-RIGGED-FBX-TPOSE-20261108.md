@@ -107,3 +107,39 @@ Si `git status --short` muestra modificaciones, **no ejecutar pull** hasta revis
 5. No sobreescribir los archivos fuente originales ni afirmar aceptación de Mixamo hasta subir el FBX real y aplicar una animación de prueba.
 
 **Límite técnico:** conservar pose original no garantiza que sea A; un FBX que solo trae una pose de acción como base podría producir una copia en esa postura. Evaluar visualmente antes de subirlo a Mixamo. Para rigs con nombres especiales y referencia incorrecta habrá que leer la jerarquía y, posiblemente, usar Blender para ajustar una pose/bind segura.
+
+
+## MOTION-05A.3 — Corrección de múltiples proxies del mismo esqueleto (2026-11-08)
+
+**Reporte real:** al exportar la **pose de referencia original**, el programa indica: `No se exportó el FBX limpio: La referencia no tiene un rig único que pueda verificarse.`
+
+### Hallazgo técnico
+
+El error se origina en `validateBinaryFBX()`: `skinBoneCount()` contaba **objetos Bone diferentes por identidad**, mientras `rigSignature()` deduplicaba por **nombre de hueso y padre óseo**. En FBX complejos, `FBXLoader` puede crear un conjunto de objetos Bone proxy para cada `SkinnedMesh` (cuerpo, cabello, prendas) aun cuando todos representan exactamente el mismo rig. Por ejemplo, 8 huesos x 2 mallas = 16 objetos Bone referenciados pero únicamente 8 nombres humanos únicos. La comparación impedía la exportación, incluso sin solicitar pose A/T.
+
+**Importante:** sin inspeccionar el archivo privado real no podemos afirmar que todos sus huesos son proxies equivalentes; un modelo con dos riggings independientes también puede presentar duplicaciones. La corrección no omite la validación.
+
+### Cambio incorporado
+
+- Nuevo `src/lib/rigCanonicalizer.js` con `consolidateEquivalentSkinRigs()`.
+- Opera **únicamente sobre un clon** preparado desde la pose de referencia antes del primer AnimationMixer; nunca en el modelo original.
+- Detecta mallas con copias de huesos que tienen el mismo nombre. Elige el esqueleto completo de la malla principal como referencia; otras mallas deben reutilizar exactamente huesos de esa estructura, en el mismo orden de índices propio de cada `SkinnedMesh`.
+- Para cada hueso homónimo comprueba **padre óseo idéntico y matriz mundial de referencia equivalente**. Si la jerarquía/pose no coincide, la consolidación se cancela y se explica el hueso conflictivo.
+- Reconstruye los `THREE.Skeleton` de cada malla en la **copia** con referencias a huesos canónicos, preservando la matriz inversa de bind de cada malla y el orden de índices original; verifica posiciones deformadas de vértices muestreados mediante `boneTransform()` para evitar cambios silenciosos del skin.
+- Retira exclusivamente ramas de huesos proxy redundantes que **no contienen mallas, accesorios ni elementos propios**. Si hay elementos extra, cancela la consolidación en lugar de borrarlos.
+- El exportador valida de nuevo el FBX binario por `FBXLoader` y por lectura física de nodos `LimbNode` y conexiones, exige cero animaciones, skinned meshes y **una sola raíz ósea física** antes de permitir descargar como rig para Mixamo.
+- Si el sistema consolidó proxies, el aviso de éxito indica, por ejemplo, «Se consolidaron 16 referencias de huesos en 8 huesos físicos de un solo rig».
+- Si hay dos personajes reales/rígidos disjuntos, referencias en distintas poses o parientes incompatibles, sigue siendo una condición bloqueante que requiere revisión manual.
+
+### Pruebas
+
+`tests/motionExtraction.test.js` incorpora tres escenarios:
+1. FBXLoader simulado con cuerpo y ropa: dos conjuntos de proxies equivalentes de 8 huesos, uno por malla; deben producir **un único FBX de 8 huesos físicos, 2 mallas, 0 clips**, reimportable. El original conserva las 16 referencias.
+2. Dos mallas con huesos homónimos en posiciones distintas: **rechazadas** sin mutar original.
+3. Dos personajes con nombres de huesos distintos y raíces separadas: **rechazados** como multirig, no se finge compatibilidad Mixamo.
+
+Se conservan todas las pruebas anteriores de LP-03D, MOTION-05A.1, MOTION-05A.2 y seguridad de exportación. CI: 197/197 pruebas aprobadas y compilación Vite correcta (código previo al ajuste cosmético de prueba), https://github.com/ingeniusvictor/orbi-3d-motion-studio/actions/runs/42462562382 .
+
+### Validación real pendiente
+
+Detener el servidor Vite, verificar `git status --short`, y si limpio `git pull --ff-only`. Ejecutar tests/build/reiniciar `localhost:5174`; actualizar Chrome con `Ctrl+Shift+R` y **volver a cargar el FBX original con sus animaciones**. Elegir **Biblioteca de animaciones → MOTION-05 → Pose original** (no forzar A/T) y pulsar Exportar FBX limpio. Si se descarga `_POSE_ORIGINAL.fbx`, reimportar y confirmar 0 clips, mallas, rig y postura intacta. Después probar Mixamo. Si sigue fallando, registrar **el error nuevo exacto**, que debe identificar bone names, parentesco, matrices o múltiples raíces; esos datos permitirán analizar las particularidades reales sin desactivar protecciones.
