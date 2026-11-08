@@ -158,12 +158,12 @@ export default function App() {
     } catch(error) {setNotice({type:'error',text:`No se pudo exportar: ${error.message||error}`});}
     finally {setBusy('');}
   };
-  const exportCleanFBX=async ({pose='reference',accessoryHandling='strict'}={})=>{
+  const exportCleanFBX=async ({pose='reference',accessoryHandling='strict',orientation='keep'}={})=>{
     if(!viewer.current||!model)return;
     setBusy('Preparando FBX sin animaciones · '+accessoryModeLabel(accessoryHandling)+'…');
     setNotice(null);
     try{
-      const result=await viewer.current.exportCleanMixamoFBX({pose,accessoryHandling});
+      const result=await viewer.current.exportCleanMixamoFBX({pose,accessoryHandling,orientation});
       const rotations=result.adjustments?.map(a=>a.side+': brazo '+
         a.upperDegrees.toFixed(1)+'°, antebrazo '+a.forearmDegrees.toFixed(1)+'°').join(' | ');
       setNotice({type:'success',text:result.filename+' descargado ('+
@@ -195,12 +195,20 @@ export default function App() {
               'Eje cabeza-pelvis '+result.bind.angleAfter+
               '° respecto de Y; revisa visualmente si está erguido. ':'')
           :'')+
+        (result.orientation?.mode==='upright'?
+          'Verticalización FBX: '+result.orientation.beforeAngle+'° → '+
+          result.orientation.roundTripAngle+'° después de reimportar, '+
+          result.orientation.verticesChecked+' muestras sin deformación. ':'')+
+        (result.integrity?.passed?
+          'Integridad geométrica: '+result.integrity.meshCount+
+          ' mallas auditadas; triángulos, materiales y superficies verificados. ':'')+
         (result.warnings?.length?'Avisos de exportación: '+
           result.warnings.join(' ')+'. ':'')+
         'Pose exportada: '+result.pose+'. Reabre el FBX en ORBI antes de probarlo en Mixamo. La aceptación por Mixamo no está garantizada.'});
     }catch(error){
       setNotice({type:'error',text:'No se exportó el FBX limpio. '+
-        'Tratamiento aplicado: '+accessoryModeLabel(accessoryHandling)+'. '+
+        'Tratamiento aplicado: '+accessoryModeLabel(accessoryHandling)+
+        '; orientación '+(orientation==='upright'?'vertical física':'original')+'. '+
         (error.message||String(error))+
         strictSplitRigHint(error,accessoryHandling)});
     }finally{setBusy('');}
