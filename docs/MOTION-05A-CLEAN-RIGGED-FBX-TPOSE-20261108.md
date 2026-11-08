@@ -281,3 +281,24 @@ Se añadieron cinco regresiones `MOTION-05B`: conservación del adorno como mall
 5. Si falla, el **nuevo mensaje debe enumerar nombres de huesos físicos faltantes y nuevos**. No volver a eliminar huesos ni ajustar su skin sin conocer esa discrepancia.
 
 **Nota:** el test binario es un rig pequeño sintético que reproduce el caso de raíz renombrada; no incluye los 340+36 huesos ni la geometría privada de Mint. La aceptación efectiva de Mint en Mixamo y la ausencia de deformaciones reales siguen pendientes de QA del usuario. La rama `main`, LUMIA R8 y el FBX original no han sido modificados.
+
+
+## MOTION-05C.1 — Cámara de recuperación y orientación visual para FBX Mixamo (8 nov 2026)
+
+**Resultado de usuario real:** el FBX limpio `_BOW_RIGID.fbx` finalmente **se descargó y se volvió a cargar en ORBI**; la exportación es exitosa en este caso, pero el personaje aparece aparentemente «botado en el espacio» y cuesta encontrarlo o acercarse. **El usuario indica que la pose exportada no es T** (correcto: el modo elegido fue `Pose original`, que nunca prometió una T). Aún **no se ha comprobado** la postura, orientación física, visual del lazo, todos los pesos de deformación o aceptación del archivo en Mixamo.
+
+### Causa probable del encuadre y corrección de cámara
+
+El antiguo `MotionViewer.resetCamera()` usaba `new THREE.Box3().setFromObject(this.model,true)` sobre la jerarquía completa del FBX. En personajes complejos con root de escala 100, auxiliares reparentados y vértices/transformaciones extraños, puede resultar un bounding box muy grande o con centro alejado de los vértices verdaderamente visibles del cuerpo.
+
+- **Nuevo `src/lib/visibleBounds.js`**: `computeVisibleCharacterBounds()` muestrea posiciones reales de vértices (incluidos skinning/morphs mediante `mesh.getVertexPosition`) en **coordenadas mundiales** para calcular una caja robusta. Prioriza la malla corporal skinned, agrega mallas próximas y excluye geometría auxiliar muy distante. No considera huesos sueltos para encuadrar; ignora puntos no finitos y ofrece ruta de fallback si faltan mallas visibles. El cálculo tiene presupuesto de muestras para no bloquear la UI con avatares premium densos.
+- `cameraFitParameters()` adapta la distancia, los planos near/far y límites OrbitControls a la escala real. `MotionViewer.resetCamera()` utiliza ese resultado automáticamente al abrir el FBX, establece el `controls.target` sobre el cuerpo y ajusta distancia, cuadrícula y clipping. **No modifica mallas, pesos, rig, animaciones, posición ni rotación del personaje**, ni se escribe sobre el FBX exportado.
+- **Botón «Centrar»** visible en la parte superior del visor. Si el usuario pierde el personaje por orbit/zoom/pan, vuelve a enmarcarlo usando su geometría real. Se conserva como recuperación de cámara segura.
+- **Botón «Enderezar vista»** (flecha hacia arriba) visible para FBX: detecta el vector cabeza→pelvis del esqueleto corporal principal (`Bip001-Head` y `Bip001-Pelvis/Hips`) y rota **solo la cámara** para mostrarlo vertical. Si no puede identificarse de forma fiable, se rechaza la operación sin tocar el modelo. No pretende corregir la orientación del FBX para Mixamo.
+- Al abrir un archivo cuyo eje cabeza-pelvis está a más de 45° de Y mundial, el aviso informa el ángulo y advierte que se trata solo de una vista de inspección. Si el modelo de verdad queda horizontal en coordenadas FBX, la corrección permanente requiere una operación posterior de ejes/transformaciones sobre una copia, con auditoría de bind pose; nunca se debe ocultar ese problema girando a ciegas la malla o el root del rig.
+
+### QA
+
+Nuevo `tests/visibleBounds.test.js` con cuatro pruebas: personaje con coordenadas desplazadas que debe centrarse en sus vértices reales; malla estática auxiliar a 250000 unidades que debe ser ignorada sin mutarse; cuerpo rotado 90° cuyo eje anatómico se detecta sin alterarlo; escenas vacías sin riesgos. **224/224 tests y compilación Vite verde**: https://github.com/ingeniusvictor/orbi-3d-motion-studio/actions/runs/42508281915.
+
+**Prueba en Windows:** detener Vite y actualizar `git pull --ff-only` manteniendo el `package-lock.json` untracked que no afecta la rama. Recargar Chrome Ctrl+Shift+R, abrir directamente el FBX `*_BOW_RIGID.fbx`; comprobar que el visor lo encuadra automáticamente. Si se pierde, pulsar **Centrar**. Si aparece horizontal, pulsar **Enderezar vista** y revisar el aviso de ángulo. Evaluar el archivo visualmente en vista normal y en vista vertical, pero **no confundir** la cámara con una conversión real de ejes. Guardar screenshot y contraste con pose del original; después comprobar si Mixamo acepta el archivo.
