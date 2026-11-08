@@ -6,6 +6,7 @@ import TextureStudio from './TextureStudio.jsx';
 import LivingPresenceLab from './LivingPresenceLab.jsx';
 import FaceQuickDock from './FaceQuickDock.jsx';
 import MotionExtractor from './MotionExtractor.jsx';
+import {accessoryModeLabel,strictSplitRigHint} from './lib/motionExportModes.js';
 import { blenderConvertScript } from './lib/mixamoKit.js';
 import { formatBytes } from './lib/modelInfo.js';
 
@@ -154,7 +155,7 @@ export default function App() {
   };
   const exportCleanFBX=async ({pose='reference',accessoryHandling='strict'}={})=>{
     if(!viewer.current||!model)return;
-    setBusy('Restaurando pose y verificando FBX riggeado sin animaciones…');
+    setBusy('Preparando FBX sin animaciones · '+accessoryModeLabel(accessoryHandling)+'…');
     setNotice(null);
     try{
       const result=await viewer.current.exportCleanMixamoFBX({pose,accessoryHandling});
@@ -177,8 +178,10 @@ export default function App() {
           :'')+
         'Pose exportada: '+result.pose+'. Reabre el FBX en ORBI antes de probarlo en Mixamo. La aceptación por Mixamo no está garantizada.'});
     }catch(error){
-      setNotice({type:'error',text:'No se exportó el FBX limpio: '+
-        (error.message||String(error))});
+      setNotice({type:'error',text:'No se exportó el FBX limpio. '+
+        'Tratamiento aplicado: '+accessoryModeLabel(accessoryHandling)+'. '+
+        (error.message||String(error))+
+        strictSplitRigHint(error,accessoryHandling)});
     }finally{setBusy('');}
   };
   const downloadRigDiagnostic=async()=>{
