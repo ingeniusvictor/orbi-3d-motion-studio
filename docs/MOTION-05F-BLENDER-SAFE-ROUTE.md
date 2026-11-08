@@ -29,12 +29,8 @@ $dialog.Title = "Selecciona el FBX ORIGINAL de Mint Swimsuit"
 if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { throw "Cancelado." }
 $original = $dialog.FileName
 $salida = Join-Path (Split-Path $original) "MINT_MOTION05F_CANDIDATE.fbx"
-$blender = @(
-  "$env:ProgramFiles\Blender Foundation\Blender 5.0\blender.exe",
-  "$env:ProgramFiles\Blender Foundation\Blender 4.5\blender.exe",
-  "$env:ProgramFiles\Blender Foundation\Blender 4.4\blender.exe",
-  "$env:ProgramFiles\Blender Foundation\Blender 4.3\blender.exe"
-) | Where-Object { Test-Path $_ } | Select-Object -First 1
+$blender = Get-ChildItem "$env:ProgramFiles\Blender Foundation" -Filter blender.exe -Recurse -ErrorAction SilentlyContinue |
+  Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
 if (-not $blender) {
   $cmd = Get-Command blender.exe -ErrorAction SilentlyContinue
   if ($cmd) { $blender = $cmd.Source }
