@@ -181,6 +181,8 @@ export default function App() {
             result.accessory.preservedAttachments.map(x=>x.name+' → '+x.target)
               .join('; ')+'. '
           :'')+
+        (result.warnings?.length?'Avisos de exportación: '+
+          result.warnings.join(' ')+'. ':'')+
         'Pose exportada: '+result.pose+'. Reabre el FBX en ORBI antes de probarlo en Mixamo. La aceptación por Mixamo no está garantizada.'});
     }catch(error){
       setNotice({type:'error',text:'No se exportó el FBX limpio. '+
