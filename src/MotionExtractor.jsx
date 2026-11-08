@@ -1,11 +1,19 @@
-import {useState} from 'react';
+import {useEffect,useState} from 'react';
+import {isKnownMintSplitRig,suggestedAccessoryMode,accessoryModeLabel} from './lib/motionExportModes.js';
 import {Download,Film,ShieldCheck} from 'lucide-react';
 
 // MOTION-05A controls remain beside the Animation Library, never in the
 // sprawling right-side inspector. The live rig/clips are never deleted.
 export default function MotionExtractor({model,clips=[],activeClip,busy,onExportRig,onSaveClip,onDownloadRigDiagnostic}){
   const [pose,setPose]=useState('reference');
-  const [accessoryHandling,setAccessoryHandling]=useState('strict');
+  const [accessoryHandling,setAccessoryHandling]=useState(()=>
+    suggestedAccessoryMode(model));
+  const knownMint=isKnownMintSplitRig(model);
+  useEffect(()=>{
+    // Initial selection is a *visible recommendation* only, not a mutation.
+    // The actual lossy copy is generated solely after pressing Export.
+    setAccessoryHandling(suggestedAccessoryMode(model));
+  },[model?.filename,model?.meshes,model?.bones]);
   if(!model)return null;
   const eligible=(model.format==='FBX'||model.format==='GLB'||model.format==='GLTF');
   const rigged=Number(model.bones)>0&&Number(model.meshes)>0;
@@ -24,6 +32,13 @@ export default function MotionExtractor({model,clips=[],activeClip,busy,onExport
           <option value="t">Pose T calibrada — brazos horizontales</option>
         </select>
       </label>
+      {knownMint&&<p>
+        <strong>Mint Swimsuit detectado: dos rigs reales (cuerpo y lazo ChestBow).</strong>
+        {' '}La opción estricta repetirá el error de «root». Para conservar
+        visualmente el lazo en el FBX de Mixamo, utiliza <strong>lazo rígido</strong>
+        (seleccionado como sugerencia). Esto quita su animación flexible
+        solo de la copia exportada.
+      </p>}
       <label className="motion-extractor-pose">Accesorios con esqueleto independiente
         <select value={accessoryHandling}
           onChange={e=>setAccessoryHandling(e.target.value)}
@@ -40,11 +55,14 @@ export default function MotionExtractor({model,clips=[],activeClip,busy,onExport
           :' el accesorio se omite del FBX para Mixamo; el archivo original conserva todas sus piezas.'}
         Solo se aplica a un accesorio identificado con rig separado, nunca al cuerpo.
       </small>}
+      <small>Preparación seleccionada: <strong>{accessoryModeLabel(accessoryHandling)}</strong>.
+        El FBX original no será modificado.</small>
       <div className="motion-extractor-actions">
         <button className="outline-btn" type="button"
           disabled={Boolean(busy)||!eligible||!rigged}
           onClick={()=>onExportRig({pose,accessoryHandling})}>
-          <Download size={14}/> Exportar FBX limpio
+          <Download size={14}/> {accessoryHandling==='rigid'?'Exportar FBX con lazo rígido':
+            accessoryHandling==='exclude'?'Exportar FBX solo cuerpo':'Exportar FBX (validación estricta)'}
         </button>
         <button className="outline-btn" type="button"
           disabled={Boolean(busy)||activeClip===null||!clips[activeClip]}
