@@ -19,11 +19,20 @@ const candidates={
 function poseNodes(root){
   const out=[];root.traverse(node=>out.push(node));return out;
 }
+// Three's FBXLoader may assign display .type labels that are not preserved
+// by SkeletonUtils.clone(). Structural safety depends on actual bone/skin
+// classes, hierarchy, and binding—not an arbitrary presentation string.
+function structuralKind(node){
+  if(node.isBone)return 'bone';
+  if(node.isSkinnedMesh)return 'skinnedMesh';
+  if(node.isMesh)return 'mesh';
+  return 'transform';
+}
 export function captureReferencePose(root){
   if(!root)throw new Error('No se ha cargado un personaje.');
   const nodes=poseNodes(root);
   return nodes.map(n=>({
-    name:n.name,type:n.type,
+    name:n.name,type:n.type,kind:structuralKind(n),
     position:n.position.toArray(),quaternion:n.quaternion.toArray(),
     scale:n.scale.toArray(),
     morph:n.morphTargetInfluences?Array.from(n.morphTargetInfluences):null,
@@ -40,8 +49,21 @@ export function cloneAtReferencePose(root,records){
     throw new Error('La jerarquía del personaje cambió; no se puede restaurar el bind original.');
   nodes.forEach((node,i)=>{
     const source=records[i];
-    if(node.name!==source.name||node.type!==source.type)
-      throw new Error('La jerarquía original no coincide con la copia de exportación.');
+    // The loader can supply an unnamed root and the viewer later labels it
+    // with the filename. The top-level label is NOT a bone/skin identity.
+    // Every descendant still requires its original name and traversal slot.
+    const rootLabelOnly=(i===0);
+    if(!rootLabelOnly&&node.name!==source.name)
+      throw new Error('La copia cambió el nombre del nodo #'+i+
+        ' (original: «'+source.name+'», copia: «'+node.name+'»). No se exportó.');
+    // A custom FBX .type string may change when a Three class is cloned;
+    // only changes to functional Bone/SkinnedMesh/Mesh roles are unsafe.
+    if(source.kind&&structuralKind(node)!==source.kind)
+      throw new Error('La copia cambió el tipo estructural del nodo #'+i+
+        ' («'+source.name+'»). No se exportó.');
+    if(!source.kind&&!rootLabelOnly&&node.type!==source.type)
+      throw new Error('La copia cambió el tipo del nodo #'+i+
+        ' («'+source.name+'»). No se exportó.');
     node.position.fromArray(source.position);
     node.quaternion.fromArray(source.quaternion);
     node.scale.fromArray(source.scale);
