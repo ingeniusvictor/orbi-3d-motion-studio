@@ -182,3 +182,32 @@ En MOTION-05A.3 se unificaban nombres óseos equivalentes solo si sus **matrices
 ### Resultado automatizado
 
 201/201 pruebas y compilación verde en la primera corrección de matrices y 202 pruebas tras integrar el diagnóstico, sujetos a comprobar en GitHub Actions. Los tests de rigs de ensayo no garantizan compatibilidad con el activo real.
+
+
+## MOTION-05B — Preparar FBX Mixamo cuando un accesorio tiene otro esqueleto (8 nov 2026)
+
+**Origen:** el diagnóstico local aportado por el usuario identificó dos mallas `SkinnedMesh` en Mint Swimsuit: una malla corporal con **340 huesos** (`Bip001`) y el accesorio `ChestBow` con **36 huesos** (`*_adjust`, `B_*_cb*`). De los **376 objetos de hueso**, solo `root` se repite como nombre. Ambos `root` tienen transformaciones de mundo diferentes: el del accesorio está trasladado y rotado en un sistema de escala ~100; el del cuerpo está en origen. **No son duplicados equivalentes del mismo esqueleto.** Esta información es suficiente para justificar separar los rigs, no para forzar una matriz uniforme o compartir su `root`. El archivo de diagnóstico completo y el FBX privado no se guardaron en GitHub.
+
+### Nueva ruta de exportación opcional
+
+En **Biblioteca de animaciones → MOTION-05**, además de elegir Pose original/A/T, se ofrece un selector independiente **Accesorios con esqueleto independiente**:
+
+- **Conservar rig original (validación estricta)** — opción inicial segura. Sigue bloqueando personajes con dos rigs incompatibles, sin modificar nada.
+- **Mixamo: conservar accesorio como malla rígida en el pecho** — copia de exportación con **un único esqueleto corporal**, preservando la forma visible y materiales del lazo, pero eliminando solamente su **rig auxiliar y movimiento independiente de tela**. El lazo rígido queda parentado a un hueso del torso (priorizando `Bip001-Spine2`, que está presente en el diagnóstico), y acompañará al torso cuando Mixamo aplique movimientos.
+- **Mixamo: exportar solo cuerpo, sin accesorio auxiliar** — conserva exclusivamente el cuerpo y su rig en el FBX de salida. No modifica ni borra el adorno del FBX de origen.
+
+### Guardas de seguridad
+
+- El detector `src/lib/auxiliaryRig.js` requiere **exactamente dos mallas riggeadas**, un rig corporal claramente mayor que uno auxiliar de 2–96 huesos, una malla identificable por su nombre como lazo/adorno, **cero huesos físicos compartidos** y no más de una coincidencia de nombre `root`, que debe ser raíz. No es retargeting ni soldadura de esqueletos.
+- En modo `rigid`, el programa **hornea todos los vértices skinned** del accesorio en su postura de referencia, conserva materiales y UVs, retira los atributos de skinning del adorno ya congelado y lo asocia a un hueso de pecho del rig corporal sin modificar visualmente su ubicación. Comprueba la posición de todos sus vértices en coordenadas mundiales antes y después de cambiarlo de padre; cualquier error relevante bloquea la exportación.
+- **Nunca** se quita un hueso auxiliar que contenga otros objetos desconocidos. Tampoco se quita un segundo personaje no identificado como accesorio, ni un skin que comparta huesos físicos con el cuerpo.
+- Luego se aplica la auditoría de un único rig y exportación FBX binario: esqueleto corporal, malla riggeada, cero clips, una sola raíz ósea. En `rigid`, adicionalmente se comprueba que `FBXLoader` haya reimportado la malla estática del lazo.
+- El FBX fuente se mantiene intacto en memoria y disco; todo opera sobre una **copia**. La salida distingue los nombres `_BOW_RIGID.fbx` y `_SOLO_CUERPO.fbx`.
+- Si Mixamo rechaza un archivo o el accesorio se ve incorrecto, revisar los resultados en ORBI/Blender y usar **solo cuerpo** como respaldo. Se deberá volver a ensamblar el lazo con el personaje animado si se necesita la flexibilidad original.
+- La estructura 340+36 proviene del diagnóstico de huesos, no de la geometría del FBX original, que aún no se ha inspeccionado. Por eso la apariencia auténtica y compatibilidad Mixamo permanecen **sin confirmar** hasta QA.
+
+### Pruebas y continuidad
+
+Se añadieron cinco regresiones `MOTION-05B`: conservación del adorno como malla rígida en el FBX reimportado, cuerpo exportado sin accesorio, bloqueo estricto original, rechazo de un segundo personaje falso y protección contra elementos adicionales en el árbol auxiliar. Resultado de CI: **207/207 pruebas y compilación verde**, run https://github.com/ingeniusvictor/orbi-3d-motion-studio/actions/runs/42464625293.
+
+**QA recomendado:** actualizar la rama experimental, recargar en ORBI el FBX original con movimiento. Seleccionar **Pose original** y **Mixamo: conservar accesorio como malla rígida en el pecho**. Exportar y reabrir `*_POSE_ORIGINAL_BOW_RIGID.fbx`, verificando que ahora hay **una sola malla riggeada**, el lazo visible en su lugar como mesh rígida, cuerpo con ~340 huesos y **0 animaciones**. Si falta el lazo o la ubicación cambió, no subir a Mixamo: probar la opción `Mixamo: exportar solo cuerpo` y reportar el error exacto. Si se ve bien, probar Mixamo y una animación simple con brazos, y revisar visualmente el lazo al mover el torso.
