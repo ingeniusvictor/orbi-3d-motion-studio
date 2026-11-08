@@ -62,21 +62,24 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip}){
     utterance.current=null;
     setVoiceStatus('idle');
   };
-  // On VRM/FBX changes, stop old speech rather than let stale audio
-  // callbacks animate a newly selected model.
+  // Switching model/clip cannot leave a stale voice session driving the rig.
+  // Keep already loaded local audio available when only the FBX changes.
   useEffect(()=>{
-    bridge.current.cancel('model-changed');
-    return ()=>{
-      controller.current?.abort();
-      detachAudio.current?.();detachAudio.current=null;
-      currentToken.current=null;
-      bridge.current.cancel('unmounted');
-      if(typeof window!=='undefined')window.speechSynthesis?.cancel();
-      if(audio.current)audio.current.pause();
-      if(soundUrl.current)URL.revokeObjectURL(soundUrl.current);
-    };
-  // getViewer is stable in App; model generation and clip selection invalidate sessions.
+    stop('model-or-clip-changed');
+    setIntent(null);setMessage('');
   },[generation,activeClip,getViewer]);
+  // Release object URLs and browser speech only when the component unmounts.
+  useEffect(()=>()=> {
+    controller.current?.abort();
+    detachAudio.current?.();detachAudio.current=null;
+    currentToken.current=null;
+    bridge.current.cancel('unmounted');
+    if(typeof window!=='undefined')window.speechSynthesis?.cancel();
+    if(audio.current)audio.current.pause();
+    if(soundUrl.current){
+      URL.revokeObjectURL(soundUrl.current);soundUrl.current=null;
+    }
+  },[]);
 
   const connect=async()=>{
     setError('');setMessage('');setBusy(true);
@@ -148,7 +151,10 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip}){
         if(currentToken.current!==token)return;
         bridge.current.start(token);
         setVoiceStatus('speaking');
-        setMessage('Voz del navegador sonando: el gesto sigue el comienzo real del audio.');
+        const status=bridge.current.getStatus();
+        setMessage(status.motorApplied
+          ? 'Voz del navegador iniciada: movimiento ligado al audio.'
+          : 'Voz iniciada SIN gestos: '+status.reason);
       };
       speech.onpause=()=>{if(currentToken.current===token){
         bridge.current.pause(token);setVoiceStatus('paused');
@@ -180,8 +186,12 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip}){
       detachAudio.current=bindMediaElementMotor(audio.current,bridge.current,token);
       try{
         await audio.current.play(); // 'playing' starts motor, not this promise.
+        if(currentToken.current!==token)return;
         setVoiceStatus('speaking');
-        setMessage('Audio local en reproducción; no se utiliza el TTS del navegador.');
+        const status=bridge.current.getStatus();
+        setMessage(status.motorApplied
+          ? 'Audio local reproduciéndose: el sistema motor acompaña la voz.'
+          : 'Audio local sonando SIN gestos: '+status.reason);
       }catch(e){
         bridge.current.end(token,'play-error');
         detachAudio.current?.();detachAudio.current=null;
