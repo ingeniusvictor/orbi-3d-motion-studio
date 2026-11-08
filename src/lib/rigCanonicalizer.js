@@ -155,8 +155,17 @@ export function consolidateEquivalentSkinRigs(root){
   // Two separate characters may have identical bone names and the same
   // translation across every bone. Require each shifted skin to physically
   // remain near the chosen character's canonical bone envelope.
-  const envelope=worldBoneBounds(canonicalSet);
   const before=meshes.map(mesh=>skinSamples(mesh));
+  const envelope=worldBoneBounds(canonicalSet);
+  // A character mesh may legitimately be in mesh-local coordinates far
+  // from its skeleton origin. Cover BOTH the canonical joint bounds and its
+  // actually skinned geometry, not bones alone.
+  const mainSamples=before[meshes.indexOf(main)];
+  if(mainSamples?.length){
+    envelope.union(sampleBounds(mainSamples));
+    const span=envelope.getSize(new THREE.Vector3()).length();
+    envelope.expandByScalar(Math.max(0.02,span*0.2));
+  }
   descriptors.forEach((entry,i)=>{
     if(entry.displacement<=DIFF_TOLERANCE)return;
     const samples=before[i],bounds=sampleBounds(samples);
