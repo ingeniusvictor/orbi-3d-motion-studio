@@ -84,7 +84,11 @@ test('MOTION-05D.1 refuses two incompatible inverse binds for same physical bone
   root.add(other);
   const bones=body.skeleton.bones;
   const inverses=body.skeleton.boneInverses.map(m=>m.clone());
-  inverses[0].elements[12]+=.5;
   other.bind(new THREE.Skeleton(bones,inverses));
+  // Inject the discrepancy AFTER the Three.js constructor/bind logic.
+  // Verifies that each skin actually exposes a different inverse matrix.
+  other.skeleton.boneInverses[0].elements[12]+=.5;
+  assert.notEqual(other.skeleton.boneInverses[0].elements[12],
+    body.skeleton.boneInverses[0].elements[12]);
   assert.throws(()=>restoreSkinnedBindPose(root),/contradictorias/);
 });
