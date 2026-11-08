@@ -17,7 +17,7 @@ export class VoiceMotorBridge{
     this.cancel('replaced');
     const token=++this.sequence;
     this.session={
-      token,intent,started:false,paused:false,motorApplied:false,lipsApplied:false,
+      token,intent,started:false,paused:false,motorApplied:false,lipsApplied:false,faceApplied:false,
       lipSource:lipSource==='file'?'file':'browser',
       viewer:null,presenceIdentity:null,restore:null,gestureTriggered:false,
     };
@@ -36,11 +36,14 @@ export class VoiceMotorBridge{
     s.lipsApplied=Boolean(viewer?.startLivingLipSync?.(token,{
       text:s.intent.dialogue,source:s.lipSource,
     }));
+    s.faceApplied=Boolean(viewer?.startLivingFaceSpeech?.(token,{
+      mode:s.intent.motorMode,
+    }));
     const eligibility=viewer?.getLivingSpeechMotorAvailability?.()||
       {available:false,reason:'Visor no disponible.'};
     if(!eligibility.available){
       this.last={status:'speaking',reason:eligibility.reason||'Motor no disponible.',
-        motorApplied:false,lipsApplied:s.lipsApplied};
+        motorApplied:false,lipsApplied:s.lipsApplied,faceApplied:s.faceApplied};
       return true; // Voice must still be allowed without animation.
     }
     s.restore={
@@ -62,7 +65,7 @@ export class VoiceMotorBridge{
       status:'speaking',reason:s.gestureTriggered?
         'Voz iniciada: gesto sincronizado con el comienzo del audio.':
         'Voz iniciada: respuesta corporal atenta.',
-      motorApplied:true,lipsApplied:s.lipsApplied,
+      motorApplied:true,lipsApplied:s.lipsApplied,faceApplied:s.faceApplied,
     };
     return true;
   }
@@ -71,12 +74,13 @@ export class VoiceMotorBridge{
     if(!s||s.token!==token||!s.started||s.paused)return false;
     s.paused=true;
     if(s.lipsApplied)s.viewer?.pauseLivingLipSync?.(token);
+    if(s.faceApplied)s.viewer?.stopLivingFaceSpeech?.(token);
     if(s.motorApplied){
       s.viewer.setLivingGestureEnabled(false); // cancel ongoing action on pause
       s.viewer.setLivingMotorMode('attentive');
     }
     this.last={status:'paused',reason:'Audio pausado; gesto detenido.',
-      motorApplied:s.motorApplied,lipsApplied:s.lipsApplied};
+      motorApplied:s.motorApplied,lipsApplied:s.lipsApplied,faceApplied:s.faceApplied};
     return true;
   }
   resume(token){
@@ -84,13 +88,14 @@ export class VoiceMotorBridge{
     if(!s||s.token!==token||!s.started||!s.paused)return false;
     s.paused=false;
     if(s.lipsApplied)s.viewer?.resumeLivingLipSync?.(token);
+    if(s.faceApplied)s.viewer?.startLivingFaceSpeech?.(token,{mode:s.intent.motorMode});
     if(s.motorApplied){
       s.viewer.setLivingGestureEnabled(true);
       s.viewer.setLivingMotorMode(s.intent.motorMode);
       // Do NOT retrigger a gesture after audio resume.
     }
     this.last={status:'speaking',reason:'Audio reanudado.',
-      motorApplied:s.motorApplied,lipsApplied:s.lipsApplied};
+      motorApplied:s.motorApplied,lipsApplied:s.lipsApplied,faceApplied:s.faceApplied};
     return true;
   }
   end(token,reason='ended'){
@@ -99,6 +104,8 @@ export class VoiceMotorBridge{
     this.session=null;
     if(s.lipsApplied&&s.viewer&&s.viewer.presence===s.presenceIdentity)
       s.viewer.stopLivingLipSync?.(token);
+    if(s.faceApplied&&s.viewer&&s.viewer.presence===s.presenceIdentity)
+      s.viewer.stopLivingFaceSpeech?.(token);
     if(s.motorApplied&&s.viewer&&s.viewer.presence===s.presenceIdentity){
       // End always returns the motor controls to precisely their user-owned
       // enabling/mode/intensity. Gesture reset prevents stale actions.
@@ -113,7 +120,7 @@ export class VoiceMotorBridge{
       }
     }
     this.last={status:reason,reason:'Audio finalizado. Controles de reposo restaurados.',
-      motorApplied:false,lipsApplied:false};
+      motorApplied:false,lipsApplied:false,faceApplied:false};
     return true;
   }
   cancel(reason='cancelled'){
