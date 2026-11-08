@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import {computeVisibleCharacterBounds,cameraFitParameters} from './visibleBounds.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
@@ -231,36 +232,53 @@ export class MotionViewer {
     return true;
   }
   resetCamera() {
-    if (!this.model) {
+    if(!this.model){
       this.camera.position.set(3,2.5,5);
       this.controls.target.set(0,1,0);
       this.controls.update();
-      return;
+      return {ok:false,reason:'Sin personaje cargado'};
     }
-    this.model.updateWorldMatrix(true, true);
-    const box = new THREE.Box3().setFromObject(this.model, true);
-    if (box.isEmpty() || !Number.isFinite(box.min.x) || !Number.isFinite(box.max.x) ||
-      !Number.isFinite(box.min.y) || !Number.isFinite(box.max.y) ||
-      !Number.isFinite(box.min.z) || !Number.isFinite(box.max.z)) {
-      this.camera.position.set(3,2.5,5); this.controls.target.set(0,0,0); this.controls.update(); return;
+    // The imported character is *never* moved, resized or rotated here.
+    // Fit a camera around actual world-space skinned vertex positions,
+    // not Bone helpers / bind ghost offsets in an imported FBX hierarchy.
+    const visible=computeVisibleCharacterBounds(this.model);
+    let box=visible?.box;
+    let method=visible?.method||'fallback';
+    if(!box){
+      this.model.updateWorldMatrix(true,true);
+      box=new THREE.Box3().setFromObject(this.model,true);
     }
-    const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3());
-    const radius = Math.max(size.length() / 2, 0.001);
-    const vfov = THREE.MathUtils.degToRad(this.camera.fov);
-    const hfov = 2 * Math.atan(Math.tan(vfov / 2) * this.camera.aspect);
-    const distance = Math.max(radius / Math.sin(vfov / 2), radius / Math.sin(hfov / 2), 0.02) * 1.35;
-    this.camera.near = Math.max(distance / 2000, 0.00001);
-    this.camera.far = Math.max(distance * 100, radius * 100, 100);
+    const fit=cameraFitParameters(box,{
+      fovDegrees:this.camera.fov,aspect:this.camera.aspect,
+    });
+    if(!fit){
+      this.camera.position.set(3,2.5,5);
+      this.controls.target.set(0,0,0);
+      this.controls.update();
+      return {ok:false,reason:'Geometría sin límites finitos'};
+    }
+    this.camera.up.set(0,1,0);
+    this.camera.near=fit.near;
+    this.camera.far=fit.far;
     this.camera.updateProjectionMatrix();
-    this.camera.position.set(center.x + distance * 0.24, center.y + distance * 0.15, center.z + distance);
-    this.controls.target.copy(center);
-    this.controls.minDistance = Math.max(radius * 0.05, 0.0005);
-    this.controls.maxDistance = Math.max(distance * 40, 50);
+    this.camera.position.copy(fit.center).add(
+      new THREE.Vector3(.24,.15,1).normalize().multiplyScalar(fit.distance));
+    this.controls.target.copy(fit.center);
+    this.controls.minDistance=fit.minDistance;
+    this.controls.maxDistance=fit.maxDistance;
     this.controls.update();
-    this.grid.position.y = box.min.y-0.015;
-    this.grid.scale.setScalar(Math.max(radius / 5, 0.001));
+    this.grid.position.y=box.min.y-.015;
+    this.grid.scale.setScalar(Math.max(fit.radius/5,.001));
+    this.lastCameraFit={
+      method,center:fit.center.toArray().map(n=>Number(n.toFixed(4))),
+      size:fit.size.toArray().map(n=>Number(n.toFixed(4))),
+      anchor:visible?.anchorName||null,
+      included:visible?.includedMeshes||0,
+      excluded:visible?.excludedMeshes||0,
+    };
+    return {ok:true,...this.lastCameraFit};
   }
+  getCameraFitInfo(){return this.lastCameraFit||null;}
   async open(files) {
     const request = ++this.loadSequence;
     const loaded = await loadObject(files);
