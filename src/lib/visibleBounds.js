@@ -113,29 +113,81 @@ export function detectBodyUpDirection(root){
   const skins=[];
   root.traverse(n=>{if(n.isSkinnedMesh&&n.skeleton?.bones?.length)
     skins.push(n);});
-  const main=skins.sort((a,b)=>b.skeleton.bones.length-a.skeleton.bones.length)[0];
-  if(!main)return null;
-  const bones=main.skeleton.bones;
-  const find=(patterns)=>{
-    for(const pattern of patterns){
-      const found=bones.filter(b=>pattern.test(b.name||''));
-      if(found.length===1)return found[0];
-    }
-    return null;
+  // A separate bow/garment skeleton can contain misleading helper names.
+  // A positive result must come from ONE skin palette with a plausible
+  // anatomical chain; never pair a head from one rig with hips in another.
+  const normalize=name=>String(name||'').replace(/^(?:mixamorig\d*[:_]?)/i,'')
+    .replace(/^(?:bip(?:ed)?\d*[:_ .-]*)/i,'')
+    .replace(/[^a-z0-9]/gi,'').toLowerCase();
+  const headNames=new Set(['head','head1','head01','jhead','headbone']);
+  const hipNames=new Set(['pelvis','hips','hip','rootpelvis','hipsjoint',
+    'pelvisbone','jhips','jpelvis']);
+  const spineNames=new Set(['spine','spine1','spine01','spinebase',
+    'lowerback']);
+  const parentBone=bone=>{
+    let p=bone?.parent;
+    while(p&&!p.isBone)p=p.parent;
+    return p||null;
   };
-  // Restrict matches to the BODY skin palette; never choose ChestBow's
-  // head_adjust or another garment's similarly named helper.
-  const head=find([/(?:^|[-_:])head$/i,/^head$/i]);
-  const hips=find([/(?:^|[-_:])pelvis$/i,/(?:^|[-_:])hips?$/i,
-    /(?:^|[-_:])spine$/i]);
-  if(!head||!hips||head===hips)return null;
-  const from=hips.getWorldPosition(new THREE.Vector3());
-  const to=head.getWorldPosition(new THREE.Vector3());
-  const direction=to.sub(from);
-  if(!finite3(direction)||direction.lengthSq()<1e-8)return null;
-  direction.normalize();
-  return {up:direction,
-    angleToWorldY:THREE.MathUtils.radToDeg(
-      direction.angleTo(new THREE.Vector3(0,1,0))),
-    head:head.name,hips:hips.name};
+  const isAncestor=(ancestor,node)=>{
+    let p=parentBone(node);
+    const visited=new Set();
+    while(p&&!visited.has(p)){
+      if(p===ancestor)return true;
+      visited.add(p);p=parentBone(p);
+    }
+    return false;
+  };
+  const rank=skins.map(mesh=>{
+    const bones=mesh.skeleton.bones.filter(b=>b?.isBone);
+    const named=(set)=>bones.filter(b=>set.has(normalize(b.name)));
+    const heads=named(headNames),hips=named(hipNames);
+    let pairs=[];
+    for(const head of heads)for(const hip of hips){
+      if(head!==hip&&isAncestor(hip,head))pairs.push({head,hip});
+    }
+    // Spine is only a fallback if a pelvis is genuinely absent. A spine
+    // cannot disambiguate multiple heads or multiple plausible chains.
+    if(!pairs.length&&hips.length===0){
+      for(const head of heads)for(const spine of named(spineNames)){
+        if(head!==spine&&isAncestor(spine,head))
+          pairs.push({head,hip:spine});
+      }
+    }
+    return {mesh,bones,pairs};
+  }).sort((a,b)=>b.bones.length-a.bones.length);
+  for(const {pairs} of rank){
+    if(pairs.length!==1)continue;
+    const {head,hip}=pairs[0];
+    const from=hip.getWorldPosition(new THREE.Vector3());
+    const to=head.getWorldPosition(new THREE.Vector3());
+    const direction=to.sub(from);
+    if(!finite3(direction)||direction.lengthSq()<1e-8)continue;
+    direction.normalize();
+    return {up:direction,
+      angleToWorldY:THREE.MathUtils.radToDeg(
+        direction.angleTo(new THREE.Vector3(0,1,0))),
+      head:head.name,hips:hip.name};
+  }
+  return null;
+}
+
+/** Names only: never exposes geometry, textures or raw FBX data. */
+export function describeBodyAxisCandidates(root){
+  if(!root)return [];
+  const reports=[];
+  root.traverse(node=>{
+    if(!node.isSkinnedMesh||!node.skeleton?.bones?.length)return;
+    const names=node.skeleton.bones.filter(b=>b?.isBone).map(b=>b.name||'(sin nombre)');
+    reports.push({
+      mesh:node.name||'(sin nombre)',boneCount:names.length,
+      // Include first names to reveal nonstandard root conventions and
+      // keyword matches to reveal nonstandard anatomical conventions.
+      rootNames:names.slice(0,12),
+      anatomicalNames:names.filter(n=>
+        /head|cabeza|pelvis|hip|cadera|spine|neck|cuello|torso|root/i.test(n)
+      ).slice(0,35),
+    });
+  });
+  return reports.sort((a,b)=>b.boneCount-a.boneCount).slice(0,8);
 }
