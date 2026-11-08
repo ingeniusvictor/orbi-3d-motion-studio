@@ -267,7 +267,11 @@ export class MotionViewer {
     this.clearModel();
     this.model = loaded.model;
     this.vrm = loaded.vrm;
-    // Capture the original reference BEFORE AnimationMixer plays imported clips.
+    // Stabilize the root label BEFORE taking the reference-pose snapshot.
+    // FBXLoader can return an unnamed Group; assigning a name afterwards
+    // previously made the safe-copy validator reject the unchanged rig.
+    this.model.name ||= loaded.name.replace(/\.[^.]+$/,'');
+    // Still captured before any AnimationMixer action or presence overlay.
     this.referencePose = captureReferencePose(this.model);
     this.presence = this.vrm ? new LivingPresence(this.vrm,{sourceName:loaded.name}) : null;
     this.motionComposer = this.vrm ? new MotionComposer(this.vrm) : null;
@@ -275,7 +279,6 @@ export class MotionViewer {
     this.facial = this.vrm ? new FacialPresence(this.vrm,{
       seed:this.presence?.randomSeed||367,
     }) : null;
-    this.model.name ||= loaded.name.replace(/\.[^.]+$/,'');
     this.lastFilename = loaded.name;
     this.lastFormat = loaded.format;
     this.scene.add(this.model);
