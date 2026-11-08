@@ -143,3 +143,42 @@ Se conservan todas las pruebas anteriores de LP-03D, MOTION-05A.1, MOTION-05A.2 
 ### Validación real pendiente
 
 Detener el servidor Vite, verificar `git status --short`, y si limpio `git pull --ff-only`. Ejecutar tests/build/reiniciar `localhost:5174`; actualizar Chrome con `Ctrl+Shift+R` y **volver a cargar el FBX original con sus animaciones**. Elegir **Biblioteca de animaciones → MOTION-05 → Pose original** (no forzar A/T) y pulsar Exportar FBX limpio. Si se descarga `_POSE_ORIGINAL.fbx`, reimportar y confirmar 0 clips, mallas, rig y postura intacta. Después probar Mixamo. Si sigue fallando, registrar **el error nuevo exacto**, que debe identificar bone names, parentesco, matrices o múltiples raíces; esos datos permitirán analizar las particularidades reales sin desactivar protecciones.
+
+
+## MOTION-05A.4 — Raíces `root` con offsets distintos entre cuerpo/ropa (2026-11-08)
+
+**Reporte real del usuario:** en la opción Pose original, la validación dice `«root» tiene posiciones de referencia diferentes entre las mallas. Hay rigs incompatibles.`
+
+### Diagnóstico de código
+
+En MOTION-05A.3 se unificaban nombres óseos equivalentes solo si sus **matrices de mundo eran idénticas**. Algunos FBX de personajes vestidos generan proxies del mismo rig por malla, con idéntica estructura/huesos pero un desplazamiento de origen `root` aplicado uniformemente a su jerarquía. Esto puede ser un offset de skinning recuperable, no necesariamente un personaje distinto. Por otro lado, dos personajes separados pueden compartir nombres de huesos: no basta con ignorar el error de raíz.
+
+### Solución experimental MOTION-05A.4
+
+- `rigCanonicalizer.js`: ahora compara la **transformación entre copia de hueso y hueso canónico para cada articulación del skin**. Solo acepta un desplazamiento traslacional único, uniforme para todos los huesos de la misma malla. Una diferencia de rotación, escala, desplazamiento no uniforme, padre diferente o huesos adicionales sigue bloqueada.
+- Recalcula exclusivamente en la **copia de exportación** las matrices inversas de bind `I_new = inverse(B_canonical) * B_original * I_original`, cumpliendo `B_canonical * I_new = B_original * I_original`. Esto conserva matemáticamente las matrices de deformación de cada hueso para la pose de referencia.
+- Comprueba las matrices por hueso y muestrea hasta 160 vértices skinned por malla **con la API actual Three.js `applyBoneTransform`** antes/después. Compara la posición de vértices, y bloquea si cambian.
+- Contrasta la proximidad espacial de cada malla trasladada con la envolvente ósea y la geometría skinned del personaje canónico para no juntar automáticamente dos personajes separados en la escena.
+- Continúa validando el FBX resultante: 0 animaciones, mallas, huesos físicos `LimbNode`, conexiones óseas y una sola raíz.
+- No modifica el FBX fuente, sus clips de animación, ni `main` o LUMIA R8.
+- Añade prueba de dos rigs similares con origen distinto pero desplazamiento coherente; prueba adicional con las propias matrices inversas de cada skin; rechazo de desplazamiento no uniforme en descendientes, rotación de root y segundo personaje lejano.
+- Debido a que el FBX original privado no está en CI, el hecho de que pase el fixture **NO demuestra que el `root` del usuario sea un offset uniforme**.
+
+### Diagnóstico bajo control del usuario
+
+- Nuevo botón **Descargar diagnóstico del rig** en la misma sección MOTION-05, junto a Exportar FBX limpio.
+- El archivo local `<personaje>_RIG_DIAGNOSTICO.json` incluye nombres de mallas, nombres y parentesco de huesos, transformaciones de referencia, inversas de bind resumidas y lista de huesos homónimos con posiciones diferentes. No incluye geometría, vértices, materiales, texturas ni keyframes/animaciones. No se envía automáticamente a ChatGPT o a GitHub.
+- Si el error persiste después de actualizar, el usuario puede compartir voluntariamente **ese JSON de diagnóstico**, en lugar de subir el FBX privado. Con él se podrá analizar si hay raíces desplazadas uniformemente, huesos con nombres repetidos entre rigs no equivalentes o jerarquía física incompatible.
+
+### Pasos para revalidar
+
+1. Detener Vite en localhost:5174 con Ctrl+C; `cd "$env:USERPROFILE\Downloads\ORBI-LIVING-PRESENCE-LAB"`; revisar `git status --short`. Ejecutar `git pull --ff-only` solo con árbol limpio, seguido de `npm.cmd test`, `npm.cmd run build`, `npm.cmd run dev -- --port 5174 --strictPort`.
+2. En Chrome `Ctrl+Shift+R` y **cargar de nuevo el FBX original**, no la versión exportada anteriormente ni un clip JSON.
+3. Biblioteca de animaciones → MOTION-05 → **Pose original** → **Exportar FBX limpio**.
+4. Si descarga `_POSE_ORIGINAL.fbx`, volverlo a abrir en ORBI: 0 clips, todas las mallas/huesos, sin deformaciones de ropa/manos. Después probarlo en Mixamo.
+5. Si aún falla, descargar `_RIG_DIAGNOSTICO.json` y revisar especialmente la entrada `root` entre mallas. Compartirlo solo si se desea asistencia más precisa.
+6. La aceptación por Mixamo permanece **pendiente** hasta prueba sobre el FBX del usuario.
+
+### Resultado automatizado
+
+201/201 pruebas y compilación verde en la primera corrección de matrices y 202 pruebas tras integrar el diagnóstico, sujetos a comprobar en GitHub Actions. Los tests de rigs de ensayo no garantizan compatibilidad con el activo real.
