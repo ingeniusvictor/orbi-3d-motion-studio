@@ -22,3 +22,6 @@ export const strictSplitRigHint=(error,mode)=>{
     ?' Este modelo parece tener dos esqueletos. Para prepararlo para Mixamo selecciona «Conservar accesorio como malla rígida» o «Solo cuerpo». La opción estricta no los convierte.'
     :'';
 };
+
+export const suggestedPoseMode=info=>
+  isKnownMintSplitRig(info)?'bind':'reference';
