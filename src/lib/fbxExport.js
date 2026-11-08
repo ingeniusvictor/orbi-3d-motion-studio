@@ -2,6 +2,7 @@ import { exportFbx, exportCharacterFbx } from 'three-js-fbx-exporter';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { makeLightweightClone, skinBoneCount, skinnedMeshes } from './lightweight.js';
 import { readPhysicalFbxRig } from './fbxBoneAudit.js';
+import { prepareMixamoRig } from './motionExtraction.js';
 
 const magic=[75,97,121,100,97,114,97,32,70,66,88,32,66,105,110,97,114,121,32,32,0,26,0];
 export function isBinaryFBX(bytes) {
@@ -90,4 +91,29 @@ export function animatedBinaryFBX(model,clips) {
   if(!verified.model.animations?.length)warnings.push(
     'El FBX conserva el skin, pero este lector no pudo verificar sus clips. Revísalos en Blender.');
   return {bytes,bytesLength:bytes.byteLength,bones:verified.bones,meshes:verified.meshes,warnings};
+}
+
+/**
+ * MOTION-05A: export an EXISTING rigged character in reference or calibrated
+ * T-pose without clips. Never touch or bake over the loaded live model.
+ */
+export function cleanRiggedMixamoFBX(source,referencePose,{pose='t'}={}){
+  const prepared=prepareMixamoRig(source,referencePose,{pose});
+  const warnings=[];
+  const bytes=exportFbx(prepared.model,{
+    format:'binary',version:7400,target:'threejs',
+    animations:[],bakeAnimations:false,
+    embedTextures:false,
+    onWarning:warning=>warnings.push(String(warning?.message||warning)),
+  });
+  const verified=validateBinaryFBX(bytes,prepared.bones,prepared.model);
+  if(verified.model.animations?.length)
+    throw new Error('El FBX todavía contiene animaciones. Se canceló la descarga.');
+  if(verified.meshes<1)
+    throw new Error('El FBX perdió todas las mallas riggeadas.');
+  return {
+    bytes,bytesLength:bytes.byteLength,bones:verified.bones,
+    meshes:verified.meshes,animations:0,pose:prepared.pose,
+    adjustments:prepared.adjustments,warnings,
+  };
 }
