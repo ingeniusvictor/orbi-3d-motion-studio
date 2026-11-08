@@ -94,12 +94,14 @@ test('LP-03C.2 respect external expression ownership and old session tokens',()=
   lips.start(11,{text:'hola',source:'file'});
   lips.audioSignal(11,0.12);
   for(let i=0;i<30;i++)lips.update(1/60);
-  const old=values.get('aa');
-  assert.ok(old>0.05);
-  values.set('aa',0.12); // external face controller takes ownership
+  const activeName=lips.capability.mapping[lips.getDiagnostics().currentVowel];
+  const old=values.get(activeName);
+  assert.ok(old>0.05,'the current vowel, not necessarily AA, must be open');
+  values.set(activeName,0.123456); // external face controller takes ownership
   assert.equal(lips.stop(12),false);
   lips.stop(11);
-  assert.equal(values.get('aa'),0.12,'do not overwrite a new external expression');
+  assert.equal(values.get(activeName),0.123456,
+    'do not overwrite an expression changed by another controller');
   assert.equal(lips.audioSignal(11,0.4),false);
 });
 test('LP-03C.2 blocked body FBX can still talk facially after audio starts',()=>{
