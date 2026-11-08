@@ -306,6 +306,13 @@ export class MotionViewer {
   }
   setLivingSwayIntensity(value){this.presence?.setSwayIntensity(value);}
   setLivingSwaySpeed(value){this.presence?.setSwaySpeed(value);}
+  getLivingSpeechMotorAvailability(){
+    if(!this.vrm||!this.presence?.enabled)
+      return {available:false,reason:'Activa Presencia natural A/B sobre un VRM.'};
+    if(this.mixer&&this.current!==null&&!this.motionComposer?.active)
+      return {available:false,reason:'Activa LP-02C.1 sobre un Idle Mixamo autorizado; el FBX actual tiene prioridad.'};
+    return {available:true,reason:'Motor preparado para acompañar la reproducción de voz.'};
+  }
   setLivingMotorCoordination(value){this.presence?.setMotorCoordination(value);}
   setLivingMotorIntensity(value){this.presence?.setMotorIntensity(value);}
   setLivingMotorMode(value){return this.presence?.setMotorMode(value)??false;}
