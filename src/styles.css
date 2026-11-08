@@ -7,3 +7,54 @@
 @media(max-width:785px){.main-content{padding:24px 15px}.topbar{height:62px;padding:0 15px}.studio-layout{grid-template-columns:1fr}.viewport-card{height:480px;min-height:380px}.sidebar-panels{display:grid;grid-template-columns:1fr 1fr;align-items:start}.help-card{grid-column:1/-1}.heading-row{align-items:flex-start}.heading-row h1{font-size:29px}.heading-row p{line-height:1.6}.new-file-btn{margin-top:15px}.footer{flex-wrap:wrap}.inspector-panel{align-self:stretch}}
 @media(max-width:580px){.breadcrumb>span:first-of-type,.breadcrumb>svg,.local-chip{display:none}.top-actions{gap:8px}.help-button{font-size:0;padding:8px}.help-button svg{width:19px;height:19px}.heading-row{flex-wrap:wrap;gap:14px}.heading-row h1{font-size:30px}.heading-row p{font-size:12px}.new-file-btn{margin:0;width:100%}.viewport-card{height:410px;min-height:380px}.viewer-actions{gap:3px}.viewer-toolbar{padding:13px 10px}.toolbar-btn{width:28px;height:28px}.empty-state h2{font-size:27px}.empty-orbit{height:83px}.empty-state p{font-size:12px;margin-bottom:17px}.sidebar-panels{display:flex}.clips-list{grid-template-columns:1fr}.footer{font-size:9px}.viewport-bottom{font-size:9px;padding:12px}.panel-header{padding:15px}.heading-row{margin-bottom:18px}.modal{padding:18px}.modal-header h2{font-size:20px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:0.01ms!important;scroll-behavior:auto!important}}
+
+/* LP-03D.2 — compact QA dock resides IN the viewport, not far below the model. */
+.face-quick-dock{
+  position:absolute;top:58px;right:13px;z-index:4;
+  width:min(275px,calc(100% - 26px));max-height:calc(100% - 113px);
+  overflow:auto;overscroll-behavior:contain;
+  padding:10px;display:grid;gap:8px;
+  border:1px solid #427f86;border-radius:11px;
+  background:rgba(10,22,35,.96);color:#d9ecf4;
+  box-shadow:0 16px 36px #040c17bb;
+  backdrop-filter:blur(10px);
+}
+.face-quick-head{display:flex;justify-content:space-between;gap:9px;align-items:start}
+.face-quick-head strong{font-size:12px;display:flex;align-items:center;gap:6px;color:#7de8d9}
+.face-quick-head small{display:block;margin-top:3px;font-size:10px;color:#8da5b8;line-height:1.4}
+.face-quick-close{
+  display:grid;place-items:center;flex-shrink:0;
+  width:27px;height:27px;border-radius:6px;
+  border:1px solid #345264;background:#172737;color:#adc0d1;
+}
+.face-quick-camera,.face-quick-tabs{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.face-quick-camera button,.face-quick-tabs button{
+  display:flex;justify-content:center;align-items:center;gap:4px;
+  border:1px solid #375366;border-radius:6px;padding:7px 3px;
+  background:#172a3b;color:#cbdeeb;font-size:10px;cursor:pointer;
+}
+.face-quick-tabs button.selected{color:#77f2df;border-color:#3ca89c;background:#154044}
+.face-quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.face-quick-grid button{
+  padding:7px 5px;min-height:31px;line-height:1.3;
+  font-size:10px;border:1px solid #38596c;border-radius:6px;
+  background:#1a3444;color:#e0eff3;cursor:pointer;
+}
+.face-quick-grid button:hover:not(:disabled),.face-quick-camera button:hover,
+.face-quick-tabs button:hover{background:#225260;border-color:#5bcfc6}
+.face-quick-grid button:disabled{opacity:.38;cursor:not-allowed}
+.face-quick-status{font-size:10px;line-height:1.5;min-height:27px;color:#a9d3cf}
+.face-quick-meter{display:flex;justify-content:space-between;gap:6px;padding-top:6px;
+  border-top:1px solid #284b55;font-size:9px;color:#7ae5d4}
+.lp-accordion{border:1px solid #294558;border-radius:8px;overflow:hidden}
+.lp-accordion>summary{cursor:pointer;list-style:none;padding:10px 11px;
+  background:#152739;color:#bedde5;font-weight:700;font-size:11px;line-height:1.5}
+.lp-accordion>summary::-webkit-details-marker{display:none}
+.lp-accordion>summary::before{content:'▸';margin-right:7px;color:#5ddccf}
+.lp-accordion[open]>summary::before{content:'▾'}
+.lp-accordion>div{padding:9px}
+@media(max-width:580px){
+  .face-quick-dock{right:8px;top:54px;max-height:calc(100% - 100px);
+    width:min(240px,calc(100% - 16px));padding:8px}
+  .face-quick-grid button{padding:6px 3px;font-size:9px}
+}
