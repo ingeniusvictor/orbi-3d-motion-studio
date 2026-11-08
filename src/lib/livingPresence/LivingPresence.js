@@ -69,6 +69,8 @@ export class LivingPresence {
     this.identity=new THREE.Quaternion();
     this.blinkApplied=null;
     this.blinkPreviewUntil=0;
+    this.gazePreviewUntil=0;
+    this.gazePreviewValue=null;
     this.gazeTarget=null;
     this.gazeBaseline=null;
     this.gazeBaselineAngles=null;
@@ -125,6 +127,17 @@ export class LivingPresence {
   setGestureIntensity(value){this.gestureDirector.setIntensity(value);}
   triggerGesture(name){return this.enabled&&this.gestureDirector.trigger(name);}
   getGestureStatus(){return this.gestureDirector.getStatus();}
+  previewGaze(direction){
+    if(!this.vrm?.lookAt||!['left','right','up','down'].includes(direction))
+      return false;
+    const positions={
+      left:{yaw:-deg(9),pitch:0},right:{yaw:deg(9),pitch:0},
+      up:{yaw:0,pitch:deg(4)},down:{yaw:0,pitch:-deg(4)},
+    };
+    this.gazePreviewValue=positions[direction];
+    this.gazePreviewUntil=this.time+1.5;
+    return true;
+  }
   previewBlink(){
     const mgr=this.vrm?.expressionManager;
     if(!mgr?.getValue)return false;
@@ -217,6 +230,7 @@ export class LivingPresence {
     this.motorCoordinator.reset();
     this.gestureDirector.reset();
     this.blinkPreviewUntil=0;
+    this.gazePreviewUntil=0;this.gazePreviewValue=null;
   }
   updateBlink(t,scale){
     const preview=t<this.blinkPreviewUntil;
@@ -244,6 +258,8 @@ export class LivingPresence {
     if(prev.size)this.blinkApplied=prev;
   }
   updateGaze(attention){
+    if(this.gazePreviewValue&&this.time<this.gazePreviewUntil)
+      attention=this.gazePreviewValue;
     const lookAt=this.vrm?.lookAt;
     if(!this.gazeActivity||!lookAt||lookAt.autoUpdate===false)return;
     if(lookAt.target!=null&&lookAt.target!==this.gazeTarget)return; // external owner
