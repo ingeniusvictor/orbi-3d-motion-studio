@@ -6,7 +6,7 @@ import VoiceMotorLab from './VoiceMotorLab.jsx';
 const FINGERS=[['Thumb','Pulgar'],['Index','Índice'],['Middle','Medio'],['Ring','Anular'],['Little','Meñique']];
 
 // LP-01: all model analysis and motion stay on-device; this panel never uploads.
-export default function LivingPresenceLab({model,generation,getViewer,activeClip=null}) {
+export default function LivingPresenceLab({model,generation,getViewer,activeClip=null,voiceQARef,onVoiceQAState}) {
   const [enabled,setEnabled]=useState(false);
   const [composerRequested,setComposerRequested]=useState(false);
   const [composerIntensity,setComposerIntensity]=useState(65);
@@ -232,7 +232,7 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
         <input type="range" min="0" max="100" step="5" value={intensity}
           disabled={!canUse} onChange={changeIntensity}/>
       </label>
-      <VoiceMotorLab getViewer={getViewer} model={model} generation={generation} activeClip={activeClip}/>
+      <VoiceMotorLab getViewer={getViewer} model={model} generation={generation} activeClip={activeClip} voiceQARef={voiceQARef} onVoiceQAState={onVoiceQAState}/>
       <details className="lp-accordion">
         <summary>Movimiento avanzado · Mixamo, manos, cuerpo y LP-03A/B</summary>
         <div style={{display:'grid',gap:10}}>
