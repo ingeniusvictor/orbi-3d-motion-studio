@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Activity, ArrowDownToLine, Box, Boxes, CheckCircle2, ChevronDown, ChevronRight, CircleHelp, Clock3, Download, Eye, FilePlus2, FileUp, Film, FolderOpen, Grid2X2, Info, Layers3, Menu, MousePointer2, Pause, Play, RotateCcw, ScanEye, ShieldCheck, SlidersHorizontal, Sparkles, UploadCloud, X, XCircle } from 'lucide-react';
+import { Activity, ArrowDownToLine, Box, Boxes, CheckCircle2, ChevronDown, ChevronRight, CircleHelp, Clock3, Download, Eye, FilePlus2, FileUp, Film, Focus, FolderOpen, Grid2X2, Info, Layers3, Menu, MousePointer2, MoveUp, Pause, Play, RotateCcw, ScanEye, ShieldCheck, SlidersHorizontal, Sparkles, UploadCloud, X, XCircle } from 'lucide-react';
 import { MotionViewer } from './lib/viewer.js';
 import LightPrep from './LightPrep.jsx';
 import TextureStudio from './TextureStudio.jsx';
@@ -87,7 +87,12 @@ export default function App() {
     setBusy('Abriendo modelo…');setNotice(null);setImportResults([]);setAllowVrmExport(false);setFinalFormat('glb');setLightMeshes([]);setLightBoneCount(0);setTextureMaterials([]);setCanUndoTextures(false);
     try {
       const info = await viewer.current.open(files);
-      if (info) { setFaceDockOpen(info.format==='VRM');setModel(info);setLightMeshes(viewer.current.getLightMeshes());setLightBoneCount(viewer.current.getLightBoneCount());setTextureMaterials(viewer.current.getTextureMaterials());setModelGeneration(n=>n+1);syncPlayer();setNotice({type:'success',text:`${info.filename} cargado correctamente.`}); }
+      if (info) { setFaceDockOpen(info.format==='VRM');setModel(info);setLightMeshes(viewer.current.getLightMeshes());setLightBoneCount(viewer.current.getLightBoneCount());setTextureMaterials(viewer.current.getTextureMaterials());setModelGeneration(n=>n+1);syncPlayer();const axis=viewer.current.getCharacterOrientationInfo();
+        const note=axis&&axis.angleToWorldY>45?
+          ' El eje cabeza-pelvis está inclinado '+axis.angleToWorldY+
+          '° respecto al eje Y. Usa «Enderezar vista» para inspeccionarlo; '+
+          'esto no cambia la orientación del archivo FBX.':'';
+        setNotice({type:'success',text:`${info.filename} cargado correctamente.`+note}); }
     } catch(error) {setNotice({type:'error',text:error.message||String(error)});}
     finally {setBusy('');}
   },[syncPlayer]);
@@ -246,6 +251,23 @@ export default function App() {
   const toggleBones = () => {setShowBones(v=>{viewer.current?.setSkeletonVisible(!v);return !v;});};
   const toggleWireframe = () => {setWireframe(v=>{viewer.current?.setWireframe(!v);return !v;});};
   const toggleGrid = () => {setGrid(v=>{if(viewer.current) viewer.current.grid.visible=!v;return !v;});};
+  const focusVisibleCharacter=()=>{
+    const fit=viewer.current?.resetCamera();
+    setNotice(fit?.ok?
+      {type:'success',text:'Cámara centrada en la geometría visible del personaje. '+
+        'No se movieron los huesos ni se modificó el FBX.'}:
+      {type:'error',text:'No se pudo centrar el personaje: '+
+        (fit?.reason||'Carga primero un archivo 3D.')});
+  };
+  const alignUprightCamera=()=>{
+    const result=viewer.current?.alignCameraToCharacter();
+    setNotice(result?.ok?
+      {type:'success',text:'Vista alineada con la cabeza y la pelvis ('+
+        result.angleToWorldY.toFixed(1)+'° respecto de Y). Solo giró la cámara: '+
+        'si el FBX quedó acostado, esto no corrige su orientación para Mixamo.'}:
+      {type:'error',text:'No se pudo enderezar la vista: '+
+        (result?.reason||'Carga un personaje con huesos de cabeza y pelvis identificables.')});
+  };
   const drop = event => {event.preventDefault();setDragging(false);if(event.dataTransfer?.files?.length)openFiles(Array.from(event.dataTransfer.files));};
   return <div className="app-shell">
     <aside className="nav-rail">
@@ -265,7 +287,7 @@ export default function App() {
         <div className={`studio-layout ${mobilePanel?'mobile-panel-open':''}`}>
           <section className="viewer-column">
             <div className={`viewport-card ${dragging?'dragging':''}`} onDragOver={event=>{event.preventDefault();setDragging(true);}} onDragLeave={event=>{if(!event.currentTarget.contains(event.relatedTarget))setDragging(false);}} onDrop={drop}>
-              <div className="viewer-toolbar"><div className="viewport-title"><span className="viewport-led"/> VISOR 3D <span className="viewer-divider">/</span> <span>{model?'MODELO CARGADO':'ESCENA VACÍA'}</span></div><div className="viewer-actions"><button className={grid?'toolbar-btn on':'toolbar-btn'} onClick={toggleGrid} title="Mostrar cuadrícula" aria-label="Cuadrícula"><Grid2X2 size={17}/></button><button className={wireframe?'toolbar-btn on':'toolbar-btn'} onClick={toggleWireframe} title="Vista de malla" aria-label="Vista de malla"><Layers3 size={17}/></button><button className={showBones?'toolbar-btn on':'toolbar-btn'} onClick={toggleBones} title="Visualizar esqueleto" aria-label="Visualizar esqueleto"><Activity size={17}/></button><button className="toolbar-btn" onClick={()=>viewer.current?.resetCamera()} title="Restablecer cámara" aria-label="Restablecer cámara"><RotateCcw size={17}/></button>{model?.format==='VRM'&&<button className={faceDockOpen?'toolbar-btn on':'toolbar-btn'} onClick={()=>setFaceDockOpen(v=>!v)} title="Abrir controles rápidos faciales junto a Vita" aria-label="Controles rápidos de rostro" aria-pressed={faceDockOpen}><ScanEye size={17}/></button>}</div></div>
+              <div className="viewer-toolbar"><div className="viewport-title"><span className="viewport-led"/> VISOR 3D <span className="viewer-divider">/</span> <span>{model?'MODELO CARGADO':'ESCENA VACÍA'}</span></div><div className="viewer-actions"><button className={grid?'toolbar-btn on':'toolbar-btn'} onClick={toggleGrid} title="Mostrar cuadrícula" aria-label="Cuadrícula"><Grid2X2 size={17}/></button><button className={wireframe?'toolbar-btn on':'toolbar-btn'} onClick={toggleWireframe} title="Vista de malla" aria-label="Vista de malla"><Layers3 size={17}/></button><button className={showBones?'toolbar-btn on':'toolbar-btn'} onClick={toggleBones} title="Visualizar esqueleto" aria-label="Visualizar esqueleto"><Activity size={17}/></button><button className="toolbar-btn toolbar-btn-label" onClick={focusVisibleCharacter} title="Centrar la cámara usando la geometría visible, no el esqueleto" aria-label="Centrar personaje"><Focus size={17}/><span>Centrar</span></button>{model?.format==='FBX'&&<button className="toolbar-btn" onClick={alignUprightCamera} title="Enderezar SOLO la vista según cabeza y pelvis (no modifica FBX)" aria-label="Enderezar vista del personaje"><MoveUp size={17}/></button>}{model?.format==='VRM'&&<button className={faceDockOpen?'toolbar-btn on':'toolbar-btn'} onClick={()=>setFaceDockOpen(v=>!v)} title="Abrir controles rápidos faciales junto a Vita" aria-label="Controles rápidos de rostro" aria-pressed={faceDockOpen}><ScanEye size={17}/></button>}</div></div>
               <div className="renderer-mount" ref={mountRef}/>
               <FaceQuickDock key={'face-dock-'+modelGeneration} getViewer={getViewer} model={model}
                 open={faceDockOpen} onClose={()=>setFaceDockOpen(false)}
