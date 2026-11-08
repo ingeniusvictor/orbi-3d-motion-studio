@@ -18,7 +18,7 @@ export class VoiceMotorBridge{
     const token=++this.sequence;
     this.session={
       token,intent,started:false,paused:false,motorApplied:false,
-      viewer:null,restore:null,gestureTriggered:false,
+      viewer:null,presenceIdentity:null,restore:null,gestureTriggered:false,
     };
     this.last={status:'prepared',reason:'Esperando audio audible.',motorApplied:false};
     return token;
@@ -35,6 +35,7 @@ export class VoiceMotorBridge{
       return true; // Voice must still be allowed without animation.
     }
     s.viewer=viewer;
+    s.presenceIdentity=viewer.presence;
     s.restore={
       motor:viewer.getLivingMotorStatus?.()||null,
       gesture:viewer.getLivingGestureStatus?.()||null,
@@ -85,7 +86,7 @@ export class VoiceMotorBridge{
     const s=this.session;
     if(!s||s.token!==token)return false;
     this.session=null;
-    if(s.motorApplied&&s.viewer){
+    if(s.motorApplied&&s.viewer&&s.viewer.presence===s.presenceIdentity){
       // End always returns the motor controls to precisely their user-owned
       // enabling/mode/intensity. Gesture reset prevents stale actions.
       s.viewer.setLivingGestureEnabled(false);
