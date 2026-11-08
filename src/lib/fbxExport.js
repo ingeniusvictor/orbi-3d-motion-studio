@@ -39,7 +39,15 @@ export function validateBinaryFBX(bytes,expectedBones,reference=null) {
   const physicalRig=readPhysicalFbxRig(bytes);
   const rig=physicalRig.size;
   const meshes=skinnedMeshes(group);
-  if(!meshes.length)throw new Error('El FBX binario no conserva una malla vinculada a huesos.');
+  // skinnedMeshes() returns lightweight METADATA records, not Three.js
+  // SkinnedMesh objects. Identity reconciliation needs actual skeletons.
+  const actualSkins=[];
+  group.traverse(node=>{
+    if(node.isSkinnedMesh&&node.geometry?.getAttribute('position')?.count)
+      actualSkins.push(node);
+  });
+  if(!meshes.length||!actualSkins.length)
+    throw new Error('El FBX binario no conserva una malla vinculada a huesos.');
   if(rig!==expectedBones)throw new Error(
     'El FBX binario contiene '+rig+' huesos físicos LimbNode, pero se esperaban '+
     expectedBones+'. No se descargará.');
@@ -52,7 +60,7 @@ export function validateBinaryFBX(bytes,expectedBones,reference=null) {
     // A physical root may be renamed if it clashes with a static FBX
     // group. Only accept the change if its FULL bone-parent graph and
     // skinned binding can be proven equivalent, never by counts alone.
-    identity=reconcilePhysicalRigNames(expected,physicalRig,meshes);
+    identity=reconcilePhysicalRigNames(expected,physicalRig,actualSkins);
   }
   return {bones:rig,meshBoneProxies:skinBoneCount(group),
     meshes:meshes.length,model:group,identity};
