@@ -268,14 +268,84 @@ test('MOTION-05B never strips a second character mistaken for an accessory',()=>
   assert.throws(()=>cleanRiggedMixamoFBX(f.root,reference,
     {accessoryHandling:'rigid'}),/no se identificó con certeza como accesorio/);
 });
-test('MOTION-05B does not delete attachments nested inside auxiliary bones',()=>{
+test('MOTION-05B.2 preserves harmless transform children under head_adjust',()=>{
   const f=separateChestBowRigFixture();
-  const attached=new THREE.Group();attached.name='unknown_extra';
-  f.bowNode.add(attached);
+  f.adjust.name='head_adjust'; // The failure reported by the real Mint FBX
+  const attached=new THREE.Group();attached.name='FBX_HeadAdjust_Helper';
+  attached.position.set(.03,-.06,.01);
+  f.adjust.add(attached);
+  const before=attached.getWorldPosition(new THREE.Vector3());
+  const ref=captureReferencePose(f.root);
+  const result=cleanRiggedMixamoFBX(f.root,ref,
+    {accessoryHandling:'rigid'});
+  assert.equal(result.bones,8);
+  assert.equal(result.animations,0);
+  assert.ok(result.accessory.preservedAttachments.some(
+    x=>x.name==='FBX_HeadAdjust_Helper'));
+  assert.ok(attached.parent===f.adjust,'original helper is never moved');
+  assert.ok(attached.getWorldPosition(new THREE.Vector3()).distanceTo(before)<1e-7);
+  const exported=new FBXLoader().parse(result.bytes.buffer.slice(
+    result.bytes.byteOffset,result.bytes.byteOffset+result.bytes.byteLength),'');
+  assert.equal(exported.animations.length,0);
+  // The exporter may omit an empty Group, but no skinned or visible asset
+  // may be lost. Preserved helper is reported and materialized on the clone.
+});
+test('MOTION-05B.2 static prop attached to auxiliary head_adjust retains visible geometry',()=>{
+  const f=separateChestBowRigFixture();
+  f.adjust.name='head_adjust';
+  const prop=new THREE.Mesh(new THREE.BoxGeometry(.07,.09,.12),
+    new THREE.MeshStandardMaterial({color:0x336699}));
+  prop.name='Mint_Head_Adjust_Prop';
+  prop.position.set(-.07,.02,.05);
+  f.adjust.add(prop);
+  f.root.updateWorldMatrix(true,true);
+  const before=prop.getVertexPosition(0,new THREE.Vector3())
+    .applyMatrix4(prop.matrixWorld);
+  const ref=captureReferencePose(f.root);
+  const result=cleanRiggedMixamoFBX(f.root,ref,
+    {accessoryHandling:'rigid'});
+  assert.equal(result.bones,8);
+  assert.ok(result.accessory.preservedAttachments.some(
+    x=>x.name==='Mint_Head_Adjust_Prop'));
+  assert.ok(prop.getVertexPosition(0,new THREE.Vector3())
+    .applyMatrix4(prop.matrixWorld).distanceTo(before)<1e-7);
+  const parsed=new FBXLoader().parse(result.bytes.buffer.slice(
+    result.bytes.byteOffset,result.bytes.byteOffset+result.bytes.byteLength),'');
+  assert.ok(parsed.getObjectByName('Mint_Head_Adjust_Prop'),
+    'physically exported FBX must retain the static prop');
+  assert.equal(parsed.animations.length,0);
+});
+test('MOTION-05B.2 unweighted helper Bone under head_adjust becomes static Group, not another rig',()=>{
+  const f=separateChestBowRigFixture();
+  f.adjust.name='head_adjust';
+  const orphan=new THREE.Bone();orphan.name='unweighted_head_helper';
+  orphan.position.set(.04,.09,0);
+  const marker=new THREE.Mesh(new THREE.BoxGeometry(.03,.04,.05),
+    new THREE.MeshBasicMaterial());
+  marker.name='Accessory_Marker';
+  orphan.add(marker);
+  f.adjust.add(orphan);
+  const ref=captureReferencePose(f.root);
+  const out=cleanRiggedMixamoFBX(f.root,ref,{accessoryHandling:'rigid'});
+  assert.equal(out.bones,8,'unweighted helper must not become a second physical skeleton');
+  assert.ok(out.accessory.preservedAttachments.some(
+    x=>x.name==='unweighted_head_helper_estatico'));
+  const loaded=new FBXLoader().parse(out.bytes.buffer.slice(
+    out.bytes.byteOffset,out.bytes.byteOffset+out.bytes.byteLength),'');
+  assert.equal(loaded.animations.length,0);
+  assert.ok(loaded.getObjectByName('Accessory_Marker'));
+  assert.ok(orphan.isBone&&orphan.parent===f.adjust,'keep original unweighted bone');
+});
+test('MOTION-05B.2 rejects unsupported light under head_adjust, never silently deletes it',()=>{
+  const f=separateChestBowRigFixture();
+  f.adjust.name='head_adjust';
+  const attached=new THREE.PointLight(0xffffff,1);
+  attached.name='HeadLight_Aux';
+  f.adjust.add(attached);
   const ref=captureReferencePose(f.root);
   assert.throws(()=>cleanRiggedMixamoFBX(f.root,ref,
-    {accessoryHandling:'exclude'}),/contiene objetos adicionales/);
-  assert.ok(attached.parent===f.bowNode);
+    {accessoryHandling:'rigid'}),/objeto no convertible/);
+  assert.ok(attached.parent===f.adjust);
 });
 test('MOTION-05A.1 supports an unnamed FBX root renamed by the viewer after load',()=>{
   const f=fixture();
