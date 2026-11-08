@@ -209,6 +209,39 @@ function separateChestBowRigFixture({name='mint019_swimsuit_ChestBow_skin_LOD0'}
   bow.bind(new THREE.Skeleton([auxRoot,adjust,bowNode]));
   return {...f,bow,auxRoot,adjust,bowNode,body};
 }
+test('MOTION-05D.1 Mint-like double rig restores body AND bow bind before rigid export',()=>{
+  const f=separateChestBowRigFixture();
+  const initialBody=f.hips.quaternion.clone();
+  const initialBow=f.auxRoot.quaternion.clone();
+  // Simulate an FBX whose animation frame is already baked on load:
+  // body lying sideways and accessory rotated independently.
+  f.hips.rotation.z=-Math.PI/2;
+  f.auxRoot.rotation.x+=0.42;
+  const bodyAnimated=f.hips.quaternion.clone();
+  const bowAnimated=f.auxRoot.quaternion.clone();
+  f.root.updateWorldMatrix(true,true);
+  const reference=captureReferencePose(f.root);
+  const prepared=prepareMixamoRig(f.root,reference,{
+    pose:'bind',accessoryHandling:'rigid',
+  });
+  assert.ok(prepared.bind);
+  const clonedRoot=prepared.model.getObjectByName('root');
+  assert.ok(clonedRoot.quaternion.angleTo(initialBody)<1e-7,
+    'body returns to its original rest, not the animated frame');
+  assert.equal(prepared.accessory.handling,'rigid');
+  assert.equal(prepared.accessory.changed,true);
+  assert.ok(prepared.model.getObjectByName('mint019_swimsuit_ChestBow_skin_LOD0')?.isMesh);
+  assert.equal(prepared.bones,8);
+  assert.ok(f.hips.quaternion.angleTo(bodyAnimated)<1e-7,'source body stays animated');
+  assert.ok(f.auxRoot.quaternion.angleTo(bowAnimated)<1e-7,'source bow stays animated');
+  assert.ok(initialBow.angleTo(bowAnimated)>0.1,'fixture actually moved bow');
+  const out=cleanRiggedMixamoFBX(f.root,reference,{
+    pose:'bind',accessoryHandling:'rigid',
+  });
+  assert.equal(out.animations,0);
+  assert.equal(out.bones,8);
+  assert.equal(out.accessory.changed,true);
+});
 test('MOTION-05B rigid bow export retains body and visual accessory with one FBX rig',()=>{
   const f=separateChestBowRigFixture();
   const pose=captureReferencePose(f.root);
