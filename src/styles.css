@@ -58,3 +58,14 @@
     width:min(240px,calc(100% - 16px));padding:8px}
   .face-quick-grid button{padding:6px 3px;font-size:9px}
 }
+
+.face-quick-voice{display:grid;grid-template-columns:1.65fr 1fr;gap:5px}
+.face-quick-voice button{
+  display:flex;align-items:center;justify-content:center;gap:5px;
+  border:1px solid #3a8080;border-radius:6px;
+  background:#164449;color:#a6f5e6;min-height:31px;
+  padding:6px 4px;font-size:10px;font-weight:700;cursor:pointer;
+}
+.face-quick-voice button:disabled{opacity:.37;cursor:not-allowed}
+.face-quick-voice button:hover:not(:disabled){background:#226263}
+.face-quick-voice-hint{font-size:9px;line-height:1.4;color:#7898a9}
