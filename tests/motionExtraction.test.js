@@ -90,7 +90,7 @@ test('MOTION-05A.3 merges equivalent FBXLoader bone proxies for body+clothing wi
 test('MOTION-05A.4 translates duplicate root bones uniformly and preserves skinned body+clothes',()=>{
   const f=duplicatedSkinFixture({shiftSecond:0.5});
   const original=captureReferencePose(f.root);
-  const poseBefore=f.clothes.boneTransform(0,new THREE.Vector3()).clone();
+  const poseBefore=f.clothes.applyBoneTransform(0,new THREE.Vector3()).clone();
   const skinBefore=f.clothes.skeleton.boneInverses.map(m=>m.clone());
   const out=cleanRiggedMixamoFBX(f.root,original);
   assert.equal(out.bones,8);
@@ -105,7 +105,7 @@ test('MOTION-05A.4 translates duplicate root bones uniformly and preserves skinn
   assert.equal(skinnedMeshes(reopened).length,2);
   assert.equal(readPhysicalFbxRig(out.bytes).size,8);
   assert.equal(skinBoneCount(f.root),16,'source must retain both proxy rigs');
-  assert.ok(f.clothes.boneTransform(0,new THREE.Vector3()).distanceTo(poseBefore)<1e-8);
+  assert.ok(f.clothes.applyBoneTransform(0,new THREE.Vector3()).distanceTo(poseBefore)<1e-8);
   assert.ok(f.clothes.skeleton.boneInverses.every((m,i)=>m.equals(skinBefore[i])),
     'source skin palette inverses must not be altered');
 });
