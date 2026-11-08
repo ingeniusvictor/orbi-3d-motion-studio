@@ -4,6 +4,7 @@ import { MotionViewer } from './lib/viewer.js';
 import LightPrep from './LightPrep.jsx';
 import TextureStudio from './TextureStudio.jsx';
 import LivingPresenceLab from './LivingPresenceLab.jsx';
+import FaceQuickDock from './FaceQuickDock.jsx';
 import { blenderConvertScript } from './lib/mixamoKit.js';
 import { formatBytes } from './lib/modelInfo.js';
 
@@ -63,6 +64,7 @@ export default function App() {
   const [allowVrmExport, setAllowVrmExport] = useState(false);
   const [dragging,setDragging] = useState(false);
   const [mobilePanel,setMobilePanel] = useState(false);
+  const [faceDockOpen,setFaceDockOpen]=useState(false);
   const getViewer = useCallback(() => viewer.current, []);
   const syncPlayer = useCallback(() => {
     const instance = viewer.current;
@@ -81,7 +83,7 @@ export default function App() {
     setBusy('Abriendo modelo…');setNotice(null);setImportResults([]);setAllowVrmExport(false);setFinalFormat('glb');setLightMeshes([]);setLightBoneCount(0);setTextureMaterials([]);setCanUndoTextures(false);
     try {
       const info = await viewer.current.open(files);
-      if (info) { setModel(info);setLightMeshes(viewer.current.getLightMeshes());setLightBoneCount(viewer.current.getLightBoneCount());setTextureMaterials(viewer.current.getTextureMaterials());setModelGeneration(n=>n+1);syncPlayer();setNotice({type:'success',text:`${info.filename} cargado correctamente.`}); }
+      if (info) { setFaceDockOpen(info.format==='VRM');setModel(info);setLightMeshes(viewer.current.getLightMeshes());setLightBoneCount(viewer.current.getLightBoneCount());setTextureMaterials(viewer.current.getTextureMaterials());setModelGeneration(n=>n+1);syncPlayer();setNotice({type:'success',text:`${info.filename} cargado correctamente.`}); }
     } catch(error) {setNotice({type:'error',text:error.message||String(error)});}
     finally {setBusy('');}
   },[syncPlayer]);
@@ -200,8 +202,9 @@ export default function App() {
         <div className={`studio-layout ${mobilePanel?'mobile-panel-open':''}`}>
           <section className="viewer-column">
             <div className={`viewport-card ${dragging?'dragging':''}`} onDragOver={event=>{event.preventDefault();setDragging(true);}} onDragLeave={event=>{if(!event.currentTarget.contains(event.relatedTarget))setDragging(false);}} onDrop={drop}>
-              <div className="viewer-toolbar"><div className="viewport-title"><span className="viewport-led"/> VISOR 3D <span className="viewer-divider">/</span> <span>{model?'MODELO CARGADO':'ESCENA VACÍA'}</span></div><div className="viewer-actions"><button className={grid?'toolbar-btn on':'toolbar-btn'} onClick={toggleGrid} title="Mostrar cuadrícula" aria-label="Cuadrícula"><Grid2X2 size={17}/></button><button className={wireframe?'toolbar-btn on':'toolbar-btn'} onClick={toggleWireframe} title="Vista de malla" aria-label="Vista de malla"><Layers3 size={17}/></button><button className={showBones?'toolbar-btn on':'toolbar-btn'} onClick={toggleBones} title="Visualizar esqueleto" aria-label="Visualizar esqueleto"><Activity size={17}/></button><button className="toolbar-btn" onClick={()=>viewer.current?.resetCamera()} title="Restablecer cámara" aria-label="Restablecer cámara"><RotateCcw size={17}/></button></div></div>
+              <div className="viewer-toolbar"><div className="viewport-title"><span className="viewport-led"/> VISOR 3D <span className="viewer-divider">/</span> <span>{model?'MODELO CARGADO':'ESCENA VACÍA'}</span></div><div className="viewer-actions"><button className={grid?'toolbar-btn on':'toolbar-btn'} onClick={toggleGrid} title="Mostrar cuadrícula" aria-label="Cuadrícula"><Grid2X2 size={17}/></button><button className={wireframe?'toolbar-btn on':'toolbar-btn'} onClick={toggleWireframe} title="Vista de malla" aria-label="Vista de malla"><Layers3 size={17}/></button><button className={showBones?'toolbar-btn on':'toolbar-btn'} onClick={toggleBones} title="Visualizar esqueleto" aria-label="Visualizar esqueleto"><Activity size={17}/></button><button className="toolbar-btn" onClick={()=>viewer.current?.resetCamera()} title="Restablecer cámara" aria-label="Restablecer cámara"><RotateCcw size={17}/></button>{model?.format==='VRM'&&<button className={faceDockOpen?'toolbar-btn on':'toolbar-btn'} onClick={()=>setFaceDockOpen(v=>!v)} title="Abrir controles rápidos faciales junto a Vita" aria-label="Controles rápidos de rostro" aria-pressed={faceDockOpen}><ScanEye size={17}/></button>}</div></div>
               <div className="renderer-mount" ref={mountRef}/>
+              <FaceQuickDock key={'face-dock-'+modelGeneration} getViewer={getViewer} model={model} open={faceDockOpen} onClose={()=>setFaceDockOpen(false)}/>
               {!model && <Intro onOpen={()=>fileInput.current?.click()}/>}
               {dragging&&<div className="drag-mask"><UploadCloud size={42}/><strong>Suelta tu archivo 3D</strong><span>Tu archivo se procesa localmente</span></div>}
               {busy&&<div className="busy-mask"><div className="loading-ring"/><strong>{busy}</strong></div>}
