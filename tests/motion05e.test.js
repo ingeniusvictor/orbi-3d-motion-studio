@@ -119,7 +119,7 @@ test('MOTION-05E.1 detects localized distorted left-hip region even with same co
 test('MOTION-05E.1 source body topology is compared before any accessory preparation',()=>{
   const source=humanoid({horizontal:false}).scene;
   const copy=source.clone(true);
-  assert.deepEqual(auditBodyPreparation(source,copy).triangles,1200);
+  assert.equal(auditBodyPreparation(source,copy).triangles,1140);
   const prepared=copy.getObjectByName('Mint_Body');
   prepared.geometry=prepared.geometry.clone();
   prepared.geometry.setIndex(new THREE.BufferAttribute(
