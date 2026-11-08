@@ -12,12 +12,13 @@ export class VoiceMotorBridge{
     this.session=null;
     this.last={status:'idle',reason:'',motorApplied:false};
   }
-  prepare(rawIntent){
+  prepare(rawIntent,{lipSource='browser'}={}){
     const intent=validateMotorIntent(rawIntent);
     this.cancel('replaced');
     const token=++this.sequence;
     this.session={
-      token,intent,started:false,paused:false,motorApplied:false,
+      token,intent,started:false,paused:false,motorApplied:false,lipsApplied:false,
+      lipSource:lipSource==='file'?'file':'browser',
       viewer:null,presenceIdentity:null,restore:null,gestureTriggered:false,
     };
     this.last={status:'prepared',reason:'Esperando audio audible.',motorApplied:false};
@@ -28,14 +29,20 @@ export class VoiceMotorBridge{
     if(!s||s.token!==token||s.started)return false;
     s.started=true;s.paused=false;
     const viewer=this.getViewer();
+    // Mouth expressions are independent of body bones, so they can accompany
+    // speech even when FBX excludes the entire procedural BODY compositor.
+    s.viewer=viewer||null;
+    s.presenceIdentity=viewer?.presence??null;
+    s.lipsApplied=Boolean(viewer?.startLivingLipSync?.(token,{
+      text:s.intent.dialogue,source:s.lipSource,
+    }));
     const eligibility=viewer?.getLivingSpeechMotorAvailability?.()||
       {available:false,reason:'Visor no disponible.'};
     if(!eligibility.available){
-      this.last={status:'speaking',reason:eligibility.reason||'Motor no disponible.',motorApplied:false};
+      this.last={status:'speaking',reason:eligibility.reason||'Motor no disponible.',
+        motorApplied:false,lipsApplied:s.lipsApplied};
       return true; // Voice must still be allowed without animation.
     }
-    s.viewer=viewer;
-    s.presenceIdentity=viewer.presence;
     s.restore={
       motor:viewer.getLivingMotorStatus?.()||null,
       gesture:viewer.getLivingGestureStatus?.()||null,
@@ -55,7 +62,7 @@ export class VoiceMotorBridge{
       status:'speaking',reason:s.gestureTriggered?
         'Voz iniciada: gesto sincronizado con el comienzo del audio.':
         'Voz iniciada: respuesta corporal atenta.',
-      motorApplied:true,
+      motorApplied:true,lipsApplied:s.lipsApplied,
     };
     return true;
   }
@@ -63,29 +70,35 @@ export class VoiceMotorBridge{
     const s=this.session;
     if(!s||s.token!==token||!s.started||s.paused)return false;
     s.paused=true;
+    if(s.lipsApplied)s.viewer?.pauseLivingLipSync?.(token);
     if(s.motorApplied){
       s.viewer.setLivingGestureEnabled(false); // cancel ongoing action on pause
       s.viewer.setLivingMotorMode('attentive');
     }
-    this.last={status:'paused',reason:'Audio pausado; gesto detenido.',motorApplied:s.motorApplied};
+    this.last={status:'paused',reason:'Audio pausado; gesto detenido.',
+      motorApplied:s.motorApplied,lipsApplied:s.lipsApplied};
     return true;
   }
   resume(token){
     const s=this.session;
     if(!s||s.token!==token||!s.started||!s.paused)return false;
     s.paused=false;
+    if(s.lipsApplied)s.viewer?.resumeLivingLipSync?.(token);
     if(s.motorApplied){
       s.viewer.setLivingGestureEnabled(true);
       s.viewer.setLivingMotorMode(s.intent.motorMode);
       // Do NOT retrigger a gesture after audio resume.
     }
-    this.last={status:'speaking',reason:'Audio reanudado.',motorApplied:s.motorApplied};
+    this.last={status:'speaking',reason:'Audio reanudado.',
+      motorApplied:s.motorApplied,lipsApplied:s.lipsApplied};
     return true;
   }
   end(token,reason='ended'){
     const s=this.session;
     if(!s||s.token!==token)return false;
     this.session=null;
+    if(s.lipsApplied&&s.viewer&&s.viewer.presence===s.presenceIdentity)
+      s.viewer.stopLivingLipSync?.(token);
     if(s.motorApplied&&s.viewer&&s.viewer.presence===s.presenceIdentity){
       // End always returns the motor controls to precisely their user-owned
       // enabling/mode/intensity. Gesture reset prevents stale actions.
@@ -99,7 +112,8 @@ export class VoiceMotorBridge{
         s.viewer.setLivingMotorCoordination(s.restore.motor.enabled);
       }
     }
-    this.last={status:reason,reason:'Audio finalizado. Controles de reposo restaurados.',motorApplied:false};
+    this.last={status:reason,reason:'Audio finalizado. Controles de reposo restaurados.',
+      motorApplied:false,lipsApplied:false};
     return true;
   }
   cancel(reason='cancelled'){
