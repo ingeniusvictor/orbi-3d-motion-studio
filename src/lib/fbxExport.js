@@ -94,10 +94,10 @@ export function animatedBinaryFBX(model,clips) {
 }
 
 /**
- * MOTION-05A: export an EXISTING rigged character in reference or calibrated
- * T-pose without clips. Never touch or bake over the loaded live model.
+ * MOTION-05: export an existing rigged character in its original reference
+ * pose or an explicitly calibrated A/T pose, without clips. Never mutate the model.
  */
-export function cleanRiggedMixamoFBX(source,referencePose,{pose='t'}={}){
+export function cleanRiggedMixamoFBX(source,referencePose,{pose='reference'}={}){
   const prepared=prepareMixamoRig(source,referencePose,{pose});
   const warnings=[];
   const bytes=exportFbx(prepared.model,{
