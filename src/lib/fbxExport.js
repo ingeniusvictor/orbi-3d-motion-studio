@@ -99,8 +99,8 @@ export function animatedBinaryFBX(model,clips) {
  * MOTION-05: export an existing rigged character in its original reference
  * pose or an explicitly calibrated A/T pose, without clips. Never mutate the model.
  */
-export function cleanRiggedMixamoFBX(source,referencePose,{pose='reference'}={}){
-  const prepared=prepareMixamoRig(source,referencePose,{pose});
+export function cleanRiggedMixamoFBX(source,referencePose,{pose='reference',accessoryHandling='strict'}={}){
+  const prepared=prepareMixamoRig(source,referencePose,{pose,accessoryHandling});
   const warnings=[];
   const bytes=exportFbx(prepared.model,{
     format:'binary',version:7400,target:'threejs',
@@ -113,6 +113,22 @@ export function cleanRiggedMixamoFBX(source,referencePose,{pose='reference'}={})
     throw new Error('El FBX todavía contiene animaciones. Se canceló la descarga.');
   if(verified.meshes<1)
     throw new Error('El FBX perdió todas las mallas riggeadas.');
+  if(prepared.accessory?.handling==='rigid'&&prepared.accessory.changed){
+    const staticMeshes=[];
+    verified.model.traverse(n=>{
+      if(n.isMesh&&!n.isSkinnedMesh&&n.geometry?.getAttribute('position')?.count)
+        staticMeshes.push(n);
+    });
+    if(!staticMeshes.some(n=>n.name===prepared.accessory.accessoryName||
+      n.name.includes(prepared.accessory.accessoryName)))
+      throw new Error('El FBX reimportado perdió el adorno rígido «'+
+        prepared.accessory.accessoryName+'». Se canceló para no perder piezas.');
+    warnings.push('El accesorio '+prepared.accessory.accessoryName+
+      ' se conservó visualmente como malla rígida unida al torso. Sus  movimientos internos de tela ya no son animables.');
+  }
+  if(prepared.accessory?.handling==='exclude'&&prepared.accessory.changed)
+    warnings.push('Se excluyó el accesorio '+prepared.accessory.accessoryName+
+      ' SOLO de esta copia para Mixamo. El FBX original no se modificó.');
   const physicalRig=readPhysicalFbxRig(bytes);
   const roots=[...physicalRig.values()].filter(parent=>parent===null);
   if(roots.length!==1)
@@ -121,6 +137,7 @@ export function cleanRiggedMixamoFBX(source,referencePose,{pose='reference'}={})
   return {
     bytes,bytesLength:bytes.byteLength,bones:verified.bones,
     meshes:verified.meshes,animations:0,pose:prepared.pose,
-    adjustments:prepared.adjustments,consolidation:prepared.consolidation,warnings,
+    adjustments:prepared.adjustments,consolidation:prepared.consolidation,
+    accessory:prepared.accessory,warnings,
   };
 }
