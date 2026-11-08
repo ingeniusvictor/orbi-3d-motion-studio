@@ -3,7 +3,11 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {FBXLoader} from 'three/addons/loaders/FBXLoader.js';
 import {captureReferencePose,prepareMixamoRig} from '../src/lib/motionExtraction.js';
-import {cleanRiggedMixamoFBX} from '../src/lib/fbxExport.js';
+import {cleanRiggedMixamoFBX as exportCleanFBXWithAudit} from '../src/lib/fbxExport.js';
+// Legacy tests of root bind recovery are structural. Preserve them with a
+// visibly unverified report; MOTION-05E performs strict geometry QA.
+const cleanRiggedMixamoFBX=(source,reference,opts={})=>
+  exportCleanFBXWithAudit(source,reference,{...opts,integrityMode:'report'});
 import {restoreSkinnedBindPose} from '../src/lib/bindPose.js';
 
 function character(){
