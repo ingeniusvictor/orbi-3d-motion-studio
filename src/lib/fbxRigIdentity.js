@@ -10,10 +10,12 @@ export function reconcilePhysicalRigNames(expected,physical,loadedSkins=[]){
   const mapping=new Map();
   const warnings=[];
   if(missing.length||unexpected.length){
-    const bodyRootMissing=missing.length===1&&missing[0]==='root'&&
-      expected.get('root')===null;
+    // The body "root" may be the topmost bone OR a child of an FBX
+    // Armature/Bip001 bone. A safe name-only substitution must preserve
+    // exactly that parent, not require the root to be scene-level.
+    const bodyRootMissing=missing.length===1&&missing[0]==='root';
     const oneReplacement=unexpected.length===1&&
-      physical.get(unexpected[0])===null;
+      physical.get(unexpected[0])===expected.get('root');
     if(bodyRootMissing&&oneReplacement){
       const replacement=unexpected[0];
       // The FBX may hold a renamed helper as a LimbNode, but it must be a
