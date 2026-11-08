@@ -45,8 +45,9 @@ function snapshotWorldPositions(mesh,geom){
   // Baking all vertices is necessary: checking only a few might overlook
   // ribbons whose vertices are driven by multiple independent cloth bones.
   for(let i=0,n=geom.getAttribute('position').count;i<n;i++){
+    // SkinnedMesh.getVertexPosition ALREADY includes skinning and morphing.
+    // Calling applyBoneTransform again would double-deform Mint's bow.
     mesh.getVertexPosition(i,sample);
-    mesh.applyBoneTransform(i,sample);
     positions.push(sample.clone());
   }
   return positions;
