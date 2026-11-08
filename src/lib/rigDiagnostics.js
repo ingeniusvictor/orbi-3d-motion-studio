@@ -34,6 +34,32 @@ export function buildRigDiagnostic(root,{filename='modelo'}={}){
     return {index,name:mesh.name||'Malla '+(index+1),
       boneCount:bones.length,bones:rows,truncated:bones.length>6000};
   });
+  // Include non-palette child node TYPES under the skinned bones. The
+  // original v1 diagnostic could identify head_adjust but not the helper
+  // Object3D/Group/Mesh that was blocking an otherwise safe rigid export.
+  // Names and types only; never geometry, texture or animation data.
+  const attachments=[];
+  for(let meshIndex=0;meshIndex<meshes.length;meshIndex++){
+    const mesh=meshes[meshIndex],palette=new Set(mesh.skeleton?.bones||[]);
+    for(const bone of palette){
+      for(const child of bone.children||[]){
+        if(child.isBone&&palette.has(child))continue;
+        if(attachments.length>=200)break;
+        let subBones=0,staticMeshes=0,skinned=0;
+        child.traverse(n=>{
+          if(n.isBone)subBones++;
+          if(n.isMesh&&!n.isSkinnedMesh)staticMeshes++;
+          if(n.isSkinnedMesh)skinned++;
+        });
+        attachments.push({
+          meshIndex,bone:bone.name||'(sin nombre)',
+          name:child.name||'(sin nombre)',type:child.type||'Object3D',
+          childBones:subBones,staticMeshes,skinnedMeshes:skinned,
+          visible:child.visible!==false,
+        });
+      }
+    }
+  }
   const differences=[];
   let duplicated=0;
   for(const [name,appearances] of groups){
@@ -54,8 +80,9 @@ export function buildRigDiagnostic(root,{filename='modelo'}={}){
     privacy:'Generado localmente al pulsar. Contiene nombres y transformaciones de huesos; NO contiene mallas, vértices, texturas, materiales ni pistas de animación.',
     summary:{skinnedMeshes:meshes.length,uniqueBoneObjects:boneObjects.size,
       uniqueBoneNames:groups.size,duplicatedNames:duplicated,
-      namesWithDifferentParentsOrWorldPositions:differences.length},
-    differences,
+      namesWithDifferentParentsOrWorldPositions:differences.length,
+      auxiliaryAttachments:attachments.length},
+    differences,auxiliaryAttachments:attachments,
     meshes:indexedMeshes,
   };
 }
