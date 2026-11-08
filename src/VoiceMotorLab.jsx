@@ -98,7 +98,7 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip}){
         setMessage('Ollama responde, pero no hay Qwen 3.5 instalado.');
       }
     }catch(e){setConnected(false);setError(e.message||String(e));}
-    finally{setBusy(false);if(controller.current===ctrl)controller.current=null;}
+    finally{if(controller.current===ctrl){controller.current=null;setBusy(false);}}
   };
   const query=async()=>{
     if(!connected||busy||!models.includes(modelName))return;
@@ -112,7 +112,7 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip}){
       setIntent(output);
       setMessage('Respuesta recibida y contrato motor validado. Voz aún sin reproducir.');
     }catch(e){if(!ctrl.signal.aborted)setError(e.message||String(e));}
-    finally{clearTimeout(timeout);if(controller.current===ctrl)controller.current=null;setBusy(false);}
+    finally{clearTimeout(timeout);if(controller.current===ctrl){controller.current=null;setBusy(false);}}
   };
   const onAudioFile=event=>{
     stop('audio-replaced');
