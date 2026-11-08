@@ -264,7 +264,13 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip}){
       Este laboratorio usa voz del navegador o un archivo de audio local;
       <strong> todavía no conecta el servidor Kokoro de LUMIA R8</strong>.
     </small>
-    <div style={{display:'grid',gap:9,padding:10,border:'1px solid #345969',borderRadius:8}}>
+    <small style={{lineHeight:1.6,opacity:0.8}}>
+      Los botones de prueba rápida del rostro están junto al visor 3D.
+      Abre estos ajustes solo para calibrar intensidad o inspeccionar el rig.
+    </small>
+    <details className="lp-accordion">
+      <summary>LP-03D.1 · Opciones faciales y diagnóstico detallado</summary>
+      <div style={{display:'grid',gap:9,padding:10}}>
       <strong style={{fontSize:12}}>LP-03D.1 · Expresión facial integral</strong>
       <small style={{fontSize:11,lineHeight:1.6,opacity:0.82}}>
         Coordina microexpresiones, cejas, mejillas, párpados y mandíbula
@@ -357,8 +363,11 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip}){
         Esta etapa no crea músculos ni blendshapes ausentes; los movimientos
         exactos del rostro deben validarse con Vita.vrm de cerca.
       </small>
-    </div>
-    <div style={{display:'grid',gap:7,padding:10,border:'1px solid #345969',borderRadius:8}}>
+      </div>
+    </details>
+    <details className="lp-accordion">
+      <summary>LP-03C.2 · Opciones de labios y visemas</summary>
+      <div style={{display:'grid',gap:7,padding:10}}>
       <strong style={{fontSize:12}}>LP-03C.2 · Boca y labios (visemas)</strong>
       <small style={{lineHeight:1.5,opacity:0.86}}>
         {lipInfo?.supported
@@ -398,7 +407,8 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip}){
         WAV/MP3 local: apertura guiada por volumen medido y forma vocálica aproximada.
         No equivale a lip-sync fonético exacto de Kokoro.
       </small>
-    </div>
+      </div>
+    </details>
     <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12}}>
       <input type="checkbox" checked={speakerEnabled}
         onChange={e=>{stop('disabled');setSpeakerEnabled(e.target.checked);}}/>
