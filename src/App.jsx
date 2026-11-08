@@ -189,7 +189,8 @@ export default function App() {
         (result.bind?
           'Pose de bind restaurada: '+result.bind.bones+' huesos, '+
             result.bind.verticesChecked+' vértices muestreados, '+
-            'desviación máxima '+result.bind.maxBindError+'. '+
+            'desviación máxima '+result.bind.maxBindError+', ' +
+            'skin '+result.bind.maxPaletteError+'. '+
             (result.bind.angleAfter!==null?
               'Eje cabeza-pelvis '+result.bind.angleAfter+
               '° respecto de Y; revisa visualmente si está erguido. ':'')
