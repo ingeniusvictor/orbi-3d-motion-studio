@@ -178,6 +178,105 @@ test('MOTION-05A.3 refuses a second independent character rig in a single Mixamo
   assert.throws(()=>cleanRiggedMixamoFBX(f.root,ref),/raíces óseas distintas/);
 });
 
+// The Mint Swimsuit diagnostic has TWO genuinely distinct palettes:
+// 340 bone body (Bip001) and 36 bone ChestBow, intersecting only in the
+// NAME "root". The following fixture reproduces this class of failure,
+// not the private file itself.
+function separateChestBowRigFixture({name='mint019_swimsuit_ChestBow_skin_LOD0'}={}){
+  const f=fixture();
+  f.hips.name='root'; // body's own root; different physical Bone from accessory
+  const auxRoot=new THREE.Bone();auxRoot.name='root';
+  auxRoot.position.set(-0.5,1.4,0.12);
+  auxRoot.rotation.z=0.7;
+  const adjust=new THREE.Bone();adjust.name='pelvis_adjust';
+  auxRoot.add(adjust);
+  const bowNode=new THREE.Bone();bowNode.name='B_L_cb00';
+  bowNode.position.set(0.05,0.02,0.04);
+  adjust.add(bowNode);
+  f.root.add(auxRoot);
+  const body=f.root.getObjectByName('Character_With_Skin');
+  const geom=new THREE.BoxGeometry(.12,.08,.04);
+  const count=geom.getAttribute('position').count;
+  const indices=new Uint16Array(count*4),weights=new Float32Array(count*4);
+  // Bow vertices are actually weighted to its independent aux skeleton.
+  for(let i=0;i<count;i++){indices[i*4]=2;weights[i*4]=1;}
+  geom.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(indices,4));
+  geom.setAttribute('skinWeight',new THREE.Float32BufferAttribute(weights,4));
+  const bow=new THREE.SkinnedMesh(geom,new THREE.MeshStandardMaterial({color:0x0099cc}));
+  bow.name=name;
+  f.root.add(bow);
+  f.root.updateWorldMatrix(true,true);
+  bow.bind(new THREE.Skeleton([auxRoot,adjust,bowNode]));
+  return {...f,bow,auxRoot,adjust,bowNode,body};
+}
+test('MOTION-05B rigid bow export retains body and visual accessory with one FBX rig',()=>{
+  const f=separateChestBowRigFixture();
+  const pose=captureReferencePose(f.root);
+  const expected={
+    roots:skinBoneCount(f.root),
+    bowPosition:f.bow.applyBoneTransform(0,
+      f.bow.getVertexPosition(0,new THREE.Vector3())).clone(),
+    originalArm:f.arms.Left.upper.quaternion.clone(),
+  };
+  assert.equal(expected.roots,11);
+  const result=cleanRiggedMixamoFBX(f.root,pose,{accessoryHandling:'rigid'});
+  assert.equal(result.animations,0);
+  assert.equal(result.bones,8);
+  assert.equal(result.meshes,1);
+  assert.equal(result.accessory.handling,'rigid');
+  assert.equal(result.accessory.changed,true);
+  assert.match(result.accessory.rigidParent,/spine/i);
+  assert.ok(result.accessory.maxPositionError<0.0005);
+  assert.equal(f.bow.isSkinnedMesh,true);
+  assert.equal(skinBoneCount(f.root),11,'never rewrite source FBX');
+  assert.ok(f.arms.Left.upper.quaternion.equals(expected.originalArm));
+  assert.ok(expected.bowPosition.distanceTo(
+    f.bow.applyBoneTransform(0,f.bow.getVertexPosition(0,new THREE.Vector3())))<1e-7);
+  assert.equal(readPhysicalFbxRig(result.bytes).size,8);
+  const exported=new FBXLoader().parse(result.bytes.buffer.slice(
+    result.bytes.byteOffset,result.bytes.byteOffset+result.bytes.byteLength),'');
+  const staticMeshes=[];
+  exported.traverse(n=>{
+    if(n.isMesh&&!n.isSkinnedMesh)staticMeshes.push(n);
+  });
+  assert.ok(staticMeshes.some(n=>n.name.includes('ChestBow')));
+  assert.equal(exported.animations.length,0);
+});
+test('MOTION-05B body-only export strips only independent bow from COPY',()=>{
+  const f=separateChestBowRigFixture();
+  const reference=captureReferencePose(f.root);
+  const result=cleanRiggedMixamoFBX(f.root,reference,{accessoryHandling:'exclude'});
+  assert.equal(result.bones,8);
+  assert.equal(result.meshes,1);
+  assert.equal(result.animations,0);
+  assert.equal(result.accessory.handling,'exclude');
+  assert.equal(result.accessory.accessoryName,'mint019_swimsuit_ChestBow_skin_LOD0');
+  assert.ok(f.bow.parent,'source must retain the bow with rig');
+  assert.ok(f.auxRoot.parent,'source must retain its auxiliary bones');
+});
+test('MOTION-05B strict mode still rejects non-equivalent ChestBow rig',()=>{
+  const f=separateChestBowRigFixture();
+  const reference=captureReferencePose(f.root);
+  assert.throws(()=>cleanRiggedMixamoFBX(f.root,reference),
+    /orientación o escala de referencia/);
+});
+test('MOTION-05B never strips a second character mistaken for an accessory',()=>{
+  const f=separateChestBowRigFixture({name:'Second_Character_Body'});
+  const reference=captureReferencePose(f.root);
+  assert.throws(()=>cleanRiggedMixamoFBX(f.root,reference,
+    {accessoryHandling:'exclude'}),/no se identificó con certeza como accesorio/);
+  assert.throws(()=>cleanRiggedMixamoFBX(f.root,reference,
+    {accessoryHandling:'rigid'}),/no se identificó con certeza como accesorio/);
+});
+test('MOTION-05B does not delete attachments nested inside auxiliary bones',()=>{
+  const f=separateChestBowRigFixture();
+  const attached=new THREE.Group();attached.name='unknown_extra';
+  f.bowNode.add(attached);
+  const ref=captureReferencePose(f.root);
+  assert.throws(()=>cleanRiggedMixamoFBX(f.root,ref,
+    {accessoryHandling:'exclude'}),/contiene objetos adicionales/);
+  assert.ok(attached.parent===f.bowNode);
+});
 test('MOTION-05A.1 supports an unnamed FBX root renamed by the viewer after load',()=>{
   const f=fixture();
   f.root.name=''; // FBXLoader sometimes supplies an unnamed top-level Group
