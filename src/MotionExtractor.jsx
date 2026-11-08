@@ -18,7 +18,7 @@ export default function MotionExtractor({model,clips=[],activeClip,busy,onExport
   const eligible=(model.format==='FBX'||model.format==='GLB'||model.format==='GLTF');
   const rigged=Number(model.bones)>0&&Number(model.meshes)>0;
   return <details className="motion-extractor">
-    <summary><Film size={15}/> MOTION-05B.1 · Extraer animaciones y preparar FBX para Mixamo</summary>
+    <summary><Film size={15}/> MOTION-05B.2 · Extraer animaciones y preparar FBX para Mixamo</summary>
     <div className="motion-extractor-content">
       <p>Genera una <strong>copia FBX riggeada sin animaciones</strong>.
         La opción recomendada conserva la pose de referencia del archivo:
@@ -84,6 +84,10 @@ export default function MotionExtractor({model,clips=[],activeClip,busy,onExport
         tu equipo. Incluye nombres, jerarquías y transformaciones de huesos;
         NO incluye geometría, texturas ni animaciones. Compártelo solo si deseas
         que revisemos las diferencias entre mallas.</small>
+      <small><ShieldCheck size={13}/> En el modo lazo rígido, se conservan
+        nodos de organización y piezas estáticas adicionales de la armadura
+        auxiliar cuando pasan la verificación de posición y orientación.
+        Los objetos con otros rigs o dependencias desconocidas siguen bloqueados.</small>
       <small><ShieldCheck size={13}/> El archivo FBX limpio conserva el rig y
         elimina los clips. Si eliges A/T calibrada y el esqueleto no se reconoce,
         no se fuerza una postura deformada: usa la pose original.
