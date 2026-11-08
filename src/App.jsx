@@ -152,7 +152,7 @@ export default function App() {
     } catch(error) {setNotice({type:'error',text:`No se pudo exportar: ${error.message||error}`});}
     finally {setBusy('');}
   };
-  const exportCleanFBX=async ({pose='t'}={})=>{
+  const exportCleanFBX=async ({pose='reference'}={})=>{
     if(!viewer.current||!model)return;
     setBusy('Restaurando pose y verificando FBX riggeado sin animaciones…');
     setNotice(null);
@@ -164,9 +164,9 @@ export default function App() {
         result.size+'). Verificado: '+result.bones+' huesos, '+
         result.meshes+' mallas riggeadas y 0 animaciones. '+
         (rotations?'Correcciones: '+rotations+'. ':'')+
-        'Reabre el FBX y confirma su pose T en Mixamo. La aceptación por Mixamo no está garantizada.'});
+        'Pose exportada: '+result.pose+'. Reabre el FBX en ORBI antes de probarlo en Mixamo. La aceptación por Mixamo no está garantizada.'});
     }catch(error){
-      setNotice({type:'error',text:'No se exportó una pose T insegura: '+
+      setNotice({type:'error',text:'No se exportó el FBX limpio: '+
         (error.message||String(error))});
     }finally{setBusy('');}
   };
