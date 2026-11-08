@@ -1,5 +1,6 @@
 import {useEffect,useState} from 'react';
 import {Eye,ScanFace,Smile,X,Focus,RotateCcw,Volume2,Square} from 'lucide-react';
+import {canRunFacialQuickAction} from './lib/livingPresence/facialQuickActions.js';
 
 const ROWS=Object.freeze([
   {key:'blink',label:'Parpadear',group:'face',feature:'blink'},
@@ -14,15 +15,6 @@ const ROWS=Object.freeze([
   {key:'jaw',label:'Mandíbula',group:'face',feature:'jaw'},
 ]);
 const VOWELS=Object.freeze(['a','e','i','o','u']);
-export function canRunFacialQuickAction(action,{face,lip,presenceEnabled}={}){
-  if(action?.group==='mouth')return Boolean(lip?.mapping?.[action.key]&&!lip?.active);
-  if(action?.key==='blink')return Boolean(face?.blink&&presenceEnabled);
-  if(action?.feature==='gaze')return Boolean(face?.gaze&&presenceEnabled);
-  if(!face?.enabled)return false;
-  if(action?.feature==='squint')
-    return Boolean(face?.channels?.leftSquint||face?.channels?.rightSquint);
-  return Boolean(face?.channels?.[action?.feature]);
-}
 function snapshot(viewer){
   return {
     face:viewer?.getLivingFacialDiagnostics?.()||null,
