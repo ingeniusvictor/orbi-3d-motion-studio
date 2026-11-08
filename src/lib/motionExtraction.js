@@ -199,7 +199,7 @@ export function prepareMixamoRig(root,referencePose,{pose='reference',accessoryH
       pose==='a'?makeCalibratedAPose(clone):
       pose==='bind'
         ?{pose:'Bind pose del esqueleto (sin animación)',adjustments:[]}
-        :{pose:'Referencia original (puede contener fotograma animado)',adjustments:[]};
+        :{pose:'Referencia original (sin modificar)',adjustments:[]};
     return {model:clone,pose:details.pose,adjustments:details.adjustments,
       consolidation,accessory,bind,bones:skinBoneCount(clone),
       meshes:skinnedMeshes(clone).length};
