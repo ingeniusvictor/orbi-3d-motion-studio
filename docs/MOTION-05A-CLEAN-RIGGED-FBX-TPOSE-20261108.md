@@ -251,3 +251,33 @@ Se añadieron cinco regresiones `MOTION-05B`: conservación del adorno como mall
 **Limitaciones:** no hemos tenido los bytes de `Mint...fbx` ni los tipos de hijos de `head_adjust`; el diagnóstico original solo mostraba nombres y matrices de los 36+340 huesos skinned. La nueva ruta es verificable en rigs sintéticos, pero la apariencia del Mint real y la aceptación en Mixamo siguen pendientes de pruebas en el equipo del usuario.
 
 **QA después de actualizar:** detener Vite, revisar `git status --short`, actualizar con `git pull --ff-only` solo cuando esté limpio, ejecutar `npm.cmd test`, `npm.cmd run build`, `npm.cmd run dev -- --port 5174 --strictPort`; recargar navegador con Ctrl+Shift+R y **volver a cargar el FBX original**. Seleccionar **Pose original + Lazo rígido unido al torso** bajo MOTION-05B.2. Si descarga, reabrir `_BOW_RIGID.fbx` para comprobar cuerpo, rostro, lazo, piezas extra, cero animaciones y una sola raíz; después probarlo con Mixamo. Si falla, adjuntar **nuevo texto exacto** y, si el error acusa otro objeto auxiliar, descargar diagnóstico actualizado con `auxiliaryAttachments`. El original y el PR draft continúan inalterados.
+
+
+## MOTION-05B.3 — Validar raíz `root` renombrada físicamente sin aceptar pérdida de huesos (2026-11-08)
+
+**Nuevo error real:** `No se exportó el FBX limpio. Tratamiento aplicado: Lazo rígido unido al torso. El FBX perdió o renombró el hueso físico «root».`
+
+**Dato importante del código:** la auditoría física de `validateBinaryFBX` *ya había aprobado* que el FBX tiene el número esperado de `LimbNode` y al menos una malla vinculada. La excepción procede de la comparación posterior por nombres: `rigSignature(reference)` incluye un hueso `root`, pero `readPhysicalFbxRig(bytes)` no lo encuentra con ese nombre. El recuento correcto por sí solo no demuestra que la raíz se haya conservado; es necesario verificar los parentescos y el skin.
+
+### Cambio aplicado
+
+- Nuevo `src/lib/fbxRigIdentity.js`, función pura `reconcilePhysicalRigNames(expected,physical,loadedSkins)`: si los mapas coinciden exactamente no cambia nada. Si difieren, solo admite **un único hueso llamado `root` desaparecido** y **un único hueso físico nuevo** (como `root_1`), con **el mismo padre físico**, **la misma lista completa de hijos** y **referencia explícita desde un `SkinnedMesh` FBX realmente reimportado**. Soporta tanto raíz corporal de nivel escena como `root` que cuelga del armature `Bip001`. Se remapea `root` únicamente para la comparación de jerarquías; nunca se modifica a ciegas el archivo físico ni los pesos.
+- Para todos los demás huesos siguen siendo obligatorios nombres idénticos, mismo padre, recuento físico exacto y una sola raíz; no se permite un reemplazo general, pérdida de hueso, hueso añadido, remapeo de un `root` sin skin ni otro tipo de discrepancia.
+- Si no puede demostrarse la equivalencia, se bloquea la descarga y el error enumera **nombres faltantes/nombres adicionales**; deja de afirmar sin evidencia que el hueso necesariamente se perdió.
+- `fbxExport.js` utiliza la reconciliación para la verificación del archivo binario y devuelve un aviso si se detecta y verifica un renombrado. **Corrección importante descubierta en la prueba:** `skinnedMeshes()` en este proyecto devuelve **metadatos de malla** (`id/name/vertices/triangles`), NO objetos Three.js; el nuevo comprobador debe obtener los objetos reales mediante `group.traverse(node=>node.isSkinnedMesh)` o todos los tests se bloquean aunque la raíz sí exista en el skin.
+- `App.jsx` muestra las advertencias `result.warnings` tras exportar, incluida cualquier raíz que el exportador haya renombrado, para que el usuario sepa qué comprobación pasó.
+
+### Pruebas
+
+- `tests/fbxRigIdentity.test.js`: prueba end-to-end que construye **FBX binario real**, lo reabre y demuestra que `root_1` reemplazó a `root` conservando `Bip001-Spine` como hijo y el skin. Pruebas puras para raíz bajo `Bip001`; rechazo de parentescos alterados, raíz no vinculada al skin, nombres de huesos no-root cambiados. Todas las pruebas anteriores de MOTION-05B.2 siguen vigentes.
+- **220/220 tests y compilación correctos** en GitHub Actions https://github.com/ingeniusvictor/orbi-3d-motion-studio/actions/runs/42505584072 (antes del cambio solo de presentación de avisos).
+
+### QA real
+
+1. En PowerShell detener Vite; revisar `git status --short` desde `$env:USERPROFILE\Downloads\ORBI-LIVING-PRESENCE-LAB`, ejecutar `git pull --ff-only` solo con árbol limpio y luego `npm.cmd test`, `npm.cmd run build` y `npm.cmd run dev -- --port 5174 --strictPort`.
+2. Forzar recarga del navegador `Ctrl+Shift+R`, volver a abrir **FBX original Mint Swimsuit con movimiento** y entrar a Biblioteca → **MOTION-05B.2**.
+3. Elegir **Pose original**, **Lazo rígido unido al torso**, Exportar FBX con lazo rígido.
+4. Si descarga `*_BOW_RIGID.fbx`, **reabrir** para comprobar una sola armadura física, 0 clips, mallas/cuerpo completos, cara correcta, accesorio visible y colocado correctamente. Revisar posibles avisos de `root` renombrado y probar importación Mixamo únicamente si el resultado es visualmente íntegro.
+5. Si falla, el **nuevo mensaje debe enumerar nombres de huesos físicos faltantes y nuevos**. No volver a eliminar huesos ni ajustar su skin sin conocer esa discrepancia.
+
+**Nota:** el test binario es un rig pequeño sintético que reproduce el caso de raíz renombrada; no incluye los 340+36 huesos ni la geometría privada de Mint. La aceptación efectiva de Mint en Mixamo y la ausencia de deformaciones reales siguen pendientes de QA del usuario. La rama `main`, LUMIA R8 y el FBX original no han sido modificados.
