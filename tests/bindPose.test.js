@@ -24,6 +24,68 @@ function character(){
   body.bind(new THREE.Skeleton([hips,spine,head]));
   return {root,hips,spine,head,body};
 }
+test('MOTION-05D.2 restores actual root bind under non-Bone FBX scale-100 and rotated axis parent',()=>{
+  const {root,hips,spine,head,body}=character();
+  hips.name='root';
+  const axis=new THREE.Group();axis.name='FBX_Global_Axis_And_UnitScale';
+  axis.position.set(8,-14,31);
+  axis.rotation.x=-Math.PI/2;
+  axis.scale.setScalar(100);
+  root.add(axis);axis.add(hips);
+  root.updateWorldMatrix(true,true);
+  body.skeleton.calculateInverses();
+  const bindWorld=new Map([hips,spine,head].map(b=>[b,b.matrixWorld.clone()]));
+  const bindInverses=body.skeleton.boneInverses.map(m=>m.clone());
+  hips.rotation.z=-Math.PI/2; // imported source contains an action pose
+  root.updateWorldMatrix(true,true);
+  const animated=hips.quaternion.clone();
+  const audit=restoreSkinnedBindPose(root);
+  assert.equal(audit.bones,3);
+  assert.equal(audit.skinnedMeshes,1);
+  assert.ok(audit.maxBindError<1e-6);
+  assert.ok(audit.maxPaletteError<1e-6);
+  assert.ok(audit.maxDecompositionError<1e-6);
+  for(const bone of [hips,spine,head]){
+    const expected=bindWorld.get(bone).elements;
+    const actual=bone.matrixWorld.elements;
+    for(let i=0;i<16;i++)assert.ok(Math.abs(expected[i]-actual[i])<1e-5,
+      bone.name+' world matrix element '+i);
+  }
+  assert.ok(hips.quaternion.angleTo(animated)>0.1);
+  assert.ok(body.skeleton.boneInverses.every((m,i)=>m.equals(bindInverses[i])),
+    'never rewrite inverse-bind data');
+  assert.deepEqual(axis.scale.toArray(),[100,100,100],
+    'the FBX parent is kept intact');
+  assert.ok(Math.abs(axis.rotation.x+Math.PI/2)<1e-9);
+});
+test('MOTION-05D.2 copy-only root recovery works through actual clean FBX export',()=>{
+  const {root,hips,body}=character();
+  hips.name='root';
+  const axis=new THREE.Group();axis.name='FBX_Centimeter_100';
+  axis.rotation.y=.23;
+  axis.scale.setScalar(100);
+  axis.position.set(12,9,-5);
+  root.add(axis);axis.add(hips);
+  root.updateWorldMatrix(true,true);
+  body.skeleton.calculateInverses();
+  hips.rotation.z=-.71;
+  root.updateWorldMatrix(true,true);
+  const frozen=hips.quaternion.clone(),transforms=axis.matrix.clone();
+  const ref=captureReferencePose(root);
+  const preview=prepareMixamoRig(root,ref,{pose:'bind'});
+  assert.ok(preview.bind.maxBindError<1e-5);
+  assert.ok(preview.bind.maxPaletteError<1e-5);
+  assert.ok(hips.quaternion.angleTo(frozen)<1e-8,
+    'the source model remains in its current pose');
+  assert.ok(axis.matrix.equals(transforms));
+  const out=cleanRiggedMixamoFBX(root,ref,{pose:'bind'});
+  assert.equal(out.bones,3);
+  assert.equal(out.animations,0);
+  assert.ok(out.bind.maxBindError<1e-5);
+  const loaded=new FBXLoader().parse(out.bytes.buffer.slice(
+    out.bytes.byteOffset,out.bytes.byteOffset+out.bytes.byteLength),'');
+  assert.equal(loaded.animations.length,0);
+});
 test('MOTION-05D.1 reference vs bind: restores body from a horizontal animation frame without mutating source',()=>{
   const {root,hips,head,body}=character();
   hips.rotation.z=-Math.PI/2;
