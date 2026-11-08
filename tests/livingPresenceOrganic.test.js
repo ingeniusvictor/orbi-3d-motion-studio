@@ -115,7 +115,11 @@ test('LP-02B respects imported clip even when paused',()=>{
   for(let i=0;i<100;i++){presence.beforeFrame();presence.update(1/60);}
   presence.beforeFrame();
   presence.update(1/60,{clipPlaying:true});
-  assert.equal(presence.applied.size,0);
+  assert.equal(presence.applied.size,0,'FBX must own all body joints');
+  // LP-03D: visual attention is now intentionally independent of FBX BODY.
+  assert.equal(vrm.lookAt.target,presence.gazeTarget,
+    'eyes continue natural fixations over an action FBX');
+  presence.setEnabled(false);
   assert.equal(vrm.lookAt.target,null);
   assert.equal(vrm.expressionManager.getValue('blink'),0);
   presence.dispose();
