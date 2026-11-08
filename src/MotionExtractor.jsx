@@ -3,7 +3,7 @@ import {Download,Film,ShieldCheck} from 'lucide-react';
 
 // MOTION-05A controls remain beside the Animation Library, never in the
 // sprawling right-side inspector. The live rig/clips are never deleted.
-export default function MotionExtractor({model,clips=[],activeClip,busy,onExportRig,onSaveClip}){
+export default function MotionExtractor({model,clips=[],activeClip,busy,onExportRig,onSaveClip,onDownloadRigDiagnostic}){
   const [pose,setPose]=useState('reference');
   if(!model)return null;
   const eligible=(model.format==='FBX'||model.format==='GLB'||model.format==='GLTF');
@@ -34,11 +34,21 @@ export default function MotionExtractor({model,clips=[],activeClip,busy,onExport
           onClick={()=>onSaveClip(activeClip)}>
           <Download size={14}/> Guardar clip seleccionado
         </button>
+        <button className="outline-btn" type="button"
+          disabled={Boolean(busy)||!eligible||!rigged}
+          onClick={onDownloadRigDiagnostic}
+          title="Guarda un reporte local de huesos y transformaciones para investigar errores de exportación">
+          <Download size={14}/> Descargar diagnóstico del rig
+        </button>
       </div>
       {!eligible&&<p>El exportador directo MOTION-05A admite FBX/GLB riggeados.
         Para VRM mantenemos el flujo de conversión controlada existente.</p>}
       {eligible&&!rigged&&<p>Este archivo no tiene mallas riggeadas verificables.
         No se generará un supuesto FBX preparado para Mixamo.</p>}
+      <small><ShieldCheck size={13}/> El diagnóstico se guarda únicamente en
+        tu equipo. Incluye nombres, jerarquías y transformaciones de huesos;
+        NO incluye geometría, texturas ni animaciones. Compártelo solo si deseas
+        que revisemos las diferencias entre mallas.</small>
       <small><ShieldCheck size={13}/> El archivo FBX limpio conserva el rig y
         elimina los clips. Si eliges A/T calibrada y el esqueleto no se reconoce,
         no se fuerza una postura deformada: usa la pose original.
