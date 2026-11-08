@@ -87,11 +87,65 @@ test('MOTION-05A.3 merges equivalent FBXLoader bone proxies for body+clothing wi
     'do not rewrite the original skin or source bone proxies');
   assert.ok(f.duplicateHips.parent===f.root);
 });
-test('MOTION-05A.3 rejects duplicate named rigs in different world rest positions',()=>{
+test('MOTION-05A.4 translates duplicate root bones uniformly and preserves skinned body+clothes',()=>{
   const f=duplicatedSkinFixture({shiftSecond:0.5});
+  const original=captureReferencePose(f.root);
+  const poseBefore=f.clothes.boneTransform(0,new THREE.Vector3()).clone();
+  const skinBefore=f.clothes.skeleton.boneInverses.map(m=>m.clone());
+  const out=cleanRiggedMixamoFBX(f.root,original);
+  assert.equal(out.bones,8);
+  assert.equal(out.meshes,2);
+  assert.equal(out.animations,0);
+  assert.equal(out.consolidation.bonesBefore,16);
+  assert.equal(out.consolidation.bonesAfter,8);
+  assert.equal(out.consolidation.offsetsCompensated,1);
+  const reopened=new FBXLoader().parse(out.bytes.buffer.slice(
+    out.bytes.byteOffset,out.bytes.byteOffset+out.bytes.byteLength),'');
+  assert.equal(reopened.animations.length,0);
+  assert.equal(skinnedMeshes(reopened).length,2);
+  assert.equal(readPhysicalFbxRig(out.bytes).size,8);
+  assert.equal(skinBoneCount(f.root),16,'source must retain both proxy rigs');
+  assert.ok(f.clothes.boneTransform(0,new THREE.Vector3()).distanceTo(poseBefore)<1e-8);
+  assert.ok(f.clothes.skeleton.boneInverses.every((m,i)=>m.equals(skinBefore[i])),
+    'source skin palette inverses must not be altered');
+});
+test('MOTION-05A.4 also supports a shifted duplicate rig with its own inverse bind matrices',()=>{
+  const f=duplicatedSkinFixture({shiftSecond:0.5});
+  f.root.updateWorldMatrix(true,true);
+  // This is the common legitimate case: a differently positioned proxy
+  // skeleton with inverse binds that place its vertices on the SAME body.
+  for(let i=0;i<f.clothes.skeleton.bones.length;i++){
+    f.clothes.skeleton.boneInverses[i].copy(
+      f.clothes.skeleton.bones[i].matrixWorld).invert();
+  }
+  const reference=captureReferencePose(f.root);
+  const out=cleanRiggedMixamoFBX(f.root,reference);
+  assert.equal(out.bones,8);
+  assert.equal(out.meshes,2);
+  assert.equal(out.animations,0);
+  assert.equal(out.consolidation.offsetsCompensated,1);
+});
+test('MOTION-05A.4 refuses nonuniform relative offsets between a repeated root and its children',()=>{
+  const f=duplicatedSkinFixture({shiftSecond:0.5});
+  const child=f.duplicateHips.children.find(x=>x.isBone);
+  child.position.x+=0.18;
   const reference=captureReferencePose(f.root);
   assert.throws(()=>cleanRiggedMixamoFBX(f.root,reference),
-    /posiciones de referencia diferentes/);
+    /no comparte el desplazamiento uniforme/);
+  assert.equal(skinBoneCount(f.root),16);
+});
+test('MOTION-05A.4 refuses rotated duplicate rigs even if names and parents match',()=>{
+  const f=duplicatedSkinFixture({shiftSecond:0.15});
+  f.duplicateHips.rotation.y=0.22;
+  const reference=captureReferencePose(f.root);
+  assert.throws(()=>cleanRiggedMixamoFBX(f.root,reference),
+    /orientación o escala/);
+});
+test('MOTION-05A.4 separate character at a distant position never merges',()=>{
+  const f=duplicatedSkinFixture({shiftSecond:15});
+  const reference=captureReferencePose(f.root);
+  assert.throws(()=>cleanRiggedMixamoFBX(f.root,reference),
+    /sin proximidad espacial/);
   assert.equal(skinBoneCount(f.root),16);
 });
 test('MOTION-05A.3 refuses a second independent character rig in a single Mixamo FBX',()=>{
