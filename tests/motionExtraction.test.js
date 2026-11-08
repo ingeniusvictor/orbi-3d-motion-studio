@@ -10,6 +10,7 @@ import {cleanRiggedMixamoFBX,isBinaryFBX} from '../src/lib/fbxExport.js';
 import {readPhysicalFbxRig} from '../src/lib/fbxBoneAudit.js';
 import {skinBoneCount,skinnedMeshes} from '../src/lib/lightweight.js';
 import {consolidateEquivalentSkinRigs} from '../src/lib/rigCanonicalizer.js';
+import {buildRigDiagnostic} from '../src/lib/rigDiagnostics.js';
 
 function fixture({includeRight=true}={}){
   const root=new THREE.Group();root.name='Animated_Character';
@@ -66,6 +67,24 @@ function duplicatedSkinFixture({shiftSecond=0}={}){
     original.bindMatrix.clone());
   return {...f,clothes,duplicateHips};
 }
+test('MOTION-05A.4 local rig diagnostic exposes offsets but never mesh/animation bytes',()=>{
+  const f=duplicatedSkinFixture({shiftSecond:0.3});
+  const report=buildRigDiagnostic(f.root,{filename:'Modelo_Ropa.fbx'});
+  assert.equal(report.format,'orbi.motion.rig-diagnostic.v1');
+  assert.equal(report.summary.skinnedMeshes,2);
+  assert.equal(report.summary.uniqueBoneObjects,16);
+  assert.equal(report.summary.uniqueBoneNames,8);
+  assert.ok(report.differences.some(d=>d.name==='mixamorig:Hips'));
+  const root=report.differences.find(d=>d.name==='mixamorig:Hips');
+  assert.equal(root.instances.length,2);
+  const serialized=JSON.stringify(report);
+  assert.ok(serialized.includes('Clothes_Shared_Rig'));
+  assert.ok(!serialized.includes('skinWeight'));
+  assert.ok(!serialized.includes('material:'));
+  assert.ok(!serialized.includes('animationTracks'));
+  assert.ok(report.meshes.every(m=>m.bones.length>0));
+});
+
 test('MOTION-05A.3 merges equivalent FBXLoader bone proxies for body+clothing without changing the source',()=>{
   const f=duplicatedSkinFixture();
   const before=skinBoneCount(f.root);
