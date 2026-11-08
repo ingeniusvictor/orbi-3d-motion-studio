@@ -164,6 +164,10 @@ export default function App() {
         result.size+'). Verificado: '+result.bones+' huesos, '+
         result.meshes+' mallas riggeadas y 0 animaciones. '+
         (rotations?'Correcciones: '+rotations+'. ':'')+
+        (result.consolidation?.consolidated
+          ?'Se consolidaron '+result.consolidation.bonesBefore+
+           ' referencias de huesos en '+result.consolidation.bonesAfter+
+           ' huesos físicos de un solo rig. ':'')+
         'Pose exportada: '+result.pose+'. Reabre el FBX en ORBI antes de probarlo en Mixamo. La aceptación por Mixamo no está garantizada.'});
     }catch(error){
       setNotice({type:'error',text:'No se exportó el FBX limpio: '+
