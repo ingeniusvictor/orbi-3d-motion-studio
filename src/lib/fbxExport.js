@@ -111,6 +111,7 @@ export function animatedBinaryFBX(model,clips) {
  */
 export function cleanRiggedMixamoFBX(source,referencePose,{
   pose='reference',accessoryHandling='strict',orientation='keep',
+  integrityMode='strict',
 }={}){
   const prepared=prepareMixamoRig(source,referencePose,{pose,accessoryHandling});
   const bodyPreparation=auditBodyPreparation(source,prepared.model);
@@ -127,8 +128,22 @@ export function cleanRiggedMixamoFBX(source,referencePose,{
   // FBXExporter/FBXLoader can preserve the 340-bone hierarchy while losing
   // a subset of the body surface. Check EVERY mesh and local spatial coverage
   // against what we actually prepared for export, before downloading.
-  const integrity=auditMeshRoundTrip(oriented.model,verified.model);
-  warnings.push(...integrity.warnings);
+  if(!['strict','report'].includes(integrityMode))
+    throw new Error('Modo de auditoría geométrica no reconocido.');
+  let integrity;
+  try{
+    integrity=auditMeshRoundTrip(oriented.model,verified.model);
+    warnings.push(...integrity.warnings);
+  }catch(error){
+    // Report mode is EXCLUSIVELY for existing structural-regression tests
+    // and optional explicit investigation; NOT the certified FBX path.
+    if(integrityMode==='strict'||!String(error?.message||'')
+      .startsWith('Auditoría de geometría FBX:'))throw error;
+    integrity={passed:false,meshCount:0,details:[],
+      failure:error.message,mode:'diagnostic-unverified'};
+    warnings.push('FBX NO CERTIFICADO: '+error.message+
+      ' Esta salida solo sirve para diagnosticar y no debe cargarse en Mixamo.');
+  }
   if(orientation==='upright'){
     const outputAxis=detectBodyUpDirection(verified.model);
     if(!outputAxis||outputAxis.angleToWorldY>5)
