@@ -19,7 +19,7 @@ const candidates={
     'armr','armright','jbiprupperarm','bip001rupperarm','rshldrbend'],
   rightLowerArm:['rightforearm','rightlowerarm','forearmr','lowerarmr','rlowerarm',
     'lowerarmright','forearmright','jbiprlowerarm','bip001rforearm','rforearmbend'],
-  rightHand:['righthand','handr','rhand','jbiprhand','jbiprhand','bip001rhand'],
+  rightHand:['righthand','handr','rhand','jbiprhand','bip001rhand'],
   hips:['hips','pelvis','hip','jbipchips','jbipchips','rootpelvis'],
 };
 function poseNodes(root){
