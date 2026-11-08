@@ -242,6 +242,26 @@ test('MOTION-05B rigid bow export retains body and visual accessory with one FBX
   assert.ok(staticMeshes.some(n=>n.name.includes('ChestBow')));
   assert.equal(exported.animations.length,0);
 });
+test('MOTION-05B.2 rigid bow is baked with skin applied exactly once',()=>{
+  const f=separateChestBowRigFixture();
+  // Deliberately deform the bow skeleton after its original binding.
+  f.bowNode.position.set(.35,.19,-.27);
+  f.root.updateWorldMatrix(true,true);
+  const source=f.bow.getVertexPosition(0,new THREE.Vector3())
+    .applyMatrix4(f.bow.matrixWorld);
+  const reference=captureReferencePose(f.root);
+  const prepared=prepareMixamoRig(f.root,reference,{
+    accessoryHandling:'rigid',
+  });
+  const rigid=prepared.model.getObjectByName(f.bow.name);
+  assert.ok(rigid&&rigid.isMesh&&!rigid.isSkinnedMesh);
+  rigid.updateWorldMatrix(true,false);
+  const frozen=rigid.getVertexPosition(0,new THREE.Vector3())
+    .applyMatrix4(rigid.matrixWorld);
+  assert.ok(source.distanceTo(frozen)<1e-5,
+    'the rigid bow must match ONE skinned source pose, not a double skin deformation');
+  assert.ok(f.bow.isSkinnedMesh,'source file is never converted');
+});
 test('MOTION-05B body-only export strips only independent bow from COPY',()=>{
   const f=separateChestBowRigFixture();
   const reference=captureReferencePose(f.root);
