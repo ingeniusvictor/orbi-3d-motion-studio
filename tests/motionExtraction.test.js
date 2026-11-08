@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import {FBXLoader} from 'three/addons/loaders/FBXLoader.js';
 import {
   captureReferencePose,cloneAtReferencePose,prepareMixamoRig,
-  makeCalibratedTPose,exportableClipJSON,
+  makeCalibratedTPose,makeCalibratedAPose,exportableClipJSON,
 } from '../src/lib/motionExtraction.js';
 import {cleanRiggedMixamoFBX,isBinaryFBX} from '../src/lib/fbxExport.js';
 import {readPhysicalFbxRig} from '../src/lib/fbxBoneAudit.js';
@@ -117,10 +117,63 @@ test('MOTION-05A two A-pose arms become horizontal T without modifying source',(
   assert.equal(built.bones,8);
   assert.equal(built.meshes,1);
 });
+test('MOTION-05A.2 calibrated A pose uses downward straight arms, not horizontal T',()=>{
+  const f=fixture(),reference=captureReferencePose(f.root);
+  const before=JSON.stringify(captureReferencePose(f.root));
+  const prepared=prepareMixamoRig(f.root,reference,{pose:'a'});
+  assert.match(prepared.pose,/A calibrada/);
+  const nodes=new Map();prepared.model.traverse(n=>nodes.set(n.name,n));
+  for(const [side,sign] of [['Left',1],['Right',-1]]){
+    const upper=nodes.get('mixamorig:'+side+'Arm');
+    const forearm=nodes.get('mixamorig:'+side+'ForeArm');
+    const hand=nodes.get('mixamorig:'+side+'Hand');
+    const target=new THREE.Vector3(sign*Math.cos(Math.PI*35/180),
+      -Math.sin(Math.PI*35/180),0);
+    assert.ok(worldSegment(upper,forearm).angleTo(target)<0.03,
+      side+' upper arm must follow the natural diagonal A');
+    assert.ok(worldSegment(forearm,hand).angleTo(target)<0.03,
+      side+' forearm must be extended diagonally');
+  }
+  assert.equal(JSON.stringify(captureReferencePose(f.root)),before,
+    'calibration is applied only to the cloned rig');
+});
+test('MOTION-05A.2 unfamiliar bone names do not prevent default original-pose FBX',()=>{
+  const f=fixture();
+  f.root.traverse(n=>{
+    if(n.isBone)n.name='avatar_joint_'+n.id;
+  });
+  f.root.name='Character_Unknown_Rig';
+  const reference=captureReferencePose(f.root);
+  f.hips.rotation.y=0.34;
+  const result=cleanRiggedMixamoFBX(f.root,reference);
+  assert.equal(result.pose,'Referencia original (sin modificar)');
+  assert.equal(result.animations,0);
+  assert.equal(result.bones,8);
+  assert.ok(isBinaryFBX(result.bytes));
+  assert.ok(Math.abs(f.hips.rotation.y-.34)<1e-7);
+  assert.throws(()=>prepareMixamoRig(f.root,reference,{pose:'a'}),/Huesos encontrados/);
+  assert.throws(()=>prepareMixamoRig(f.root,reference,{pose:'t'}),/Pose de referencia original/);
+});
+test('MOTION-05A.2 default original pose preserves a downward A posture',()=>{
+  const f=fixture();
+  f.arms.Left.upper.rotation.z=0.17;
+  f.arms.Right.upper.rotation.z=-0.17;
+  const reference=captureReferencePose(f.root);
+  const prepared=prepareMixamoRig(f.root,reference);
+  assert.equal(prepared.pose,'Referencia original (sin modificar)');
+  const nodes=new Map();prepared.model.traverse(n=>nodes.set(n.name,n));
+  for(const side of ['Left','Right']){
+    const a=f.arms[side].upper;
+    const b=nodes.get('mixamorig:'+side+'Arm');
+    assert.ok(a.quaternion.angleTo(b.quaternion)<1e-7,
+      side+' shoulder pose should not be altered');
+  }
+});
+
 test('MOTION-05A pose reference fallback never forces T correction',()=>{
   const f=fixture(),original=captureReferencePose(f.root);
   const result=prepareMixamoRig(f.root,original,{pose:'reference'});
-  assert.equal(result.pose,'Referencia original');
+  assert.equal(result.pose,'Referencia original (sin modificar)');
   assert.deepEqual(result.adjustments,[]);
   assert.deepEqual(captureReferencePose(f.root),original);
 });
@@ -166,7 +219,7 @@ test('MOTION-05A refuses missing humanoid arms without fake T pose',()=>{
   const f=fixture({includeRight:false}),original=captureReferencePose(f.root);
   assert.throws(()=>prepareMixamoRig(f.root,original,{pose:'t'}),/brazo right/);
   const fallback=prepareMixamoRig(f.root,original,{pose:'reference'});
-  assert.equal(fallback.pose,'Referencia original');
+  assert.equal(fallback.pose,'Referencia original (sin modificar)');
 });
 test('MOTION-05A protects against stale hierarchy and unrigged models',()=>{
   const f=fixture(),original=captureReferencePose(f.root);
