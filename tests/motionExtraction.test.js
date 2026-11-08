@@ -288,6 +288,19 @@ test('MOTION-05B never strips a second character mistaken for an accessory',()=>
   assert.throws(()=>cleanRiggedMixamoFBX(f.root,reference,
     {accessoryHandling:'rigid'}),/no se identificó con certeza como accesorio/);
 });
+test('MOTION-05B.2 diagnostic identifies exact unsupported child of head_adjust',()=>{
+  const f=separateChestBowRigFixture();
+  f.adjust.name='head_adjust';
+  const extra=new THREE.Group();extra.name='Mint_Extra_Helper';
+  f.adjust.add(extra);
+  const report=buildRigDiagnostic(f.root,{filename:'Mint.fbx'});
+  const found=report.auxiliaryAttachments.find(x=>
+    x.bone==='head_adjust'&&x.name==='Mint_Extra_Helper');
+  assert.ok(found,'the next local diagnostic must show the non-palette child');
+  assert.equal(found.type,'Group');
+  assert.equal(found.skinnedMeshes,0);
+  assert.ok(report.summary.auxiliaryAttachments>=1);
+});
 test('MOTION-05B.2 preserves harmless transform children under head_adjust',()=>{
   const f=separateChestBowRigFixture();
   f.adjust.name='head_adjust'; // The failure reported by the real Mint FBX
