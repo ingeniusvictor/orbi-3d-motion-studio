@@ -6,6 +6,7 @@ import {Download,Film,ShieldCheck} from 'lucide-react';
 // sprawling right-side inspector. The live rig/clips are never deleted.
 export default function MotionExtractor({model,clips=[],activeClip,busy,onExportRig,onSaveClip,onDownloadRigDiagnostic}){
   const [pose,setPose]=useState(()=>suggestedPoseMode(model));
+  const [orientation,setOrientation]=useState(()=>isKnownMintSplitRig(model)?'upright':'keep');
   const [accessoryHandling,setAccessoryHandling]=useState(()=>
     suggestedAccessoryMode(model));
   const knownMint=isKnownMintSplitRig(model);
@@ -14,12 +15,13 @@ export default function MotionExtractor({model,clips=[],activeClip,busy,onExport
     // The actual lossy copy is generated solely after pressing Export.
     setAccessoryHandling(suggestedAccessoryMode(model));
     setPose(suggestedPoseMode(model));
+    setOrientation(isKnownMintSplitRig(model)?'upright':'keep');
   },[model?.filename,model?.meshes,model?.bones]);
   if(!model)return null;
   const eligible=(model.format==='FBX'||model.format==='GLB'||model.format==='GLTF');
   const rigged=Number(model.bones)>0&&Number(model.meshes)>0;
   return <details className="motion-extractor">
-    <summary><Film size={15}/> MOTION-05D.2 · Extraer animaciones y preparar FBX para Mixamo</summary>
+    <summary><Film size={15}/> MOTION-05E.1 · Extraer animaciones y preparar FBX para Mixamo</summary>
     <div className="motion-extractor-content">
       <p>Genera una <strong>copia FBX riggeada sin animaciones</strong>.
         Un archivo FBX puede abrir en un fotograma de animación, no en su pose
@@ -47,6 +49,17 @@ export default function MotionExtractor({model,clips=[],activeClip,busy,onExport
         (seleccionado como sugerencia). Esto quita su animación flexible
         solo de la copia exportada.
       </p>}
+      <label className="motion-extractor-pose">Orientación física del FBX
+        <select value={orientation} onChange={e=>setOrientation(e.target.value)}
+          disabled={Boolean(busy)||!eligible||!rigged}>
+          <option value="upright">Enderezar personaje físicamente (eje cabeza-pelvis hacia Y)</option>
+          <option value="keep">Conservar orientación original del FBX</option>
+        </select>
+      </label>
+      <small>La orientación física modifica solo la copia exportada:
+        gira cuerpo, cabello y accesorios juntos alrededor del personaje,
+        sin cambiar la bind pose, los pesos del skin ni el FBX original.
+        El proceso se bloquea si la rotación de las mallas no se puede verificar.</small>
       <label className="motion-extractor-pose">Accesorios con esqueleto independiente
         <select value={accessoryHandling}
           onChange={e=>setAccessoryHandling(e.target.value)}
@@ -68,7 +81,7 @@ export default function MotionExtractor({model,clips=[],activeClip,busy,onExport
       <div className="motion-extractor-actions">
         <button className="outline-btn" type="button"
           disabled={Boolean(busy)||!eligible||!rigged}
-          onClick={()=>onExportRig({pose,accessoryHandling})}>
+          onClick={()=>onExportRig({pose,accessoryHandling,orientation})}>
           <Download size={14}/> {accessoryHandling==='rigid'?'Exportar FBX con lazo rígido':
             accessoryHandling==='exclude'?'Exportar FBX solo cuerpo':'Exportar FBX (validación estricta)'}
         </button>
@@ -88,6 +101,10 @@ export default function MotionExtractor({model,clips=[],activeClip,busy,onExport
         Para VRM mantenemos el flujo de conversión controlada existente.</p>}
       {eligible&&!rigged&&<p>Este archivo no tiene mallas riggeadas verificables.
         No se generará un supuesto FBX preparado para Mixamo.</p>}
+      <small><ShieldCheck size={13}/> Auditoría MOTION-05E: al reimportar
+        el FBX se comprueban mallas, triángulos, materiales, morph targets
+        y cobertura espacial de las superficies. Si aparece un hueco,
+        desplazamiento o pérdida importante, se bloquea la descarga.</small>
       <small><ShieldCheck size={13}/> El diagnóstico se guarda únicamente en
         tu equipo. Incluye nombres, jerarquías y transformaciones de huesos;
         NO incluye geometría, texturas ni animaciones. Compártelo solo si deseas
