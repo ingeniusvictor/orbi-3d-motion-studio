@@ -43,9 +43,14 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip}){
   const [speakerEnabled,setSpeakerEnabled]=useState(false);
   const [voiceStatus,setVoiceStatus]=useState('idle');
   const [lipStrength,setLipStrength]=useState(72);
+  const [faceEnabled,setFaceEnabled]=useState(true);
+  const [faceIntensity,setFaceIntensity]=useState(46);
+  const [faceMode,setFaceMode]=useState('resting');
+  const [faceFeedback,setFaceFeedback]=useState('');
   const [lipReadout,setLipReadout]=useState(null);
   const origin=typeof window==='undefined'?'':window.location.origin;
   const lipInfo=lipReadout||getViewer()?.getLivingLipDiagnostics?.()||null;
+  const faceInfo=getViewer()?.getLivingFacialDiagnostics?.()||null;
   useEffect(()=>{
     if(voiceStatus!=='speaking'&&!lipReadout?.preview)return;
     const handle=setInterval(()=>setLipReadout(getViewer()?.getLivingLipDiagnostics?.()||null),250);
@@ -80,9 +85,16 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip}){
   // Keep already loaded local audio available when only the FBX changes.
   useEffect(()=>{
     stop('model-or-clip-changed');
+    setFaceFeedback('');
     setLipReadout(null);
     setIntent(null);setMessage('');
   },[generation,activeClip,getViewer]);
+  useEffect(()=>{
+    setFaceEnabled(true);setFaceIntensity(46);setFaceMode('resting');
+    getViewer()?.setLivingFacialEnabled?.(true);
+    getViewer()?.setLivingFacialIntensity?.(0.46);
+    getViewer()?.setLivingFacialMode?.('resting');
+  },[generation,getViewer]);
   // Release object URLs and browser speech only when the component unmounts.
   useEffect(()=>()=> {
     controller.current?.abort();
@@ -252,6 +264,100 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip}){
       Este laboratorio usa voz del navegador o un archivo de audio local;
       <strong> todavía no conecta el servidor Kokoro de LUMIA R8</strong>.
     </small>
+    <div style={{display:'grid',gap:9,padding:10,border:'1px solid #345969',borderRadius:8}}>
+      <strong style={{fontSize:12}}>LP-03D.1 · Expresión facial integral</strong>
+      <small style={{fontSize:11,lineHeight:1.6,opacity:0.82}}>
+        Coordina microexpresiones, cejas, mejillas, párpados y mandíbula
+        según los controles verdaderamente disponibles del VRM.
+        La mirada y el parpadeo siguen funcionando incluso con un FBX de
+        acción, sin modificar los huesos corporales.
+      </small>
+      <label style={{display:'flex',gap:8,alignItems:'center',fontSize:12}}>
+        <input type="checkbox" checked={faceEnabled} disabled={!model||model?.format!=='VRM'}
+          onChange={e=>{
+            const next=e.target.checked;setFaceEnabled(next);
+            getViewer()?.setLivingFacialEnabled?.(next);
+          }}/>
+        Microexpresiones faciales naturales (A/B)
+      </label>
+      <label style={{display:'grid',gap:5,fontSize:12}}>
+        Intensidad facial: {faceIntensity} %
+        <input type="range" min="0" max="100" step="5" value={faceIntensity}
+          disabled={!faceEnabled||model?.format!=='VRM'}
+          onChange={e=>{
+            const next=Number(e.target.value);setFaceIntensity(next);
+            getViewer()?.setLivingFacialIntensity?.(next/100);
+          }}/>
+      </label>
+      <label style={{fontSize:12,display:'grid',gap:5}}>
+        Estado facial de prueba
+        <select style={style} disabled={!faceEnabled||model?.format!=='VRM'}
+          value={faceMode} onChange={e=>{
+            const next=e.target.value;
+            if(getViewer()?.setLivingFacialMode?.(next))setFaceMode(next);
+          }}>
+          <option value="resting">Reposo natural</option>
+          <option value="attentive">Escuchando con atención</option>
+          <option value="thinking">Pensando</option>
+          <option value="explaining">Explicando</option>
+        </select>
+      </label>
+      <small style={{opacity:0.78,lineHeight:1.6}}>
+        Ojos: {faceInfo?.gaze?'VRMLookAt detectado':'sin controlador compatible'}.
+        {' '}Parpadeo: {faceInfo?.blink?'expresiones disponibles':'sin preset compatible'}.
+        {' '}Cejas: {faceInfo?.channels?.browLift||faceInfo?.channels?.browFrown||'sin control'}.
+        {' '}Mejillas: {faceInfo?.channels?.cheeks||'sin morph localizado'}.
+        {' '}Sonrisa: {faceInfo?.channels?.smile||'sin control'}.
+        {' '}Párpados de entrecerramiento: {
+          faceInfo?.channels?.leftSquint||faceInfo?.channels?.rightSquint||'sin morph localizado'}.
+        {' '}Mandíbula: {faceInfo?.channels?.jaw||'sin control independiente'}.
+      </small>
+      {faceInfo?.proxies?.length>0&&<small style={{lineHeight:1.6,opacity:0.76}}>
+        Control facial aproximado mediante emociones VRM:
+        {' '}{faceInfo.proxies.join(', ')}. Esos presets pueden afectar varias zonas
+        a la vez; no sustituyen morphs anatómicos independientes.
+      </small>}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+        {[
+          ['brows','Probar cejas',Boolean(faceInfo?.channels?.browLift)],
+          ['smile','Probar sonrisa',Boolean(faceInfo?.channels?.smile)],
+          ['cheeks','Probar mejillas',Boolean(faceInfo?.channels?.cheeks)],
+          ['eyelids','Probar entrecerrar ojos',Boolean(faceInfo?.channels?.leftSquint||faceInfo?.channels?.rightSquint)],
+          ['jaw','Probar mandíbula',Boolean(faceInfo?.channels?.jaw)],
+        ].map(([key,label,available])=>
+          <button key={key} type="button" className="outline-btn"
+            style={{fontSize:11,padding:'8px 5px'}} disabled={!faceEnabled||!available||voiceStatus!=='idle'}
+            onClick={()=>{
+              const ok=getViewer()?.previewLivingFace?.(key);
+              setFaceFeedback(ok?label+': inspecciona el rostro de Vita.':
+                'Esa expresión facial no está disponible en este VRM.');
+            }}>{label}</button>
+        )}
+        <button type="button" className="outline-btn"
+          style={{fontSize:11,padding:'8px 5px'}} disabled={!faceInfo?.blink||voiceStatus!=='idle'}
+          onClick={()=>{
+            const ok=getViewer()?.previewLivingBlink?.();
+            setFaceFeedback(ok?'Parpadeo de prueba solicitado.':
+              'Activa Presencia natural A/B para probar el parpadeo.');
+          }}>Probar parpadeo</button>
+        {[
+          ['left','Mirar izquierda'],['right','Mirar derecha'],
+        ].map(([direction,label])=><button key={direction} type="button"
+          className="outline-btn" style={{fontSize:11,padding:'8px 5px'}}
+          disabled={!faceInfo?.gaze||voiceStatus!=='idle'}
+          onClick={()=>{
+            const ok=getViewer()?.previewLivingGaze?.(direction);
+            setFaceFeedback(ok?label+': observa las pupilas.':
+              'Activa Presencia natural A/B para probar la mirada.');
+          }}>{label}</button>)}
+      </div>
+      {faceFeedback&&<small role="status" style={{lineHeight:1.5}}>{faceFeedback}</small>}
+      <small style={{opacity:0.76,fontSize:11,lineHeight:1.5}}>
+        Durante la voz, las microexpresiones pasan a estado de habla.
+        Esta etapa no crea músculos ni blendshapes ausentes; los movimientos
+        exactos del rostro deben validarse con Vita.vrm de cerca.
+      </small>
+    </div>
     <div style={{display:'grid',gap:7,padding:10,border:'1px solid #345969',borderRadius:8}}>
       <strong style={{fontSize:12}}>LP-03C.2 · Boca y labios (visemas)</strong>
       <small style={{lineHeight:1.5,opacity:0.86}}>
