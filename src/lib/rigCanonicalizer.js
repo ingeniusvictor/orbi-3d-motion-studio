@@ -29,16 +29,16 @@ const skinSamples=mesh=>{
   const attr=mesh.geometry?.getAttribute('position');
   if(!attr||!mesh.geometry?.getAttribute('skinIndex')||
     !mesh.geometry?.getAttribute('skinWeight')||
-    typeof mesh.boneTransform!=='function'||!attr.count)return null;
+    typeof mesh.applyBoneTransform!=='function'||!attr.count)return null;
   const result=[],n=attr.count;
   const step=Math.max(1,Math.floor(n/SAMPLE_LIMIT));
   for(let i=0;i<n;i+=step){
-    const local=mesh.boneTransform(i,new THREE.Vector3());
+    const local=mesh.applyBoneTransform(i,new THREE.Vector3());
     result.push({index:i,position:local.clone(),
       world:local.clone().applyMatrix4(mesh.matrixWorld)});
   }
   if((n-1)%step!==0){
-    const local=mesh.boneTransform(n-1,new THREE.Vector3());
+    const local=mesh.applyBoneTransform(n-1,new THREE.Vector3());
     result.push({index:n-1,position:local.clone(),
       world:local.clone().applyMatrix4(mesh.matrixWorld)});
   }
@@ -48,7 +48,7 @@ const assertSkinUnchanged=(mesh,samples)=>{
   if(!samples)throw new Error('No se pudo verificar el skin de «'+
     (mesh.name||'malla')+'». No se unificaron huesos.');
   for(const sample of samples){
-    const actual=mesh.boneTransform(sample.index,new THREE.Vector3());
+    const actual=mesh.applyBoneTransform(sample.index,new THREE.Vector3());
     const tolerance=DIFF_TOLERANCE*Math.max(1,sample.position.length());
     if(actual.distanceTo(sample.position)>tolerance)
       throw new Error('La unificación modificaría la deformación de «'+
