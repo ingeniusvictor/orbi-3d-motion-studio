@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import {detectBodyUpDirection,computeVisibleCharacterBounds} from './visibleBounds.js';
+import {detectBodyUpDirection,computeVisibleCharacterBounds,describeBodyAxisCandidates} from './visibleBounds.js';
 
 // MOTION-05E.1: Rotate the COMPLETE CLONED export scene, not a pelvis bone.
 // Skin, outfit, face and static accessories must undergo the same rigid-world
@@ -32,9 +32,16 @@ export function orientExportUpright(model,{mode='keep'}={}){
   if(mode!=='upright')
     throw new Error('Modo de orientación desconocido; el FBX original no se modificó.');
   const body=detectBodyUpDirection(model);
-  if(!body)
-    throw new Error('No se identificaron cabeza y pelvis del esqueleto corporal. '+
-      'Para enderezar el FBX de manera segura es necesaria esa referencia anatómica.');
+  if(!body){
+    const candidates=describeBodyAxisCandidates(model);
+    const info=candidates.map(c=>c.mesh+' ('+c.boneCount+' huesos): '+
+      [...new Set([...c.anatomicalNames,...c.rootNames])].slice(0,24).join(', '))
+      .join(' | ');
+    throw new Error('No se identificó una pareja anatómica cabeza-pelvis '+
+      'inequívoca y conectada en el mismo rig. No se forzó ninguna rotación. '+
+      'Huesos observados: '+(info||'ninguna malla skinned')+
+      '. Usa «Descargar diagnóstico del rig» si necesitas revisar la jerarquía.');
+  }
   if(!finite(body.up)||body.up.lengthSq()<1e-8)
     throw new Error('La orientación cabeza-pelvis no es verificable.');
   const from=body.up.clone().normalize();
