@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {Brain,Volume2,Square,ShieldCheck} from 'lucide-react';
+import {MediaElementRmsMeter} from './lib/livingPresence/audioRmsMeter.js';
 import {
   getInstalledOllamaModels,OLLAMA_MODEL,ollamaOriginHelp,
 } from './lib/ollamaVision.js';
@@ -27,6 +28,8 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip}){
   const soundUrl=useRef(null);
   const utterance=useRef(null);
   const currentToken=useRef(null);
+  const meter=useRef(null);
+  const meterFrame=useRef(null);
   const [connected,setConnected]=useState(false);
   const [models,setModels]=useState([]);
   const [modelName,setModelName]=useState(OLLAMA_MODEL);
@@ -39,9 +42,20 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip}){
   const [audioName,setAudioName]=useState('');
   const [speakerEnabled,setSpeakerEnabled]=useState(false);
   const [voiceStatus,setVoiceStatus]=useState('idle');
+  const [lipStrength,setLipStrength]=useState(72);
+  const [lipReadout,setLipReadout]=useState(null);
   const origin=typeof window==='undefined'?'':window.location.origin;
+  const lipInfo=lipReadout||getViewer()?.getLivingLipDiagnostics?.()||null;
+  useEffect(()=>{
+    if(voiceStatus!=='speaking')return;
+    const handle=setInterval(()=>setLipReadout(getViewer()?.getLivingLipDiagnostics?.()||null),250);
+    return ()=>clearInterval(handle);
+  },[voiceStatus,getViewer]);
 
   const stop=(reason='cancelled')=>{
+    if(meterFrame.current!==null){
+      cancelAnimationFrame(meterFrame.current);meterFrame.current=null;
+    }
     controller.current?.abort();
     controller.current=null;
     detachAudio.current?.();detachAudio.current=null;
@@ -79,6 +93,8 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip}){
     if(soundUrl.current){
       URL.revokeObjectURL(soundUrl.current);soundUrl.current=null;
     }
+    meter.current?.dispose();meter.current=null;
+    if(meterFrame.current!==null)cancelAnimationFrame(meterFrame.current);
   },[]);
 
   const connect=async()=>{
@@ -133,7 +149,10 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip}){
     stop('new-playback');
     setError('');setMessage('');
     let token;
-    try{token=bridge.current.prepare(intent);}
+    try{
+      getViewer()?.setLivingLipStrength?.(lipStrength/100);
+      token=bridge.current.prepare(intent,{lipSource:source});
+    }
     catch(e){setError(e.message||String(e));return;}
     currentToken.current=token;
     if(source==='browser'){
@@ -152,10 +171,14 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip}){
         bridge.current.start(token);
         setVoiceStatus('speaking');
         const status=bridge.current.getStatus();
-        setMessage(status.motorApplied
-          ? 'Voz del navegador iniciada: movimiento ligado al audio.'
-          : 'Voz iniciada SIN gestos: '+status.reason);
+        setMessage(status.lipsApplied
+          ? 'Voz del navegador: boca animada por aproximación temporal de vocales.'
+          :(status.motorApplied?'Movimiento corporal activo, pero boca no disponible.':
+            'Voz sin animación facial. ')+(getViewer()?.getLivingLipDiagnostics?.().reason||status.reason));
       };
+      speech.onboundary=event=>{if(currentToken.current===token){
+        getViewer()?.boundaryLivingLipSync?.(token,event.charIndex);
+      }};
       speech.onpause=()=>{if(currentToken.current===token){
         bridge.current.pause(token);setVoiceStatus('paused');
       }};
@@ -185,13 +208,30 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip}){
       }
       detachAudio.current=bindMediaElementMotor(audio.current,bridge.current,token);
       try{
+        // A local WebAudio analyser measures the ACTUAL WAV/MP3 amplitude.
+        // On unsupported browsers, speaking continues with approximate timing.
+        if(!meter.current)meter.current=new MediaElementRmsMeter(audio.current);
+        try{await meter.current.connect();}
+        catch(error){setMessage('Detector de volumen no disponible: '+String(error?.message||error));}
         await audio.current.play(); // 'playing' starts motor, not this promise.
         if(currentToken.current!==token)return;
         setVoiceStatus('speaking');
+        const sample=()=>{
+          if(currentToken.current!==token)return;
+          const level=meter.current?.sample();
+          const player=audio.current;
+          const progress=player&&Number.isFinite(player.duration)&&player.duration>0
+            ?player.currentTime/player.duration:null;
+          if(level!==null&&level!==undefined)
+            getViewer()?.updateLivingLipAudio?.(token,level,progress);
+          meterFrame.current=requestAnimationFrame(sample);
+        };
+        meterFrame.current=requestAnimationFrame(sample);
         const status=bridge.current.getStatus();
-        setMessage(status.motorApplied
-          ? 'Audio local reproduciéndose: el sistema motor acompaña la voz.'
-          : 'Audio local sonando SIN gestos: '+status.reason);
+        setMessage(status.lipsApplied
+          ? 'Audio local: labios animados por volumen real y vocales aproximadas.'
+          :(status.motorApplied?'Movimiento corporal activo, pero boca no disponible.':
+            'Audio local sin animación facial. ')+(getViewer()?.getLivingLipDiagnostics?.().reason||status.reason));
       }catch(e){
         bridge.current.end(token,'play-error');
         detachAudio.current?.();detachAudio.current=null;
