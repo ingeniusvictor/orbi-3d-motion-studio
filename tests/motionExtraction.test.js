@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
+import {FBXLoader} from 'three/addons/loaders/FBXLoader.js';
 import {
   captureReferencePose,cloneAtReferencePose,prepareMixamoRig,
   makeCalibratedTPose,exportableClipJSON,
@@ -97,6 +98,22 @@ test('MOTION-05A emits an actual binary FBX with skin, original bone graph and z
   assert.equal(result.bones,8);
   assert.equal(result.meshes,1);
   assert.equal(readPhysicalFbxRig(result.bytes).size,8);
+  const reimported=new FBXLoader().parse(result.bytes.buffer.slice(
+    result.bytes.byteOffset,result.bytes.byteOffset+result.bytes.byteLength),'');
+  assert.equal(reimported.animations.length,0);
+  reimported.updateWorldMatrix(true,true);
+  const reloadedArms={};
+  reimported.traverse(node=>{
+    if(node.isBone&&!reloadedArms[node.name])reloadedArms[node.name]=node;
+  });
+  for(const side of ['Left','Right']){
+    const upper=reloadedArms['mixamorig:'+side+'Arm'];
+    const fore=reloadedArms['mixamorig:'+side+'ForeArm'];
+    assert.ok(upper&&fore,'the FBX reader must reconstruct the upper/forearm '+side);
+    const direction=worldSegment(upper,fore);
+    assert.ok(Math.abs(direction.y)<0.055,
+      'exported FBX, not just internal clone, must preserve horizontal T arms');
+  }
   assert.equal(f.root.animations.length,1);
   assert.equal(f.hips.rotation.y,before);
 });
