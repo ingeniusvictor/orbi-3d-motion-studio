@@ -5,6 +5,7 @@ import {Download,Film,ShieldCheck} from 'lucide-react';
 // sprawling right-side inspector. The live rig/clips are never deleted.
 export default function MotionExtractor({model,clips=[],activeClip,busy,onExportRig,onSaveClip,onDownloadRigDiagnostic}){
   const [pose,setPose]=useState('reference');
+  const [accessoryHandling,setAccessoryHandling]=useState('strict');
   if(!model)return null;
   const eligible=(model.format==='FBX'||model.format==='GLB'||model.format==='GLTF');
   const rigged=Number(model.bones)>0&&Number(model.meshes)>0;
@@ -23,10 +24,26 @@ export default function MotionExtractor({model,clips=[],activeClip,busy,onExport
           <option value="t">Pose T calibrada — brazos horizontales</option>
         </select>
       </label>
+      <label className="motion-extractor-pose">Accesorios con esqueleto independiente
+        <select value={accessoryHandling}
+          onChange={e=>setAccessoryHandling(e.target.value)}
+          disabled={Boolean(busy)||!eligible||!rigged}>
+          <option value="strict">Conservar rig original (validación estricta)</option>
+          <option value="rigid">Mixamo: conservar accesorio como malla rígida en el pecho</option>
+          <option value="exclude">Mixamo: exportar solo cuerpo, sin accesorio auxiliar</option>
+        </select>
+      </label>
+      {accessoryHandling!=='strict'&&<small>
+        Preparación experimental exclusiva de la COPIA exportada:
+        {accessoryHandling==='rigid'
+          ?' el lazo se congela en su forma actual y acompaña al torso; perderá su flexibilidad y animación propias.'
+          :' el accesorio se omite del FBX para Mixamo; el archivo original conserva todas sus piezas.'}
+        Solo se aplica a un accesorio identificado con rig separado, nunca al cuerpo.
+      </small>}
       <div className="motion-extractor-actions">
         <button className="outline-btn" type="button"
           disabled={Boolean(busy)||!eligible||!rigged}
-          onClick={()=>onExportRig({pose})}>
+          onClick={()=>onExportRig({pose,accessoryHandling})}>
           <Download size={14}/> Exportar FBX limpio
         </button>
         <button className="outline-btn" type="button"
