@@ -146,6 +146,6 @@ export function cleanRiggedMixamoFBX(source,referencePose,{pose='reference',acce
     bytes,bytesLength:bytes.byteLength,bones:verified.bones,
     meshes:verified.meshes,animations:0,pose:prepared.pose,
     adjustments:prepared.adjustments,consolidation:prepared.consolidation,
-    accessory:prepared.accessory,warnings,
+    accessory:prepared.accessory,bind:prepared.bind,warnings,
   };
 }
