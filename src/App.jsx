@@ -5,6 +5,7 @@ import LightPrep from './LightPrep.jsx';
 import TextureStudio from './TextureStudio.jsx';
 import LivingPresenceLab from './LivingPresenceLab.jsx';
 import FaceQuickDock from './FaceQuickDock.jsx';
+import MotionExtractor from './MotionExtractor.jsx';
 import { blenderConvertScript } from './lib/mixamoKit.js';
 import { formatBytes } from './lib/modelInfo.js';
 
@@ -151,6 +152,31 @@ export default function App() {
     } catch(error) {setNotice({type:'error',text:`No se pudo exportar: ${error.message||error}`});}
     finally {setBusy('');}
   };
+  const exportCleanFBX=async ({pose='t'}={})=>{
+    if(!viewer.current||!model)return;
+    setBusy('Restaurando pose y verificando FBX riggeado sin animaciones…');
+    setNotice(null);
+    try{
+      const result=await viewer.current.exportCleanMixamoFBX({pose});
+      const rotations=result.adjustments?.map(a=>a.side+': brazo '+
+        a.upperDegrees.toFixed(1)+'°, antebrazo '+a.forearmDegrees.toFixed(1)+'°').join(' | ');
+      setNotice({type:'success',text:result.filename+' descargado ('+
+        result.size+'). Verificado: '+result.bones+' huesos, '+
+        result.meshes+' mallas riggeadas y 0 animaciones. '+
+        (rotations?'Correcciones: '+rotations+'. ':'')+
+        'Reabre el FBX y confirma su pose T en Mixamo. La aceptación por Mixamo no está garantizada.'});
+    }catch(error){
+      setNotice({type:'error',text:'No se exportó una pose T insegura: '+
+        (error.message||String(error))});
+    }finally{setBusy('');}
+  };
+  const saveExtractedClip=index=>{
+    try{
+      const result=viewer.current.exportExtractedClipJSON(index);
+      setNotice({type:'success',text:'Clip guardado: '+result.filename+
+        '. Formato de biblioteca ORBI, no FBX para Mixamo.'});
+    }catch(error){setNotice({type:'error',text:error.message||String(error)});}
+  };
   const downloadScript = () => {
     const blob=new Blob([blenderConvertScript()],{type:'text/x-python;charset=utf-8'});
     const url=URL.createObjectURL(blob);
@@ -219,6 +245,8 @@ export default function App() {
             {notice&&<div className={`notice ${notice.type}`} role="status">{notice.type==='error'?<XCircle size={18}/>:<CheckCircle2 size={18}/>}<span>{notice.text}</span><button onClick={()=>setNotice(null)} aria-label="Cerrar aviso"><X size={16}/></button></div>}
             <section className="panel animation-panel"><div className="panel-header"><div><div className="section-icon"><Film size={19}/></div><div><h3>Biblioteca de animaciones</h3><p>{clips.length?`${clips.length} movimientos encontrados`:'Los movimientos de tu modelo aparecerán aquí'}</p></div></div><span className="counter">{clips.length.toString().padStart(2,'0')}</span></div>
               {clips.length?<><div className="clips-list">{clips.map(clip=><button className={`clip-row ${activeClip===clip.index?'active':''}`} key={`${clip.index}-${clip.name}`} onClick={()=>chooseClip(clip.index)}><div className="clip-play"><Play size={14} fill={activeClip===clip.index?'currentColor':'none'}/></div><span className="clip-name">{clip.name}<small>{clip.source}</small></span><span className="clip-meta">{clip.duration.toFixed(1)} s</span>{activeClip===clip.index&&<span className="playing-pill">ACTIVA</span>}</button>)}</div><div className="player-controls"><button className="play-btn" onClick={togglePlay} aria-label={playing?'Pausar animación':'Reproducir animación'}>{playing?<Pause size={18} fill="currentColor"/>:<Play size={18} fill="currentColor"/>}</button><div className="now-playing"><small>{playing?'REPRODUCIENDO':'EN PAUSA'}</small><strong>{activeClip!==null?clips[activeClip]?.name:'Selecciona un movimiento'}</strong></div><label className="speed-label">Velocidad <select value={speed} onChange={changeSpeed}><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label></div></>:<div className="no-animation"><div className="no-animation-icon"><Film size={22}/></div><div><strong>{model?'Este modelo no incluye animaciones':'Sin animaciones todavía'}</strong><p>{model?.format==='VRM'?'El VRM puede ser estático. Si tiene animaciones integradas, aparecerán aquí.':model?'Puedes inspeccionar el modelo o agregar animaciones del mismo esqueleto.':'Carga un personaje animado para reproducir sus movimientos.'}</p></div></div>}
+              <MotionExtractor model={model} clips={clips} activeClip={activeClip}
+                busy={busy} onExportRig={exportCleanFBX} onSaveClip={saveExtractedClip}/>
             </section>
           </section>
           <aside className="sidebar-panels"><section className="panel inspector-panel"><div className="panel-header"><div><div className="section-icon"><SlidersHorizontal size={19}/></div><div><h3>Inspector 3D</h3><p>Detalles de tu modelo</p></div></div></div>
