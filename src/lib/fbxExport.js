@@ -2,6 +2,7 @@ import { exportFbx, exportCharacterFbx } from 'three-js-fbx-exporter';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { makeLightweightClone, skinBoneCount, skinnedMeshes } from './lightweight.js';
 import { readPhysicalFbxRig } from './fbxBoneAudit.js';
+import { reconcilePhysicalRigNames } from './fbxRigIdentity.js';
 import { prepareMixamoRig } from './motionExtraction.js';
 
 const magic=[75,97,121,100,97,114,97,32,70,66,88,32,66,105,110,97,114,121,32,32,0,26,0];
@@ -42,21 +43,19 @@ export function validateBinaryFBX(bytes,expectedBones,reference=null) {
   if(rig!==expectedBones)throw new Error(
     'El FBX binario contiene '+rig+' huesos físicos LimbNode, pero se esperaban '+
     expectedBones+'. No se descargará.');
+  let identity={renamedBones:[],warnings:[]};
   if(reference) {
     const expected=rigSignature(reference);
     if(expected.size!==expectedBones)throw new Error(
       'El personaje contiene '+expectedBones+' objetos de hueso vinculados, pero solo '+
       expected.size+' nombres óseos únicos. Las copias de esqueleto no son equivalentes o no se pudieron consolidar. No se exportó un rig ambiguo.');
-    for(const [name,parent] of expected) {
-      if(!physicalRig.has(name))throw new Error('El FBX perdió o renombró el hueso físico «'+name+'».');
-      if(physicalRig.get(name)!==parent)
-        throw new Error('La jerarquía física del hueso «'+name+'» cambió al generar el FBX.');
-    }
-    // The FBXLoader can clone each skin's bone objects internally; never
-    // treat those runtime proxies as additional physical bones.
-    if(physicalRig.size!==expected.size)throw new Error('Aparecieron huesos físicos adicionales en el FBX.');
+    // A physical root may be renamed if it clashes with a static FBX
+    // group. Only accept the change if its FULL bone-parent graph and
+    // skinned binding can be proven equivalent, never by counts alone.
+    identity=reconcilePhysicalRigNames(expected,physicalRig,meshes);
   }
-  return {bones:rig,meshBoneProxies:skinBoneCount(group),meshes:meshes.length,model:group};
+  return {bones:rig,meshBoneProxies:skinBoneCount(group),
+    meshes:meshes.length,model:group,identity};
 }
 export function lightweightBinaryFBX(source,ids) {
   const prepared=makeLightweightClone(source,ids);
@@ -109,6 +108,7 @@ export function cleanRiggedMixamoFBX(source,referencePose,{pose='reference',acce
     onWarning:warning=>warnings.push(String(warning?.message||warning)),
   });
   const verified=validateBinaryFBX(bytes,prepared.bones,prepared.model);
+  warnings.push(...verified.identity.warnings);
   if(verified.model.animations?.length)
     throw new Error('El FBX todavía contiene animaciones. Se canceló la descarga.');
   if(verified.meshes<1)
