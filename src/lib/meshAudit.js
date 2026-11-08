@@ -173,6 +173,12 @@ export function auditMeshRoundTrip(prepared,reimported){
       sampleVertices(candidate.mesh,Math.min(SOURCE_SAMPLES,6000)),
       sampleVertices(original.mesh,TARGET_SAMPLES));
     const fmt=v=>(100*v).toFixed(2)+'%';
+    const sourceBounds=new THREE.Box3().setFromPoints(a);
+    const exportedBounds=new THREE.Box3().setFromPoints(b);
+    const centerGap=sourceBounds.getCenter(new THREE.Vector3())
+      .distanceTo(exportedBounds.getCenter(new THREE.Vector3()));
+    const sizeDifference=sourceBounds.getSize(new THREE.Vector3())
+      .distanceTo(exportedBounds.getSize(new THREE.Vector3()));
     const worst=forward.localWorst;
     if(forward.coverage<.997||
       (worst&&worst.coverage<.96)||
@@ -181,6 +187,8 @@ export function auditMeshRoundTrip(prepared,reimported){
         'en el FBX reimportado. Cobertura original→FBX '+fmt(forward.coverage)+
         ', FBX→original '+fmt(backward.coverage)+
         (worst?', región '+worst.region+' '+fmt(worst.coverage):'')+
+        ', diferencia de centros '+centerGap.toFixed(4)+
+        ', diferencia de dimensiones '+sizeDifference.toFixed(4)+
         '. No se descargó un personaje con posibles deformaciones.');
     }
     details.push({mesh:original.name,exportedAs:candidate.name,
