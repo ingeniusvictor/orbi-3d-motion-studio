@@ -12,7 +12,17 @@ function rig({headName='mixamorig:Head',hipsName='mixamorig:Hips',ambiguous=fals
   if(ambiguous){
     const other=new THREE.Bone();other.name=headName;other.position.x=.3;hips.add(other);
   }
-  const skin=new THREE.SkinnedMesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshStandardMaterial());
+  // Real SkinnedMesh geometry needs skinIndex + skinWeight attributes.
+  // Without them getVertexPosition() throws, and the visible-bounds safety
+  // check correctly refuses to invent a pivot for the upright rotation.
+  const geometry=new THREE.BoxGeometry(1,1,1);
+  const vertexCount=geometry.getAttribute('position').count;
+  const indices=new Uint16Array(vertexCount*4);
+  const weights=new Float32Array(vertexCount*4);
+  for(let i=0;i<vertexCount;i++)weights[i*4]=1;
+  geometry.setAttribute('skinIndex',new THREE.Uint16BufferAttribute(indices,4));
+  geometry.setAttribute('skinWeight',new THREE.Float32BufferAttribute(weights,4));
+  const skin=new THREE.SkinnedMesh(geometry,new THREE.MeshStandardMaterial());
   skin.name='Body';
   swivel.add(skin);root.updateMatrixWorld(true);
   skin.bind(new THREE.Skeleton([hips,head,...(ambiguous?[hips.children[1]]:[])]));
