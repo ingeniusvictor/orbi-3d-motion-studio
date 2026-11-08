@@ -328,3 +328,33 @@ La captura muestra una postura deformada, pero **no determina por sí sola** si 
 4. Si la nueva exportación sigue con pose acrobática, no seguir intentando forzar A/T mediante ajustes sin identificaciones. Guardar captura y comunicar el ángulo reportado cabeza-pelvis, o inspeccionar la pose de bind en Blender. **No afirmar compatibilidad Mixamo** hasta verificarla visual y funcionalmente.
 
 Ningún FBX privado de Mint se sube al repositorio; `main` y LUMIA R8 permanecen intactos.
+
+
+## MOTION-05D.2 — FBX root: matrices de bind correctas bajo padres transformados (2026-11-08)
+
+**Nueva incidencia del FBX original real:** `No se exportó el FBX limpio. Tratamiento aplicado: Lazo rígido unido al torso. El esqueleto no alcanzó la pose de bind en «root» (diferencia 1.00000). Puede tener transformaciones FBX externas incompatibles; no se exportó.`
+
+### Causa localizada en el código
+
+La función MOTION-05D.1 aplicaba `mesh.skeleton.pose()` para recuperar las matrices mundiales implícitas en `Skeleton.boneInverses`. La implementación `Skeleton.pose()` en Three.js calcula la transformación local del **hueso raíz** como si no hubiera un padre de escena transformado: cuando el hueso `root` está bajo un `Group` FBX con escala de conversión (por ejemplo 100) o giro de ejes, la operación puede generar una matriz local que no reproduce la matriz de bind mundial. La auditoría de seguridad lanzaba la diferencia `1.00000` de `root`, sin que eso demostrase por sí solo corrupción de los 340 huesos del cuerpo. El error **no** se debía a la verificación de ChestBow ni de Mixamo.
+
+### Corrección MOTION-05D.2
+
+- `src/lib/bindPose.js`: reemplaza la restauración ciega `Skeleton.pose()` por resolución explícita de `M_local = inverse(M_world_parent_real) × inverse(BoneInverse)`, trabajando de padres a hijos. Incluye **todos los padres reales de escena, incluso Group/Object3D que no son Bone**. No modifica el modelo fuente.
+- Para cada hueso comprueba que la matriz local se pueda descomponer en posición+rotación+escala y reconstruir sin `shear` destructivo; rechaza escalas singulares y un hueso padre no representado en las paletas de bind auditadas.
+- Tras restaurar, comprueba la **matriz mundial objetivo de cada hueso** y, de forma independiente, la matriz física efectiva de skin `B_world × B_inverse = identidad` para cada hueso de cada malla. Ningún caso dudoso se exporta por “relajar” las tolerancias.
+- Mantiene verificación de vértices muestreados con coordenadas finitas y las pruebas posteriores de un único rig físico, conservación de ChestBow en modo rígido y **0 clips** en FBX binario reimportado.
+- La restauración del cuerpo y del esqueleto de 36 huesos de ChestBow ocurre antes de congelar el accesorio en el torso. Mantiene las opciones de pose originales, A/T opcionales y continuidad de biblioteca.
+- Muestra **MOTION-05D.2** en la UI y publica también el error de paleta `maxPaletteError` en los detalles de éxito.
+
+### Regresiones
+
+Se agregaron dos pruebas importantes en `tests/bindPose.test.js`:
+1. Hueso `root` bajo un **Group no-Bone con escala 100, rotación de eje -90° y desplazamiento**. La pose cargada es animada/horizontal; recupera matrices mundiales exactas de bind de root, spine, head, sin alterar el Group, ni la paleta inversa, ni el original.
+2. Misma estructura con rotación/escala/offset + exportación binaria real reimportable y sin animaciones. Verifica que solo cambia el clon y que se conserva el skin.
+
+**231/231 pruebas y build Vite OK**, verificación https://github.com/ingeniusvictor/orbi-3d-motion-studio/actions/runs/42511480722 (antes del cambio cosmético de etiqueta D.2 y métrica de UI). Revisar run final después de documentación.
+
+### QA real pendiente
+
+No se ha inspeccionado la geometría completa privada de Mint; las regresiones son modelos sintéticos. Por tanto, **la exportación con pose de bind de Mint real y la compatibilidad con Mixamo siguen sin estar certificadas**. Para revalidar: detener Vite, mantener el `?? package-lock.json` local, actualizar `git pull --ff-only` con árbol rastreado limpio, correr `npm.cmd test`, `npm.cmd run build` y `npm.cmd run dev -- --port 5174 --strictPort`. Recargar el navegador, volver a cargar el **FBX ORIGINAL** y seleccionar **MOTION-05D.2 → Pose de bind real + Lazo rígido**, exportar el FBX nuevo `*_BIND_POSE_BOW_RIGID.fbx`, abrirlo y revisar frente/lateral, postura, rostro, piel y lazo. No confundir `Pose al abrir` (puede ser fotograma acrobático) con bind. Si el bind real ya es acrobático o incluye transformaciones/shear no representables, se requerirá intervención en Blender; no forzar ángulos desde la aplicación sin evidencia del rig.
