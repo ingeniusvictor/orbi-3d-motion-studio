@@ -4,7 +4,7 @@ import {Download,Film,ShieldCheck} from 'lucide-react';
 // MOTION-05A controls remain beside the Animation Library, never in the
 // sprawling right-side inspector. The live rig/clips are never deleted.
 export default function MotionExtractor({model,clips=[],activeClip,busy,onExportRig,onSaveClip}){
-  const [pose,setPose]=useState('t');
+  const [pose,setPose]=useState('reference');
   if(!model)return null;
   const eligible=(model.format==='FBX'||model.format==='GLB'||model.format==='GLTF');
   const rigged=Number(model.bones)>0&&Number(model.meshes)>0;
@@ -12,13 +12,15 @@ export default function MotionExtractor({model,clips=[],activeClip,busy,onExport
     <summary><Film size={15}/> MOTION-05 · Extraer animaciones y preparar FBX para Mixamo</summary>
     <div className="motion-extractor-content">
       <p>Genera una <strong>copia FBX riggeada sin animaciones</strong>.
-        La pose T solo se exporta cuando se puede calibrar el esqueleto
-        de forma segura. El personaje original y sus clips permanecen intactos.</p>
+        La opción recomendada conserva la pose de referencia del archivo:
+        si ya está en A, se mantiene en A sin exigir nombres de brazo.
+        Calibrar A o T es opcional y requiere identificar las articulaciones.</p>
       <label className="motion-extractor-pose">Pose de exportación
         <select value={pose} onChange={e=>setPose(e.target.value)}
           disabled={Boolean(busy)||!eligible||!rigged}>
-          <option value="t">T calibrada — objetivo Mixamo</option>
-          <option value="reference">Pose de referencia original — respaldo seguro</option>
+          <option value="reference">Pose original — conserva A/T sin mover huesos (recomendado)</option>
+          <option value="a">Pose A calibrada — brazos 35° hacia abajo</option>
+          <option value="t">Pose T calibrada — brazos horizontales</option>
         </select>
       </label>
       <div className="motion-extractor-actions">
@@ -37,9 +39,11 @@ export default function MotionExtractor({model,clips=[],activeClip,busy,onExport
         Para VRM mantenemos el flujo de conversión controlada existente.</p>}
       {eligible&&!rigged&&<p>Este archivo no tiene mallas riggeadas verificables.
         No se generará un supuesto FBX preparado para Mixamo.</p>}
-      <small><ShieldCheck size={13}/> Los clips se guardan inicialmente como
-        JSON de animación ORBI, no como FBX compatible con Mixamo.
-        No se aplica retargeting ni se modifican las mallas originales.</small>
+      <small><ShieldCheck size={13}/> El archivo FBX limpio conserva el rig y
+        elimina los clips. Si eliges A/T calibrada y el esqueleto no se reconoce,
+        no se fuerza una postura deformada: usa la pose original.
+        El JSON de cada clip conserva sus curvas para futura reimportación ORBI,
+        pero no es un FBX de animación que Mixamo acepte.</small>
     </div>
   </details>;
 }
