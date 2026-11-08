@@ -69,3 +69,18 @@
 .face-quick-voice button:disabled{opacity:.37;cursor:not-allowed}
 .face-quick-voice button:hover:not(:disabled){background:#226263}
 .face-quick-voice-hint{font-size:9px;line-height:1.4;color:#7898a9}
+
+/* MOTION-05A — extraction next to the existing animation list. */
+.motion-extractor{border-top:1px solid #2d4659;margin-top:8px}
+.motion-extractor>summary{cursor:pointer;display:flex;align-items:center;gap:8px;
+  color:#7debd7;font-size:12px;font-weight:700;padding:12px 14px}
+.motion-extractor-content{padding:0 14px 14px;display:grid;gap:10px}
+.motion-extractor-content p{margin:0;color:#b9cddb;font-size:11px;line-height:1.6}
+.motion-extractor-pose{display:grid;gap:5px;font-size:11px;color:#d0e0ea}
+.motion-extractor-pose select{width:100%;background:#14283b;color:#deedfa;
+  border:1px solid #39576c;border-radius:7px;padding:8px}
+.motion-extractor-actions{display:flex;flex-wrap:wrap;gap:7px}
+.motion-extractor-actions button{display:flex;align-items:center;gap:6px;font-size:11px}
+.motion-extractor-content small{display:flex;align-items:flex-start;gap:6px;
+  font-size:10px;color:#99bbc7;line-height:1.5}
+.motion-extractor button:disabled{opacity:.38;cursor:not-allowed}
