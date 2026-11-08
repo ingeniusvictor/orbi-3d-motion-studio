@@ -9,6 +9,7 @@ import {
 import {cleanRiggedMixamoFBX,isBinaryFBX} from '../src/lib/fbxExport.js';
 import {readPhysicalFbxRig} from '../src/lib/fbxBoneAudit.js';
 import {skinBoneCount,skinnedMeshes} from '../src/lib/lightweight.js';
+import {consolidateEquivalentSkinRigs} from '../src/lib/rigCanonicalizer.js';
 
 function fixture({includeRight=true}={}){
   const root=new THREE.Group();root.name='Animated_Character';
@@ -42,6 +43,71 @@ function fixture({includeRight=true}={}){
 }
 const worldSegment=(a,b)=>b.getWorldPosition(new THREE.Vector3())
   .sub(a.getWorldPosition(new THREE.Vector3())).normalize();
+
+
+// Reproduce the FBXLoader behaviour observed on multi-component characters:
+// one body skin and one clothing skin use distinct Bone proxy objects with
+// exactly the same names, hierarchy, and rest transforms.
+function duplicatedSkinFixture({shiftSecond=0}={}){
+  const f=fixture();
+  const original=f.root.getObjectByName('Character_With_Skin');
+  const duplicateHips=f.hips.clone(true);
+  duplicateHips.position.x+=shiftSecond;
+  f.root.add(duplicateHips);
+  const proxy=[];
+  duplicateHips.traverse(node=>{if(node.isBone)proxy.push(node);});
+  const clothes=new THREE.SkinnedMesh(
+    original.geometry.clone(),new THREE.MeshStandardMaterial());
+  clothes.name='Clothes_Shared_Rig';
+  f.root.add(clothes);
+  f.root.updateWorldMatrix(true,true);
+  clothes.bind(new THREE.Skeleton(proxy,
+    original.skeleton.boneInverses.map(matrix=>matrix.clone())),
+    original.bindMatrix.clone());
+  return {...f,clothes,duplicateHips};
+}
+test('MOTION-05A.3 merges equivalent FBXLoader bone proxies for body+clothing without changing the source',()=>{
+  const f=duplicatedSkinFixture();
+  const before=skinBoneCount(f.root);
+  assert.equal(before,16);
+  const reference=captureReferencePose(f.root);
+  const result=cleanRiggedMixamoFBX(f.root,reference);
+  assert.equal(result.animations,0);
+  assert.equal(result.bones,8);
+  assert.equal(result.meshes,2);
+  assert.equal(result.consolidation.consolidated,true);
+  assert.deepEqual([result.consolidation.bonesBefore,
+    result.consolidation.bonesAfter],[16,8]);
+  assert.equal(readPhysicalFbxRig(result.bytes).size,8);
+  const reopened=new FBXLoader().parse(result.bytes.buffer.slice(
+    result.bytes.byteOffset,result.bytes.byteOffset+result.bytes.byteLength),'');
+  assert.equal(reopened.animations.length,0);
+  assert.equal(skinnedMeshes(reopened).length,2);
+  assert.equal(skinBoneCount(f.root),16,
+    'do not rewrite the original skin or source bone proxies');
+  assert.ok(f.duplicateHips.parent===f.root);
+});
+test('MOTION-05A.3 rejects duplicate named rigs in different world rest positions',()=>{
+  const f=duplicatedSkinFixture({shiftSecond:0.5});
+  const reference=captureReferencePose(f.root);
+  assert.throws(()=>cleanRiggedMixamoFBX(f.root,reference),
+    /posiciones de referencia diferentes/);
+  assert.equal(skinBoneCount(f.root),16);
+});
+test('MOTION-05A.3 refuses a second independent character rig in a single Mixamo FBX',()=>{
+  const f=duplicatedSkinFixture();
+  f.root.traverse(node=>{
+    if(node===f.duplicateHips||node.parent===f.duplicateHips||node.name.includes('AvatarDuplicate'))
+      return;
+  });
+  // Give the second skeleton unique names: it is a real SECOND character,
+  // not equivalent skin proxy references for clothing.
+  f.duplicateHips.traverse(node=>{if(node.isBone)node.name='Second_'+node.name;});
+  const ref=captureReferencePose(f.root);
+  const status=consolidateEquivalentSkinRigs(f.root);
+  assert.equal(status.consolidated,false);
+  assert.throws(()=>cleanRiggedMixamoFBX(f.root,ref),/raíces óseas distintas/);
+});
 
 test('MOTION-05A.1 supports an unnamed FBX root renamed by the viewer after load',()=>{
   const f=fixture();
