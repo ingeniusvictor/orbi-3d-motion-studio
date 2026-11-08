@@ -233,6 +233,9 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
           disabled={!canUse} onChange={changeIntensity}/>
       </label>
       <VoiceMotorLab getViewer={getViewer} model={model} generation={generation} activeClip={activeClip}/>
+      <details className="lp-accordion">
+        <summary>Movimiento avanzado · Mixamo, manos, cuerpo y LP-03A/B</summary>
+        <div style={{display:'grid',gap:10}}>
       <div style={{display:'grid',gap:9,borderTop:'1px solid #284158',paddingTop:12}}>
         <strong style={{fontSize:12}}>LP-03B.1 · Director de gestos naturales</strong>
         <small style={{opacity:0.8,lineHeight:1.55}}>
@@ -488,6 +491,8 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
         y la actuación ligada a la voz siguen pendientes.
       </small>
       {!canUse&&<small>Carga un VRM para habilitar este laboratorio.</small>}
+        </div>
+      </details>
     </div>
   </section>;
 }
