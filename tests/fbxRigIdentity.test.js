@@ -31,7 +31,18 @@ test('MOTION-05B.3 name-only physical root replacement validated from exported F
   const bytes=exportRig(copy.scene);
   const physical=readPhysicalFbxRig(bytes);
   assert.equal(physical.size,2);
-  const validated=validateBinaryFBX(bytes,2,original.scene);
+  let validated;
+  try{validated=validateBinaryFBX(bytes,2,original.scene);}
+  catch(error){
+    const loaded=new FBXLoader().parse(bytes.buffer.slice(
+      bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');
+    const skinBones=[];loaded.traverse(n=>{
+      if(n.isSkinnedMesh)skinBones.push(
+        ...n.skeleton.bones.map(b=>({name:b.name,parent:b.parent?.name||null})));
+    });
+    throw new Error(error.message+' | physical '+
+      JSON.stringify([...physical])+' | skin '+JSON.stringify(skinBones));
+  }
   assert.equal(validated.identity.renamedBones.length,1);
   assert.deepEqual(validated.identity.renamedBones[0],
     {before:'root',after:'root_1'});
