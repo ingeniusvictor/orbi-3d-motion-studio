@@ -15,7 +15,8 @@ import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { catalogMaterials, applyTextureToMaterial } from './textureStudio.js';
 import { captureMaterialState,restoreMaterialState } from './textureBatch.js';
 import { skinnedMeshes, skinBoneCount, exportLightweightGLB } from './lightweight.js';
-import { lightweightBinaryFBX, animatedBinaryFBX } from './fbxExport.js';
+import { lightweightBinaryFBX, animatedBinaryFBX, cleanRiggedMixamoFBX } from './fbxExport.js';
+import { captureReferencePose, exportableClipJSON } from './motionExtraction.js';
 import { extensionOf, formatBytes, inspectRigCompatibility, uniqueClipName, summarizeRenderableGeometry, validateLoadedContent } from './modelInfo.js';
 
 const EMPTY_INFO = { meshes: 0, vertices: 0, triangles: 0, materials: 0, bones: 0, animations: 0, nodes: 0, textures: 0, hierarchy: [] };
@@ -149,6 +150,7 @@ export class MotionViewer {
     this.showBones = false;
     this.wireframe = false;
     this.lastFilename = null;
+    this.referencePose = null;
     this.lastFormat = null;
     this.textureAssetUrls = new Set();
     this.lastTextureBatch = null;
@@ -265,6 +267,8 @@ export class MotionViewer {
     this.clearModel();
     this.model = loaded.model;
     this.vrm = loaded.vrm;
+    // Capture the original reference BEFORE AnimationMixer plays imported clips.
+    this.referencePose = captureReferencePose(this.model);
     this.presence = this.vrm ? new LivingPresence(this.vrm,{sourceName:loaded.name}) : null;
     this.motionComposer = this.vrm ? new MotionComposer(this.vrm) : null;
     this.lipSync = this.vrm ? new LipSyncController(this.vrm) : null;
@@ -307,6 +311,7 @@ export class MotionViewer {
     this.lastTextureBatch=null;
     this.model = null;
     this.vrm = null;
+    this.referencePose = null;
     this.mixer = null;
     this.clips = [];
     this.current = null;
@@ -480,6 +485,38 @@ export class MotionViewer {
       if(this.presenceSuspendCount===0&&this.lipSync?.session)
         this.lipSync.captureBaseline();
     }
+  }
+  async exportCleanMixamoFBX({pose='t'}={}){
+    if(!this.model||!this.referencePose)throw new Error('Carga primero un personaje.');
+    if(this.vrm)throw new Error('MOTION-05A acepta personajes FBX o GLB riggeados. VRM requiere un proceso separado para preservar sus metadatos.');
+    return this.withPresenceSuspended(async()=>{
+      const result=cleanRiggedMixamoFBX(this.model,this.referencePose,{pose});
+      const base=(this.lastFilename||'Personaje').replace(/\.[^.]+$/,'')
+        .replace(/[^a-z0-9_\-]/gi,'_').slice(0,80);
+      const filename=base+(pose==='t'?'_MIXAMO_TPOSE':'_POSE_ORIGINAL')+'.fbx';
+      const url=URL.createObjectURL(new Blob([result.bytes],{
+        type:'application/octet-stream',
+      }));
+      const a=document.createElement('a');a.href=url;a.download=filename;
+      document.body.append(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),5000);
+      return {...result,filename,size:formatBytes(result.bytesLength)};
+    });
+  }
+  exportExtractedClipJSON(index){
+    if(!this.clips[index])throw new Error('Selecciona una animación de la biblioteca.');
+    const json=exportableClipJSON(this.clips[index].clip,{
+      rigName:this.lastFilename||'personaje',rigBones:skinBoneCount(this.model),
+    });
+    const filename=(this.clips[index].name||'animacion')
+      .replace(/[^a-z0-9_\-]/gi,'_').slice(0,90)+'_ORBI_MOTION.json';
+    const url=URL.createObjectURL(new Blob([json],{
+      type:'application/json;charset=utf-8',
+    }));
+    const a=document.createElement('a');a.href=url;a.download=filename;
+    document.body.append(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),5000);
+    return {filename,size:formatBytes(new Blob([json]).size)};
   }
   async exportLightweight(ids) {
     return this.withPresenceSuspended(async()=>{
