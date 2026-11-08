@@ -18,7 +18,7 @@ export default function MotionExtractor({model,clips=[],activeClip,busy,onExport
   const eligible=(model.format==='FBX'||model.format==='GLB'||model.format==='GLTF');
   const rigged=Number(model.bones)>0&&Number(model.meshes)>0;
   return <details className="motion-extractor">
-    <summary><Film size={15}/> MOTION-05 · Extraer animaciones y preparar FBX para Mixamo</summary>
+    <summary><Film size={15}/> MOTION-05B.1 · Extraer animaciones y preparar FBX para Mixamo</summary>
     <div className="motion-extractor-content">
       <p>Genera una <strong>copia FBX riggeada sin animaciones</strong>.
         La opción recomendada conserva la pose de referencia del archivo:
@@ -43,7 +43,7 @@ export default function MotionExtractor({model,clips=[],activeClip,busy,onExport
         <select value={accessoryHandling}
           onChange={e=>setAccessoryHandling(e.target.value)}
           disabled={Boolean(busy)||!eligible||!rigged}>
-          <option value="strict">Conservar rig original (validación estricta)</option>
+          <option value="strict">Conservar todos los rigs (bloquea esqueletos diferentes)</option>
           <option value="rigid">Mixamo: conservar accesorio como malla rígida en el pecho</option>
           <option value="exclude">Mixamo: exportar solo cuerpo, sin accesorio auxiliar</option>
         </select>
