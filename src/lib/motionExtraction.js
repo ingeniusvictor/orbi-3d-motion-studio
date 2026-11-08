@@ -137,7 +137,7 @@ export function prepareMixamoRig(root,referencePose,{pose='t'}={}){
   }
 }
 export function exportableClipJSON(clip,{rigName='personaje',rigBones=0}={}){
-  if(!clip?.isAnimationClip||!clip.tracks.length)
+  if(!(clip instanceof THREE.AnimationClip)||!clip.tracks.length)
     throw new Error('Selecciona una animación válida para guardarla.');
   return JSON.stringify({
     format:'orbi.motion.clip.v1',
