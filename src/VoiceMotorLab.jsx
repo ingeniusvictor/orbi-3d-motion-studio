@@ -19,7 +19,7 @@ const demo=()=>validateMotorIntent({
   motorMode:'explaining',gesture:'emphasize',attentionTarget:'interlocutor',intensity:0.48,
 });
 
-export default function VoiceMotorLab({getViewer,model,generation,activeClip}){
+export default function VoiceMotorLab({getViewer,model,generation,activeClip,voiceQARef,onVoiceQAState}){
   const bridge=useRef(null);
   if(!bridge.current)bridge.current=new VoiceMotorBridge(getViewer);
   const controller=useRef(null);
@@ -254,6 +254,22 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip}){
     }
   };
 
+  // The viewport quick dock calls the existing real TTS/audio session.
+  // Do not create a second speaker: one spoken response, one motor token.
+  useEffect(()=>{
+    if(voiceQARef)voiceQARef.current={
+      play:()=>play(),
+      stop:()=>{stop('manual-stop');setMessage('Voz detenida. Reposo restaurado.');},
+    };
+    return ()=>{if(voiceQARef)voiceQARef.current=null;};
+  },[voiceQARef,play]);
+  useEffect(()=>{
+    onVoiceQAState?.({
+      ready:Boolean(intent&&speakerEnabled&&!busy&&(source!=='file'||audioName)),
+      authorized:speakerEnabled,
+      status:voiceStatus,
+    });
+  },[intent,speakerEnabled,busy,source,audioName,voiceStatus,onVoiceQAState]);
   return <div style={{display:'grid',gap:10,borderTop:'1px solid #284158',paddingTop:12}}>
     <strong style={{display:'flex',alignItems:'center',gap:8,fontSize:12}}>
       <Brain size={16}/> LP-03C.1 · Qwen local + voz sincronizada
