@@ -358,3 +358,52 @@ Se agregaron dos pruebas importantes en `tests/bindPose.test.js`:
 ### QA real pendiente
 
 No se ha inspeccionado la geometría completa privada de Mint; las regresiones son modelos sintéticos. Por tanto, **la exportación con pose de bind de Mint real y la compatibilidad con Mixamo siguen sin estar certificadas**. Para revalidar: detener Vite, mantener el `?? package-lock.json` local, actualizar `git pull --ff-only` con árbol rastreado limpio, correr `npm.cmd test`, `npm.cmd run build` y `npm.cmd run dev -- --port 5174 --strictPort`. Recargar el navegador, volver a cargar el **FBX ORIGINAL** y seleccionar **MOTION-05D.2 → Pose de bind real + Lazo rígido**, exportar el FBX nuevo `*_BIND_POSE_BOW_RIGID.fbx`, abrirlo y revisar frente/lateral, postura, rostro, piel y lazo. No confundir `Pose al abrir` (puede ser fotograma acrobático) con bind. Si el bind real ya es acrobático o incluye transformaciones/shear no representables, se requerirá intervención en Blender; no forzar ángulos desde la aplicación sin evidencia del rig.
+
+
+## MOTION-05E.1 — FBX físicamente erguido + auditoría de superficies (2026-11-08)
+
+### Evidencia real que motivó esta fase
+
+El usuario mostró tres capturas de la última exportación `*_BIND_POSE_BOW_RIGID.fbx`: el personaje está en una postura corporal bastante más cercana al reposo, pero **continúa horizontal**; hay fallos visibles de hombro/brazo, rostro, cabello y una zona de la nalga izquierda aparentemente ausente. No debe tratarse como FBX certificado para Mixamo. **La pose A/T no es obligatoria; sí es necesaria la integridad visual y un solo esqueleto riggeado.**
+
+### Cambio 1 — Enderezar físicamente toda la escena de exportación
+
+- Nuevo `src/lib/uprightExport.js`: `orientExportUpright(model,{mode:'upright'})` detecta cabeza/pelvis en la **paleta corporal principal**, calcula el ángulo real con el Y positivo y crea una **envoltura transformadora** de la copia del personaje (nunca del original). La rotación rígida mínima alinea el eje anatómico con +Y alrededor del centro visible de la geometría; no altera índices, topología, bind inverses, huesos, ni materiales, y hace girar juntos cuerpo, ropa, cabello y piezas rígidas.
+- Se valida la operación sobre vértices muestreados de **todas las mallas**, comparando la posición mundial esperada tras la misma transformación rígida. Se valida que la dirección cabeza→pelvis quede a menos de 2° de Y *antes del serializado* y a menos de 5° **después de exportar FBX binario y reimportarlo**; si el exportador pierde la orientación se bloquea.
+- **Corrección crítica de implementación:** para actualizar matrices al transformar la escena se utiliza `Object3D.updateMatrixWorld(true)`, que invoca `SkinnedMesh.updateMatrixWorld` y mantiene `bindMatrixInverse` sincronizada. Usar únicamente `updateWorldMatrix` dejaba una cache de skinning obsoleta y producía errores ficticios de vértices deformados al enderezar el personaje.
+- La UI añade un selector separado **Orientación física del FBX** con `Enderezar personaje físicamente` o `Conservar orientación original`. Mint Swimsuit identificado usa la primera como sugerencia inicial; los demás modelos conservan el default sin rotación. La nueva salida usa `*_BIND_POSE_UPRIGHT_BOW_RIGID.fbx`.
+
+### Cambio 2 — Auditoría de fidelidad de geometría al reimportar
+
+- Nuevo `src/lib/meshAudit.js`: `auditBodyPreparation` compara topología y morph targets del cuerpo **original vs copia preparada** para detectar pérdida de malla previa al exportador; `auditMeshRoundTrip` compara cada Mesh/SkinnedMesh preparado **contra FBX reimportado real**, exige correspondencia inequívoca de mallas, tipo de skinning, triángulos, morph targets y cantidad de materiales; bloquea pérdidas críticas de material de doble cara o transparencia.
+- Compara muestras de posiciones mundiales **ya skinneadas y transformadas**, no solo vértices crudos, en ambas direcciones usando una cuadrícula 3D de vecinos. Audita cobertura global y por zonas (4×4×4) para detectar pérdidas localizadas como cadera, rostro, cabello y hombros aunque la cantidad total de triángulos no cambie. En caso de fallo, el error incluye **nombre de la malla**, cobertura original→FBX y FBX→original, región más afectada y desviación de centros/dimensiones. El FBX no se descarga en modo estricto.
+- Se informa si el FBX no incorpora texturas externas; la auditoría geométrica **NO es un render-pixel-perfect** y no puede descartar problemas exclusivamente de shaders, alpha blend, normal maps, materiales locales o la postura de bind original. La aceptación final requiere inspección visual real.
+- `fbxExport.js`: `integrityMode='strict'` es el default del API y del flujo de usuario. Existe `integrityMode='report'` **solo para preservar tests históricos de esqueleto o investigación expresamente no certificada**, con `integrity.passed=false` y mensaje explícito de «FBX NO CERTIFICADO». No se expone como modo verificado en la aplicación y NO se debe presentar una exportación report-only como apta para Mixamo. En esta fase hubo antiguas regresiones con geometría de accesorio / mallas bajo transformaciones que el exportador pierde; sus tests siguen validando el esqueleto, pero la auditoría nueva deja constancia de los fallos en vez de ocultarlos.
+- `App.jsx`: muestra el tratamiento de orientación seleccionado, el ángulo antes/después del FBX reimportado y resultado del audit geométrico. En modo estricto no se descarga archivo si detecta una superficie alterada.
+
+### QA automatizado
+
+`tests/motion05e.test.js` añade ocho escenarios:
+1. Enderezar físicamente un cuerpo horizontal manteniendo las matrices de skinning de la copia.
+2. Generar/reimportar un FBX binario real de un humanoide horizontal, verificar cabeza-pelvis vertical y 0 clips.
+3. Reimportar cuerpo geométricamente intacto sin inventar vértices.
+4. Rechazar una malla perdida aunque el personaje conserve otros objetos.
+5. Rechazar triángulos perdidos.
+6. Detectar zona de cadera izquierda desplazada sin variar número de vértices ni triángulos.
+7. Rechazar pérdida topológica del cuerpo durante preparación.
+8. Rechazar material `DoubleSide` convertido en una cara, que puede ocultar geometría.
+
+Los 231 tests previos quedan disponibles. Los tests históricos de exportación que verifican exclusivamente estructura física utilizan explícitamente modo `report` para no fingir fidelidad geométrica al buscar otro resultado. CI del último código funcional: **239/239 tests y Vite build verde** https://github.com/ingeniusvictor/orbi-3d-motion-studio/actions/runs/42513713177 . Revisar la certificación tras esta documentación.
+
+### Protocolo real
+
+- Mantener el FBX original con animaciones como fuente. **NO reutilizar como fuente** el FBX limpio horizontal de 54.1 MB.
+- Detener Vite; desde `C:\Users\ingvm\Downloads\ORBI-LIVING-PRESENCE-LAB` comprobar rama `feat/lumia-living-presence-lp01-20261107`, revisar `git status --short`, conservar `?? package-lock.json`, hacer `git pull --ff-only` solamente cuando no haya cambios conflictivos; `npm.cmd test`, `npm.cmd run build`, `npm.cmd run dev -- --port 5174 --strictPort`.
+- Recargar Chrome Ctrl+Shift+R; abrir **Mint Swimsuit FBX original**; Biblioteca → **MOTION-05E.1**.
+- Elegir: **Pose de bind real**, **Orientación física: Enderezar personaje**, **Lazo rígido unido al torso**. Pulsar Exportar. Si pasa auditoría física y geométrica, aparece `*_BIND_POSE_UPRIGHT_BOW_RIGID.fbx`. Reimportar, usar Centrar, inspeccionar cuidadosamente hombro, cara, cabello, brazo y cadera izquierda. Confirmar 0 animaciones/un solo armature, probar Mixamo después.
+- **Si el modo estricto bloquea:** anotar el mensaje completo con la malla/zonas. Significa que el exportador FBX actual está perdiendo geometría/skinning o que existen diferencias transformacionales que el modelo real requiere diagnosticar. **No desactivar la auditoría ni declarar éxito**; en esa situación explorar conversión controlada en **Blender 5.2.3** a partir del FBX original, sin los cambios destructivos de la ruta Three.js, y usar inspección visual + controles de mallas/armaduras en Blender. El acceso al FBX privado real es necesario para corregir defectos específicos.
+- `main`, LUMIA y los archivos privados siguen intactos. **PR #2 permanece draft**.
+
+### Límites
+
+Esta fase implementa la **corrección física de orientación y la detección de pérdida visual/geométrica**, **no una reconstrucción mágica de trozos de malla ausentes**. Como todavía no se han probado los 340+36 huesos y las mallas originales reales con la nueva rama, no se puede certificar la salida de Mint ni la aceptación de Mixamo. Si el exportador anterior también alteró piel, cara o cabello, la auditoría más estricta puede rechazar con razón el mismo archivo que antes descargaba silenciosamente.
