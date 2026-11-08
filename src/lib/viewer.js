@@ -490,16 +490,18 @@ export class MotionViewer {
         this.lipSync.captureBaseline();
     }
   }
-  async exportCleanMixamoFBX({pose='reference'}={}){
+  async exportCleanMixamoFBX({pose='reference',accessoryHandling='strict'}={}){
     if(!this.model||!this.referencePose)throw new Error('Carga primero un personaje.');
     if(this.vrm)throw new Error('MOTION-05A acepta personajes FBX o GLB riggeados. VRM requiere un proceso separado para preservar sus metadatos.');
     return this.withPresenceSuspended(async()=>{
-      const result=cleanRiggedMixamoFBX(this.model,this.referencePose,{pose});
+      const result=cleanRiggedMixamoFBX(this.model,this.referencePose,{pose,accessoryHandling});
       const base=(this.lastFilename||'Personaje').replace(/\.[^.]+$/,'')
         .replace(/[^a-z0-9_\-]/gi,'_').slice(0,80);
       const suffix=pose==='t'?'_MIXAMO_TPOSE':
         pose==='a'?'_MIXAMO_APOSE':'_POSE_ORIGINAL';
-      const filename=base+suffix+'.fbx';
+      const accessorySuffix=accessoryHandling==='rigid'?'_BOW_RIGID':
+        accessoryHandling==='exclude'?'_SOLO_CUERPO':'';
+      const filename=base+suffix+accessorySuffix+'.fbx';
       const url=URL.createObjectURL(new Blob([result.bytes],{
         type:'application/octet-stream',
       }));
