@@ -302,6 +302,9 @@ export class LivingPresence {
       // or VRMLookAt. Continue eyes/blink without modifying any body joints.
       // Switching clips already reset the last body overlay in viewer.play().
       if(!this.enabled){this.resetOverlay();return;}
+      // Cancel body intentions when FBX takes exclusive skeletal ownership.
+      this.gestureDirector.reset();
+      this.motorCoordinator.reset();
       this.fade=springStep(this.fade,1,dt,0.85);
       const attention=this.attention.sample(this.time);
       this.updateGaze(attention);
