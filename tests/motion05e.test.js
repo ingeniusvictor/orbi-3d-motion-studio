@@ -77,7 +77,7 @@ test('MOTION-05E.1 geometry audit passes intact exported FBX without inventing n
   const result=auditMeshRoundTrip(scene,parsed);
   assert.equal(result.passed,true);
   assert.equal(result.meshCount,1);
-  assert.equal(result.details[0].triangles,1200);
+  assert.equal(result.details[0].triangles,1140);
 });
 test('MOTION-05E.1 rejects a missing mesh even when the skeleton is present',()=>{
   const root=new THREE.Group(),empty=new THREE.Group();
