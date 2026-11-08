@@ -81,3 +81,29 @@ Si `git status --short` muestra modificaciones, **no ejecutar pull** hasta revis
 **CI:** 191/191 pruebas y build aprobados. [GitHub Actions 42460872733](https://github.com/ingeniusvictor/orbi-3d-motion-studio/actions/runs/42460872733).
 
 **Procedimiento de recuperación:** detener Vite, comprobar `git status --short`, `git pull --ff-only` solo si limpio, ejecutar pruebas/build/servidor; recargar Chrome con Ctrl+Shift+R y **volver a cargar el FBX ORIGINAL** para regenerar la pose de referencia con el nuevo orden. Después usar Biblioteca de animaciones → MOTION-05 → T calibrada → Exportar FBX limpio. Reimportar el archivo y probar en Mixamo. Si aparece un error diferente (brazos, malla o jerarquía ósea), registrar mensaje exacto: la compatibilidad con ese rig real todavía requiere QA visual.
+
+
+## MOTION-05A.2 — Pose original como predeterminada + opción de pose A (2026-11-08)
+
+**QA real informado:** «El movimiento guardado en JSON funcionó, pero la exportación de FBX limpio en T mostró: `No se pudo reconocer el brazo left completo (brazo superior, antebrazo, mano y caderas)`». El usuario solicita también **pose A, brazos extendidos en diagonal hacia abajo**, no necesariamente T horizontal.
+
+**Respuesta sobre JSON:** `_ORBI_MOTION.json` guarda un `AnimationClip` de Three.js serializado, con duraciones, pistas/keyframes y metadatos del rig. Es un respaldo válido de las curvas originales **para uso futuro de la biblioteca ORBI**. En MOTION-05A la interfaz todavía no incluye un importador del JSON guardado, y Mixamo **no consume ese JSON como FBX de animación**; la exportación FBX de movimiento por separado sigue pendiente. Mantener el original FBX como respaldo.
+
+**Cambios implementados:**
+- **Predeterminada: `reference`** — conserva sin modificación la pose de referencia que tenía el modelo ANTES de reproducirse el primer clip (A, T u otra). Esta ruta no intenta identificar caderas/brazos, por lo que puede exportar rigs con nombres desconocidos; sigue auditando el FBX binario, el skin, la jerarquía física de huesos y cero animaciones.
+- **Optativa: `a`** — cuando los huesos se reconocen con suficiente confianza, alinea cada brazo superior y antebrazo en diagonal hacia abajo **35° respecto de horizontal**, con límites de giro, manteniendo ambos lados simétricos. Es una **A calibrada**, no brazos completamente pegados al cuerpo. Nunca se cambia el personaje en reproducción: se opera sobre una copia.
+- **Optativa: `t`** — calibración T horizontal previa, sin cambios de seguridad.
+- Se amplían aliases conservadores para rigs compatibles (incluidos `J_Bip_`, `Arm_L/Arm_R`, `Bip001` y otros). Si A/T no se puede calcular, el mensaje indica **articulaciones no reconocidas** y un muestreo de **nombres reales de huesos**; aconseja seleccionar Pose original. La herramienta no inventa un T/A si no puede reconocer el rig.
+- La UI de `MotionExtractor.jsx` cambia la elección por defecto y clarifica la diferencia entre **conservar original** y **calibrar A/T**. La respuesta de exportación en `App.jsx` ya no afirma que toda exportación está en T; los nombres resultantes son `_POSE_ORIGINAL.fbx`, `_MIXAMO_APOSE.fbx` o `_MIXAMO_TPOSE.fbx` según selección.
+- `tests/motionExtraction.test.js` añade tres casos para pose A calibrada, nombres de huesos irreconocibles con exportación de pose original FBX binario reimportable, y conservación de postura original inclinada sin deformar al personaje activo.
+
+**Aclaración Mixamo:** Adobe documenta la subida de **FBX ya riggeados** y su mapeo automático. No garantiza que cualquier rig sea compatible ni obliga a nuestra aplicación a generar una T horizontal para todos los personajes: https://helpx.adobe.com/creative-cloud/help/mixamo-rigging-animation.html . La calidad del skin, la pose neutral y la aceptación real siguen pendientes de pruebas con el FBX del usuario.
+
+**Protocolo recomendado de QA:**
+1. Detener Vite; `cd "$env:USERPROFILE\Downloads\ORBI-LIVING-PRESENCE-LAB"` → `git status --short` → solo si limpio `git pull --ff-only` → `npm.cmd test`, `npm.cmd run build`, `npm.cmd run dev -- --port 5174 --strictPort`.
+2. `Ctrl+Shift+R` en localhost:5174. **Volver a cargar el FBX original** (el que contiene las animaciones) para reconstruir el snapshot.
+3. Biblioteca de animaciones → MOTION-05 → dejar seleccionada **Pose original — conserva A/T sin mover huesos** → Exportar FBX limpio. Este flujo ya no requiere detectar la estructura de brazos. Inspeccionar `_POSE_ORIGINAL.fbx` reimportándolo en ORBI: 0 clips, mallas, huesos, apariencia sin deformación. Si la pose se ve neutral con los brazos separados del cuerpo, probarla en Mixamo.
+4. Solo si se desea una A más uniforme y el rig tiene articulaciones reconocidas, elegir **Pose A calibrada — 35° hacia abajo**. Si se bloquea, usar Pose original y copiar **los nombres de huesos mostrados** para agregar soporte a ese rig.
+5. No sobreescribir los archivos fuente originales ni afirmar aceptación de Mixamo hasta subir el FBX real y aplicar una animación de prueba.
+
+**Límite técnico:** conservar pose original no garantiza que sea A; un FBX que solo trae una pose de acción como base podría producir una copia en esa postura. Evaluar visualmente antes de subirlo a Mixamo. Para rigs con nombres especiales y referencia incorrecta habrá que leer la jerarquía y, posiblemente, usar Blender para ajustar una pose/bind segura.
