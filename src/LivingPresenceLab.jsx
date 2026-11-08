@@ -1,6 +1,7 @@
 import {useEffect,useState} from 'react';
 import {Activity,HeartPulse,ShieldCheck} from 'lucide-react';
 import {describePresenceGate} from './lib/livingPresence/activationGate.js';
+import VoiceMotorLab from './VoiceMotorLab.jsx';
 
 const FINGERS=[['Thumb','Pulgar'],['Index','Índice'],['Middle','Medio'],['Ring','Anular'],['Little','Meñique']];
 
@@ -231,6 +232,7 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
         <input type="range" min="0" max="100" step="5" value={intensity}
           disabled={!canUse} onChange={changeIntensity}/>
       </label>
+      <VoiceMotorLab getViewer={getViewer} model={model} generation={generation} activeClip={activeClip}/>
       <div style={{display:'grid',gap:9,borderTop:'1px solid #284158',paddingTop:12}}>
         <strong style={{fontSize:12}}>LP-03B.1 · Director de gestos naturales</strong>
         <small style={{opacity:0.8,lineHeight:1.55}}>
