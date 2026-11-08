@@ -68,6 +68,7 @@ export class LivingPresence {
     this.fingerOffset=new THREE.Quaternion();
     this.identity=new THREE.Quaternion();
     this.blinkApplied=null;
+    this.blinkPreviewUntil=0;
     this.gazeTarget=null;
     this.gazeBaseline=null;
     this.gazeBaselineAngles=null;
@@ -124,6 +125,15 @@ export class LivingPresence {
   setGestureIntensity(value){this.gestureDirector.setIntensity(value);}
   triggerGesture(name){return this.enabled&&this.gestureDirector.trigger(name);}
   getGestureStatus(){return this.gestureDirector.getStatus();}
+  previewBlink(){
+    const mgr=this.vrm?.expressionManager;
+    if(!mgr?.getValue)return false;
+    const hasBlink=mgr.getValue('blink')!==null||
+      (mgr.getValue('blinkLeft')!==null&&mgr.getValue('blinkRight')!==null);
+    if(!hasBlink)return false;
+    this.blinkPreviewUntil=this.time+0.48;
+    return true;
+  }
   setFingerDirection(side,reverse){
     if(SIDES.includes(side))this.fingerDirections[side]=reverse?-1:1;
   }
@@ -206,16 +216,22 @@ export class LivingPresence {
     this.slowSway.reset();
     this.motorCoordinator.reset();
     this.gestureDirector.reset();
+    this.blinkPreviewUntil=0;
   }
   updateBlink(t,scale){
-    if(!this.blinkActivity)return;
+    const preview=t<this.blinkPreviewUntil;
+    if(!this.blinkActivity&&!preview)return;
     const mgr=this.vrm?.expressionManager;
     if(!mgr?.getValue||!mgr?.setValue)return;
     const names=mgr.getValue('blink')!==null?['blink']:
       (mgr.getValue('blinkLeft')!==null&&mgr.getValue('blinkRight')!==null?
         ['blinkLeft','blinkRight']:[]);
     if(!names.length)return;
-    const value=clamp01(this.blink.sample(t)*scale);
+    const phase=preview?1-(this.blinkPreviewUntil-t)/0.48:0;
+    const demonstration=preview?
+      0.96*Math.pow(Math.max(0,Math.sin(Math.PI*phase)),2):0;
+    const value=clamp01(Math.max(this.blinkActivity?this.blink.sample(t)*scale:0,
+      demonstration));
     if(value<0.00001)return;
     const prev=new Map();
     for(const name of names){
@@ -265,7 +281,17 @@ export class LivingPresence {
     // A clip owns the whole humanoid unless the user EXPLICITLY opts into
     // a recognized idle's post-mixer overlay. Paused clips obey the same rule.
     const composing=Boolean(clipPlaying&&composition?.active);
-    if(clipPlaying&&!composing){this.resetOverlay();return;}
+    if(clipPlaying&&!composing){
+      // LP-03D: FBX controls BODY bones exclusively, not facial expressions
+      // or VRMLookAt. Continue eyes/blink without modifying any body joints.
+      // Switching clips already reset the last body overlay in viewer.play().
+      if(!this.enabled){this.resetOverlay();return;}
+      this.fade=springStep(this.fade,1,dt,0.85);
+      const attention=this.attention.sample(this.time);
+      this.updateGaze(attention);
+      this.updateBlink(this.time,clamp01(this.fade.x));
+      return;
+    }
     this.fade=springStep(this.fade,this.enabled?1:0,dt,0.85);
     const blend=clamp01(this.fade.x);
     if(blend<0.00001){this.releaseGaze();return;}
