@@ -549,7 +549,8 @@ export class MotionViewer {
       const base=(this.lastFilename||'Personaje').replace(/\.[^.]+$/,'')
         .replace(/[^a-z0-9_\-]/gi,'_').slice(0,80);
       const suffix=pose==='t'?'_MIXAMO_TPOSE':
-        pose==='a'?'_MIXAMO_APOSE':'_POSE_ORIGINAL';
+        pose==='a'?'_MIXAMO_APOSE':
+        pose==='bind'?'_BIND_POSE':'_POSE_ORIGINAL';
       const accessorySuffix=accessoryHandling==='rigid'?'_BOW_RIGID':
         accessoryHandling==='exclude'?'_SOLO_CUERPO':'';
       const filename=base+suffix+accessorySuffix+'.fbx';
