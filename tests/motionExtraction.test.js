@@ -105,7 +105,7 @@ test('MOTION-05A emits an actual binary FBX with skin, original bone graph and z
   const reloadedBones=[];
   reimported.traverse(node=>{if(node.isBone)reloadedBones.push(node);});
   const normalizedName=node=>node.name.replace(/[^a-z0-9]/gi,'')
-    .toLowerCase().replace(/\\d+$/,'');
+    .toLowerCase().replace(/\d+$/,'');
   for(const side of ['Left','Right']){
     // FBXLoader may strip colons, add suffixes or clone a per-skin proxy.
     const upper=reloadedBones.find(node=>normalizedName(node).endsWith(
