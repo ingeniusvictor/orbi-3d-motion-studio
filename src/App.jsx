@@ -176,6 +176,11 @@ export default function App() {
                 ' (sin movimiento independiente de tela). '
               :'omitido solo de la copia Mixamo. ')
           :'')+
+        (result.accessory?.preservedAttachments?.length
+          ?'Nodos auxiliares conservados: '+
+            result.accessory.preservedAttachments.map(x=>x.name+' → '+x.target)
+              .join('; ')+'. '
+          :'')+
         'Pose exportada: '+result.pose+'. Reabre el FBX en ORBI antes de probarlo en Mixamo. La aceptación por Mixamo no está garantizada.'});
     }catch(error){
       setNotice({type:'error',text:'No se exportó el FBX limpio. '+
