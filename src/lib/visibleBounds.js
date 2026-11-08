@@ -106,3 +106,36 @@ export function cameraFitParameters(box,{fovDegrees=38,aspect=1}={}){
     maxDistance:Math.max(distance*40,.1),
   };
 }
+
+export function detectBodyUpDirection(root){
+  if(!root)return null;
+  root.updateWorldMatrix(true,true);
+  const skins=[];
+  root.traverse(n=>{if(n.isSkinnedMesh&&n.skeleton?.bones?.length)
+    skins.push(n);});
+  const main=skins.sort((a,b)=>b.skeleton.bones.length-a.skeleton.bones.length)[0];
+  if(!main)return null;
+  const bones=main.skeleton.bones;
+  const find=(patterns)=>{
+    for(const pattern of patterns){
+      const found=bones.filter(b=>pattern.test(b.name||''));
+      if(found.length===1)return found[0];
+    }
+    return null;
+  };
+  // Restrict matches to the BODY skin palette; never choose ChestBow's
+  // head_adjust or another garment's similarly named helper.
+  const head=find([/(?:^|[-_:])head$/i,/^head$/i]);
+  const hips=find([/(?:^|[-_:])pelvis$/i,/(?:^|[-_:])hips?$/i,
+    /(?:^|[-_:])spine$/i]);
+  if(!head||!hips||head===hips)return null;
+  const from=hips.getWorldPosition(new THREE.Vector3());
+  const to=head.getWorldPosition(new THREE.Vector3());
+  const direction=to.sub(from);
+  if(!finite3(direction)||direction.lengthSq()<1e-8)return null;
+  direction.normalize();
+  return {up:direction,
+    angleToWorldY:THREE.MathUtils.radToDeg(
+      direction.angleTo(new THREE.Vector3(0,1,0))),
+    head:head.name,hips:hips.name};
+}
