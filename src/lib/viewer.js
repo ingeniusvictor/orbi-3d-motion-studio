@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import {computeVisibleCharacterBounds,cameraFitParameters} from './visibleBounds.js';
+import {computeVisibleCharacterBounds,cameraFitParameters,detectBodyUpDirection} from './visibleBounds.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
@@ -279,6 +279,39 @@ export class MotionViewer {
     return {ok:true,...this.lastCameraFit};
   }
   getCameraFitInfo(){return this.lastCameraFit||null;}
+  getCharacterOrientationInfo(){
+    const orientation=detectBodyUpDirection(this.model);
+    return orientation?{
+      head:orientation.head,hips:orientation.hips,
+      angleToWorldY:Number(orientation.angleToWorldY.toFixed(1)),
+      axis:orientation.up.toArray().map(v=>Number(v.toFixed(3))),
+    }:null;
+  }
+  alignCameraToCharacter(){
+    if(!this.model)return {ok:false,reason:'Sin personaje'};
+    const orientation=detectBodyUpDirection(this.model);
+    if(!orientation)
+      return {ok:false,reason:'No se identificaron cabeza y pelvis del esqueleto corporal'};
+    // Only adjust the VIEW coordinate system, not the character's world
+    // transforms, FBX skeleton, geometry or exported content.
+    const fitted=this.resetCamera();
+    if(!fitted.ok)return fitted;
+    const up=orientation.up.clone();
+    let front=new THREE.Vector3(0,0,1).addScaledVector(
+      up,-up.dot(new THREE.Vector3(0,0,1)));
+    if(front.lengthSq()<1e-8)front=new THREE.Vector3(1,0,0)
+      .addScaledVector(up,-up.dot(new THREE.Vector3(1,0,0)));
+    front.normalize();
+    this.camera.up.copy(up);
+    const dist=this.camera.position.distanceTo(this.controls.target);
+    this.camera.position.copy(this.controls.target)
+      .addScaledVector(front,dist);
+    this.controls.update();
+    this.camera.lookAt(this.controls.target);
+    this.controls.update();
+    return {ok:true,angleToWorldY:orientation.angleToWorldY,
+      head:orientation.head,hips:orientation.hips};
+  }
   async open(files) {
     const request = ++this.loadSequence;
     const loaded = await loadObject(files);
