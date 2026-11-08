@@ -16,7 +16,8 @@ import { catalogMaterials, applyTextureToMaterial } from './textureStudio.js';
 import { captureMaterialState,restoreMaterialState } from './textureBatch.js';
 import { skinnedMeshes, skinBoneCount, exportLightweightGLB } from './lightweight.js';
 import { lightweightBinaryFBX, animatedBinaryFBX, cleanRiggedMixamoFBX } from './fbxExport.js';
-import { captureReferencePose, exportableClipJSON } from './motionExtraction.js';
+import { captureReferencePose, cloneAtReferencePose, exportableClipJSON } from './motionExtraction.js';
+import { buildRigDiagnostic } from './rigDiagnostics.js';
 import { extensionOf, formatBytes, inspectRigCompatibility, uniqueClipName, summarizeRenderableGeometry, validateLoadedContent } from './modelInfo.js';
 
 const EMPTY_INFO = { meshes: 0, vertices: 0, triangles: 0, materials: 0, bones: 0, animations: 0, nodes: 0, textures: 0, hierarchy: [] };
@@ -506,6 +507,27 @@ export class MotionViewer {
       document.body.append(a);a.click();a.remove();
       setTimeout(()=>URL.revokeObjectURL(url),5000);
       return {...result,filename,size:formatBytes(result.bytesLength)};
+    });
+  }
+  async exportRigDiagnosticJSON(){
+    if(!this.model||!this.referencePose)
+      throw new Error('Carga primero un personaje FBX/GLB riggeado.');
+    if(this.vrm)
+      throw new Error('Este diagnóstico MOTION-05 está destinado a FBX/GLB.');
+    return this.withPresenceSuspended(async()=>{
+      const neutral=cloneAtReferencePose(this.model,this.referencePose);
+      const report=buildRigDiagnostic(neutral,{filename:this.lastFilename||'modelo'});
+      const json=JSON.stringify(report,null,2);
+      const safe=(this.lastFilename||'Personaje').replace(/\.[^.]+$/,'')
+        .replace(/[^a-z0-9_-]/gi,'_').slice(0,75);
+      const filename=safe+'_RIG_DIAGNOSTICO.json';
+      const blob=new Blob([json],{type:'application/json;charset=utf-8'});
+      const url=URL.createObjectURL(blob);
+      const anchor=document.createElement('a');
+      anchor.href=url;anchor.download=filename;
+      document.body.append(anchor);anchor.click();anchor.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),5000);
+      return {filename,summary:report.summary,size:formatBytes(blob.size)};
     });
   }
   exportExtractedClipJSON(index){
