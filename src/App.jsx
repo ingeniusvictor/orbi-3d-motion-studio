@@ -174,6 +174,20 @@ export default function App() {
         (error.message||String(error))});
     }finally{setBusy('');}
   };
+  const downloadRigDiagnostic=async()=>{
+    if(!viewer.current)return;
+    setBusy('Recopilando diagnóstico local de huesos…');
+    try{
+      const report=await viewer.current.exportRigDiagnosticJSON();
+      setNotice({type:'success',text:report.filename+
+        ' descargado. Solo contiene nombres y transformaciones óseas ('+
+        report.summary.skinnedMeshes+' mallas, '+
+        report.summary.uniqueBoneObjects+' objetos Bone). No incluye el FBX ni texturas.'});
+    }catch(error){
+      setNotice({type:'error',text:'No se pudo generar el diagnóstico: '+
+        (error.message||String(error))});
+    }finally{setBusy('');}
+  };
   const saveExtractedClip=index=>{
     try{
       const result=viewer.current.exportExtractedClipJSON(index);
@@ -250,7 +264,9 @@ export default function App() {
             <section className="panel animation-panel"><div className="panel-header"><div><div className="section-icon"><Film size={19}/></div><div><h3>Biblioteca de animaciones</h3><p>{clips.length?`${clips.length} movimientos encontrados`:'Los movimientos de tu modelo aparecerán aquí'}</p></div></div><span className="counter">{clips.length.toString().padStart(2,'0')}</span></div>
               {clips.length?<><div className="clips-list">{clips.map(clip=><button className={`clip-row ${activeClip===clip.index?'active':''}`} key={`${clip.index}-${clip.name}`} onClick={()=>chooseClip(clip.index)}><div className="clip-play"><Play size={14} fill={activeClip===clip.index?'currentColor':'none'}/></div><span className="clip-name">{clip.name}<small>{clip.source}</small></span><span className="clip-meta">{clip.duration.toFixed(1)} s</span>{activeClip===clip.index&&<span className="playing-pill">ACTIVA</span>}</button>)}</div><div className="player-controls"><button className="play-btn" onClick={togglePlay} aria-label={playing?'Pausar animación':'Reproducir animación'}>{playing?<Pause size={18} fill="currentColor"/>:<Play size={18} fill="currentColor"/>}</button><div className="now-playing"><small>{playing?'REPRODUCIENDO':'EN PAUSA'}</small><strong>{activeClip!==null?clips[activeClip]?.name:'Selecciona un movimiento'}</strong></div><label className="speed-label">Velocidad <select value={speed} onChange={changeSpeed}><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label></div></>:<div className="no-animation"><div className="no-animation-icon"><Film size={22}/></div><div><strong>{model?'Este modelo no incluye animaciones':'Sin animaciones todavía'}</strong><p>{model?.format==='VRM'?'El VRM puede ser estático. Si tiene animaciones integradas, aparecerán aquí.':model?'Puedes inspeccionar el modelo o agregar animaciones del mismo esqueleto.':'Carga un personaje animado para reproducir sus movimientos.'}</p></div></div>}
               <MotionExtractor model={model} clips={clips} activeClip={activeClip}
-                busy={busy} onExportRig={exportCleanFBX} onSaveClip={saveExtractedClip}/>
+                busy={busy} onExportRig={exportCleanFBX}
+                onSaveClip={saveExtractedClip}
+                onDownloadRigDiagnostic={downloadRigDiagnostic}/>
             </section>
           </section>
           <aside className="sidebar-panels"><section className="panel inspector-panel"><div className="panel-header"><div><div className="section-icon"><SlidersHorizontal size={19}/></div><div><h3>Inspector 3D</h3><p>Detalles de tu modelo</p></div></div></div>
