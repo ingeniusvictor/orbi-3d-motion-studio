@@ -217,7 +217,7 @@ test('MOTION-05A emits an actual binary FBX with skin, original bone graph and z
 });
 test('MOTION-05A refuses missing humanoid arms without fake T pose',()=>{
   const f=fixture({includeRight:false}),original=captureReferencePose(f.root);
-  assert.throws(()=>prepareMixamoRig(f.root,original,{pose:'t'}),/brazo right/);
+  assert.throws(()=>prepareMixamoRig(f.root,original,{pose:'t'}),/brazo derecho/);
   const fallback=prepareMixamoRig(f.root,original,{pose:'reference'});
   assert.equal(fallback.pose,'Referencia original (sin modificar)');
 });
