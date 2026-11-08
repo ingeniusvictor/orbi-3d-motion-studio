@@ -35,7 +35,8 @@ function sampleVertices(mesh,max){
   if(!attr?.count)return [];
   const step=Math.max(1,Math.ceil(attr.count/max));
   const points=[],p=new THREE.Vector3();
-  mesh.updateWorldMatrix(true,false);
+  // Keep SkinnedMesh.bindMatrixInverse synchronized after scene rotations.
+  mesh.updateMatrixWorld(true);
   for(let i=0;i<attr.count;i+=step){
     mesh.getVertexPosition(i,p);
     p.applyMatrix4(mesh.matrixWorld);
@@ -115,6 +116,8 @@ function nearestCoverage(source,target){
     }:null,tolerance};
 }
 export function auditMeshRoundTrip(prepared,reimported){
+  prepared.updateMatrixWorld(true);
+  reimported.updateMatrixWorld(true);
   const source=meshes(prepared).map(geomStats);
   const output=meshes(reimported).map(geomStats);
   if(!source.length)fail('la escena de referencia no contiene superficies.');
