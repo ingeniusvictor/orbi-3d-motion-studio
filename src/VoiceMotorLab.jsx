@@ -251,6 +251,47 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip}){
       Este laboratorio usa voz del navegador o un archivo de audio local;
       <strong> todavía no conecta el servidor Kokoro de LUMIA R8</strong>.
     </small>
+    <div style={{display:'grid',gap:7,padding:10,border:'1px solid #345969',borderRadius:8}}>
+      <strong style={{fontSize:12}}>LP-03C.2 · Boca y labios (visemas)</strong>
+      <small style={{lineHeight:1.5,opacity:0.86}}>
+        {lipInfo?.supported
+          ?'Expresiones de boca detectadas: '+lipInfo.names.join(', ')+'. '+lipInfo.reason
+          :(lipInfo?.reason||'Carga un VRM para inspeccionar sus expresiones faciales.')}
+      </small>
+      {lipInfo?.supported&&<>
+        <button className="outline-btn" type="button" disabled={voiceStatus!=='idle'}
+          onClick={()=>{
+            const viewer=getViewer();
+            const ok=viewer?.previewLivingVowel?.('a');
+            setLipReadout(viewer?.getLivingLipDiagnostics?.()||null);
+            setMessage(ok?'Prueba de la vocal A iniciada. Acerca la cámara a la boca de Vita.':
+              'No se pudo probar la boca mientras hay audio reproduciéndose.');
+          }}>
+          Probar apertura de boca · Vocal A (sin voz)
+        </button>
+        <label style={{fontSize:11,display:'grid',gap:4}}>
+          Intensidad labial: {lipStrength}%
+          <input type="range" min="15" max="100" step="5" value={lipStrength}
+            onChange={e=>{
+              const next=Number(e.target.value);setLipStrength(next);
+              getViewer()?.setLivingLipStrength?.(next/100);
+            }}/>
+        </label>
+        <small style={{opacity:0.73,lineHeight:1.5}}>
+          {lipInfo.active?'Boca enlazada a una reproducción de voz.':
+            'Boca en reposo; lista para hablar.'}
+          {lipInfo.active?' · Apertura estimada: '+Math.round(lipInfo.opening*100)+'%.':''}
+          {lipInfo.active&&lipInfo.source==='file'?
+            ' · Análisis acústico: '+(lipInfo.audioSignalReceived?'activo':'aún no disponible'):''}
+        </small>
+      </>}
+      <small style={{fontSize:11,opacity:0.75,lineHeight:1.5}}>
+        Voz del navegador: simulación aproximada de vocales basada en el texto y
+        eventos de palabra, sin acceso a muestras reales del sintetizador.
+        WAV/MP3 local: apertura guiada por volumen medido y forma vocálica aproximada.
+        No equivale a lip-sync fonético exacto de Kokoro.
+      </small>
+    </div>
     <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12}}>
       <input type="checkbox" checked={speakerEnabled}
         onChange={e=>{stop('disabled');setSpeakerEnabled(e.target.checked);}}/>
