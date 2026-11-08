@@ -74,7 +74,9 @@ test('LP-02A clip ownership yields exact original pose even when FBX is paused',
   presence.beforeFrame();
   presence.update(1/60,{clipPlaying:true});
   assert.ok(Math.abs(elbowHeight(vrm,'left')-1.5)<1e-8);
-  assert.equal(presence.fade.x,0);
+  // LP-03D: facial presence keeps its own smooth blend during an FBX,
+  // while every body joint remains under exclusive clip ownership.
+  assert.ok(presence.fade.x>0);
 });
 
 test('LP-02A tolerates missing optional hands without throwing',()=>{
