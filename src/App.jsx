@@ -87,7 +87,7 @@ export default function App() {
     setBusy('Abriendo modelo…');setNotice(null);setImportResults([]);setAllowVrmExport(false);setFinalFormat('glb');setLightMeshes([]);setLightBoneCount(0);setTextureMaterials([]);setCanUndoTextures(false);
     try {
       const info = await viewer.current.open(files);
-      if (info) { setFaceDockOpen(info.format==='VRM');setModel(info);setLightMeshes(viewer.current.getLightMeshes());setLightBoneCount(viewer.current.getLightBoneCount());setTextureMaterials(viewer.current.getTextureMaterials());setModelGeneration(n=>n+1);syncPlayer();const axis=viewer.current.getCharacterOrientationInfo();
+      if (info) { setFaceDockOpen(['VRM','FBX','GLB','GLTF'].includes(info.format));setModel(info);setLightMeshes(viewer.current.getLightMeshes());setLightBoneCount(viewer.current.getLightBoneCount());setTextureMaterials(viewer.current.getTextureMaterials());setModelGeneration(n=>n+1);syncPlayer();const axis=viewer.current.getCharacterOrientationInfo();
         const note=axis&&axis.angleToWorldY>45?
           ' El eje cabeza-pelvis está inclinado '+axis.angleToWorldY+
           '° respecto al eje Y. Usa «Enderezar vista» para inspeccionarlo; '+
@@ -276,6 +276,12 @@ export default function App() {
       {type:'error',text:'No se pudo centrar el personaje: '+
         (fit?.reason||'Carga primero un archivo 3D.')});
   };
+  const focusFaceCamera=()=>{
+    const ok=viewer.current?.focusFace();
+    setNotice(ok?
+      {type:'success',text:'Primer plano de rostro activado. La cámara seguirá la cabeza durante la animación, sin cambiar el FBX. Usa «Centrar» para volver a la vista general.'}:
+      {type:'error',text:'No se identificó una región visible para enfocar el rostro.'});
+  };
   const alignUprightCamera=()=>{
     const result=viewer.current?.alignCameraToCharacter();
     setNotice(result?.ok?
@@ -304,7 +310,7 @@ export default function App() {
         <div className={`studio-layout ${mobilePanel?'mobile-panel-open':''}`}>
           <section className="viewer-column">
             <div className={`viewport-card ${dragging?'dragging':''}`} onDragOver={event=>{event.preventDefault();setDragging(true);}} onDragLeave={event=>{if(!event.currentTarget.contains(event.relatedTarget))setDragging(false);}} onDrop={drop}>
-              <div className="viewer-toolbar"><div className="viewport-title"><span className="viewport-led"/> VISOR 3D <span className="viewer-divider">/</span> <span>{model?'MODELO CARGADO':'ESCENA VACÍA'}</span></div><div className="viewer-actions"><button className={grid?'toolbar-btn on':'toolbar-btn'} onClick={toggleGrid} title="Mostrar cuadrícula" aria-label="Cuadrícula"><Grid2X2 size={17}/></button><button className={wireframe?'toolbar-btn on':'toolbar-btn'} onClick={toggleWireframe} title="Vista de malla" aria-label="Vista de malla"><Layers3 size={17}/></button><button className={showBones?'toolbar-btn on':'toolbar-btn'} onClick={toggleBones} title="Visualizar esqueleto" aria-label="Visualizar esqueleto"><Activity size={17}/></button><button className="toolbar-btn toolbar-btn-label" onClick={focusVisibleCharacter} title="Centrar la cámara usando la geometría visible, no el esqueleto" aria-label="Centrar personaje"><Focus size={17}/><span>Centrar</span></button>{model?.format==='FBX'&&<button className="toolbar-btn" onClick={alignUprightCamera} title="Enderezar SOLO la vista según cabeza y pelvis (no modifica FBX)" aria-label="Enderezar vista del personaje"><MoveUp size={17}/></button>}{model?.format==='VRM'&&<button className={faceDockOpen?'toolbar-btn on':'toolbar-btn'} onClick={()=>setFaceDockOpen(v=>!v)} title="Abrir controles rápidos faciales junto a Vita" aria-label="Controles rápidos de rostro" aria-pressed={faceDockOpen}><ScanEye size={17}/></button>}</div></div>
+              <div className="viewer-toolbar"><div className="viewport-title"><span className="viewport-led"/> VISOR 3D <span className="viewer-divider">/</span> <span>{model?'MODELO CARGADO':'ESCENA VACÍA'}</span></div><div className="viewer-actions"><button className={grid?'toolbar-btn on':'toolbar-btn'} onClick={toggleGrid} title="Mostrar cuadrícula" aria-label="Cuadrícula"><Grid2X2 size={17}/></button><button className={wireframe?'toolbar-btn on':'toolbar-btn'} onClick={toggleWireframe} title="Vista de malla" aria-label="Vista de malla"><Layers3 size={17}/></button><button className={showBones?'toolbar-btn on':'toolbar-btn'} onClick={toggleBones} title="Visualizar esqueleto" aria-label="Visualizar esqueleto"><Activity size={17}/></button><button className="toolbar-btn toolbar-btn-label" onClick={focusVisibleCharacter} title="Centrar la cámara usando la geometría visible, no el esqueleto" aria-label="Centrar personaje"><Focus size={17}/><span>Centrar</span></button>{model?.format==='FBX'&&<button className="toolbar-btn" onClick={alignUprightCamera} title="Enderezar SOLO la vista según cabeza y pelvis (no modifica FBX)" aria-label="Enderezar vista del personaje"><MoveUp size={17}/></button>}{model&&<button className="toolbar-btn toolbar-btn-label" onClick={focusFaceCamera} title="Primer plano de la cara; sigue la cabeza sin mover el rig" aria-label="Acercar cámara al rostro"><ScanEye size={17}/><span>Rostro</span></button>}{model&&<button className={faceDockOpen?'toolbar-btn on':'toolbar-btn'} onClick={()=>setFaceDockOpen(v=>!v)} title="Mostrar controles faciales compatibles" aria-label="Controles rápidos de rostro" aria-pressed={faceDockOpen}><SlidersHorizontal size={17}/></button>}</div></div>
               <div className="renderer-mount" ref={mountRef}/>
               <FaceQuickDock key={'face-dock-'+modelGeneration} getViewer={getViewer} model={model}
                 open={faceDockOpen} onClose={()=>setFaceDockOpen(false)}
