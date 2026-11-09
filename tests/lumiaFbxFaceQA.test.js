@@ -52,7 +52,7 @@ test('LP-FBX-01 detects supported facial bones conservatively',()=>{
   assert.equal(data.controls.jaw,true);
   assert.equal(data.controls.brows,true);
   assert.equal(data.names.jaw,'Jaw');
-  assert.equal(data.controls.smile,undefined);
+  assert.equal(data.controls.smile,false,'smile needs two recognized mouth corners');
 });
 test('LP-FBX-01 preview overlays are reversible and never modify rest pose',()=>{
   const {root,jaw,eyeL}=character();
