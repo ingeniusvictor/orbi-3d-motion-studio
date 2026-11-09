@@ -24,7 +24,7 @@ export default function AutoRigLab({model}){
       <details className="lp-accordion">
         <summary>Preparar personaje y colocar marcadores</summary>
         <div style={{display:'grid',gap:10,padding:10,fontSize:11,lineHeight:1.6}}>
-          <div><strong>1.</strong> Utiliza un GLB sin huesos y vertical en T-Pose.
+          <div><strong>1.</strong> Utiliza un GLB autocontenido sin huesos y vertical en T-Pose.
             La previsualización no transforma ni modifica el archivo.</div>
           <div><strong>2.</strong> Abre PowerShell desde el repositorio y ejecuta:</div>
           <code style={{wordBreak:'break-all',color:'#83ddcd'}}>{PREPARE}</code>
