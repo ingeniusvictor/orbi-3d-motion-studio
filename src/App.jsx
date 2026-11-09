@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Activity, ArrowDownToLine, Box, Boxes, CheckCircle2, ChevronDown, ChevronRight, CircleHelp, Clock3, Download, Eye, FilePlus2, FileUp, Film, FolderOpen, Grid2X2, Info, Layers3, Menu, MousePointer2, Pause, Play, RotateCcw, ScanEye, ShieldCheck, SlidersHorizontal, Sparkles, UploadCloud, X, XCircle } from 'lucide-react';
+import { Activity, ArrowDownToLine, Box, Boxes, CheckCircle2, ChevronDown, ChevronRight, CircleHelp, Clock3, Download, Eye, FilePlus2, FileUp, Film, Focus, FolderOpen, Grid2X2, Info, Layers3, Menu, MousePointer2, MoveUp, Pause, Play, RotateCcw, ScanEye, ShieldCheck, SlidersHorizontal, Sparkles, UploadCloud, X, XCircle } from 'lucide-react';
 import { MotionViewer } from './lib/viewer.js';
 import LightPrep from './LightPrep.jsx';
 import TextureStudio from './TextureStudio.jsx';
+import LivingPresenceLab from './LivingPresenceLab.jsx';
+import FaceQuickDock from './FaceQuickDock.jsx';
+import MotionExtractor from './MotionExtractor.jsx';
+import {accessoryModeLabel,strictSplitRigHint} from './lib/motionExportModes.js';
 import { blenderConvertScript } from './lib/mixamoKit.js';
 import { formatBytes } from './lib/modelInfo.js';
 
@@ -62,6 +66,10 @@ export default function App() {
   const [allowVrmExport, setAllowVrmExport] = useState(false);
   const [dragging,setDragging] = useState(false);
   const [mobilePanel,setMobilePanel] = useState(false);
+  const [faceDockOpen,setFaceDockOpen]=useState(false);
+  const voiceQARef=useRef(null);
+  const [voiceQAState,setVoiceQAState]=useState({ready:false,authorized:false,status:'idle'});
+  const getViewer = useCallback(() => viewer.current, []);
   const syncPlayer = useCallback(() => {
     const instance = viewer.current;
     if (!instance) return;
@@ -79,7 +87,12 @@ export default function App() {
     setBusy('Abriendo modelo…');setNotice(null);setImportResults([]);setAllowVrmExport(false);setFinalFormat('glb');setLightMeshes([]);setLightBoneCount(0);setTextureMaterials([]);setCanUndoTextures(false);
     try {
       const info = await viewer.current.open(files);
-      if (info) { setModel(info);setLightMeshes(viewer.current.getLightMeshes());setLightBoneCount(viewer.current.getLightBoneCount());setTextureMaterials(viewer.current.getTextureMaterials());setModelGeneration(n=>n+1);syncPlayer();setNotice({type:'success',text:`${info.filename} cargado correctamente.`}); }
+      if (info) { setFaceDockOpen(['VRM','FBX','GLB','GLTF'].includes(info.format));setModel(info);setLightMeshes(viewer.current.getLightMeshes());setLightBoneCount(viewer.current.getLightBoneCount());setTextureMaterials(viewer.current.getTextureMaterials());setModelGeneration(n=>n+1);syncPlayer();const axis=viewer.current.getCharacterOrientationInfo();
+        const note=axis&&axis.angleToWorldY>45?
+          ' El eje cabeza-pelvis está inclinado '+axis.angleToWorldY+
+          '° respecto al eje Y. Usa «Enderezar vista» para inspeccionarlo; '+
+          'esto no cambia la orientación del archivo FBX.':'';
+        setNotice({type:'success',text:`${info.filename} cargado correctamente.`+note}); }
     } catch(error) {setNotice({type:'error',text:error.message||String(error)});}
     finally {setBusy('');}
   },[syncPlayer]);
@@ -145,6 +158,82 @@ export default function App() {
     } catch(error) {setNotice({type:'error',text:`No se pudo exportar: ${error.message||error}`});}
     finally {setBusy('');}
   };
+  const exportCleanFBX=async ({pose='reference',accessoryHandling='strict',orientation='keep'}={})=>{
+    if(!viewer.current||!model)return;
+    setBusy('Preparando FBX sin animaciones · '+accessoryModeLabel(accessoryHandling)+'…');
+    setNotice(null);
+    try{
+      const result=await viewer.current.exportCleanMixamoFBX({pose,accessoryHandling,orientation});
+      const rotations=result.adjustments?.map(a=>a.side+': brazo '+
+        a.upperDegrees.toFixed(1)+'°, antebrazo '+a.forearmDegrees.toFixed(1)+'°').join(' | ');
+      setNotice({type:'success',text:result.filename+' descargado ('+
+        result.size+'). Verificado: '+result.bones+' huesos, '+
+        result.meshes+' mallas riggeadas y 0 animaciones. '+
+        (rotations?'Correcciones: '+rotations+'. ':'')+
+        (result.consolidation?.consolidated
+          ?'Se consolidaron '+result.consolidation.bonesBefore+
+           ' referencias de huesos en '+result.consolidation.bonesAfter+
+           ' huesos físicos de un solo rig. ':'')+
+        (result.accessory?.changed
+          ?'Accesorio '+result.accessory.accessoryName+': '+
+            (result.accessory.handling==='rigid'
+              ?'conservado como malla rígida vinculada a '+result.accessory.rigidParent+
+                ' (sin movimiento independiente de tela). '
+              :'omitido solo de la copia Mixamo. ')
+          :'')+
+        (result.accessory?.preservedAttachments?.length
+          ?'Nodos auxiliares conservados: '+
+            result.accessory.preservedAttachments.map(x=>x.name+' → '+x.target)
+              .join('; ')+'. '
+          :'')+
+        (result.bind?
+          'Pose de bind restaurada: '+result.bind.bones+' huesos, '+
+            result.bind.verticesChecked+' vértices muestreados, '+
+            'desviación máxima '+result.bind.maxBindError+', ' +
+            'skin '+result.bind.maxPaletteError+'. '+
+            (result.bind.angleAfter!==null?
+              'Eje cabeza-pelvis '+result.bind.angleAfter+
+              '° respecto de Y; revisa visualmente si está erguido. ':'')
+          :'')+
+        (result.orientation?.mode==='upright'?
+          'Verticalización FBX: '+result.orientation.beforeAngle+'° → '+
+          result.orientation.roundTripAngle+'° después de reimportar, '+
+          result.orientation.verticesChecked+' muestras sin deformación. ':'')+
+        (result.integrity?.passed?
+          'Integridad geométrica: '+result.integrity.meshCount+
+          ' mallas auditadas; triángulos, materiales y superficies verificados. ':'')+
+        (result.warnings?.length?'Avisos de exportación: '+
+          result.warnings.join(' ')+'. ':'')+
+        'Pose exportada: '+result.pose+'. Reabre el FBX en ORBI antes de probarlo en Mixamo. La aceptación por Mixamo no está garantizada.'});
+    }catch(error){
+      setNotice({type:'error',text:'No se exportó el FBX limpio. '+
+        'Tratamiento aplicado: '+accessoryModeLabel(accessoryHandling)+
+        '; orientación '+(orientation==='upright'?'vertical física':'original')+'. '+
+        (error.message||String(error))+
+        strictSplitRigHint(error,accessoryHandling)});
+    }finally{setBusy('');}
+  };
+  const downloadRigDiagnostic=async()=>{
+    if(!viewer.current)return;
+    setBusy('Recopilando diagnóstico local de huesos…');
+    try{
+      const report=await viewer.current.exportRigDiagnosticJSON();
+      setNotice({type:'success',text:report.filename+
+        ' descargado. Solo contiene nombres y transformaciones óseas ('+
+        report.summary.skinnedMeshes+' mallas, '+
+        report.summary.uniqueBoneObjects+' objetos Bone). No incluye el FBX ni texturas.'});
+    }catch(error){
+      setNotice({type:'error',text:'No se pudo generar el diagnóstico: '+
+        (error.message||String(error))});
+    }finally{setBusy('');}
+  };
+  const saveExtractedClip=index=>{
+    try{
+      const result=viewer.current.exportExtractedClipJSON(index);
+      setNotice({type:'success',text:'Clip guardado: '+result.filename+
+        '. Formato de biblioteca ORBI, no FBX para Mixamo.'});
+    }catch(error){setNotice({type:'error',text:error.message||String(error)});}
+  };
   const downloadScript = () => {
     const blob=new Blob([blenderConvertScript()],{type:'text/x-python;charset=utf-8'});
     const url=URL.createObjectURL(blob);
@@ -179,6 +268,29 @@ export default function App() {
   const toggleBones = () => {setShowBones(v=>{viewer.current?.setSkeletonVisible(!v);return !v;});};
   const toggleWireframe = () => {setWireframe(v=>{viewer.current?.setWireframe(!v);return !v;});};
   const toggleGrid = () => {setGrid(v=>{if(viewer.current) viewer.current.grid.visible=!v;return !v;});};
+  const focusVisibleCharacter=()=>{
+    const fit=viewer.current?.resetCamera();
+    setNotice(fit?.ok?
+      {type:'success',text:'Cámara centrada en la geometría visible del personaje. '+
+        'No se movieron los huesos ni se modificó el FBX.'}:
+      {type:'error',text:'No se pudo centrar el personaje: '+
+        (fit?.reason||'Carga primero un archivo 3D.')});
+  };
+  const focusFaceCamera=()=>{
+    const ok=viewer.current?.focusFace();
+    setNotice(ok?
+      {type:'success',text:'Primer plano de rostro activado. La cámara seguirá la cabeza durante la animación, sin cambiar el FBX. Usa «Centrar» para volver a la vista general.'}:
+      {type:'error',text:'No se identificó una región visible para enfocar el rostro.'});
+  };
+  const alignUprightCamera=()=>{
+    const result=viewer.current?.alignCameraToCharacter();
+    setNotice(result?.ok?
+      {type:'success',text:'Vista alineada con la cabeza y la pelvis ('+
+        result.angleToWorldY.toFixed(1)+'° respecto de Y). Solo giró la cámara: '+
+        'si el FBX quedó acostado, esto no corrige su orientación para Mixamo.'}:
+      {type:'error',text:'No se pudo enderezar la vista: '+
+        (result?.reason||'Carga un personaje con huesos de cabeza y pelvis identificables.')});
+  };
   const drop = event => {event.preventDefault();setDragging(false);if(event.dataTransfer?.files?.length)openFiles(Array.from(event.dataTransfer.files));};
   return <div className="app-shell">
     <aside className="nav-rail">
@@ -198,8 +310,13 @@ export default function App() {
         <div className={`studio-layout ${mobilePanel?'mobile-panel-open':''}`}>
           <section className="viewer-column">
             <div className={`viewport-card ${dragging?'dragging':''}`} onDragOver={event=>{event.preventDefault();setDragging(true);}} onDragLeave={event=>{if(!event.currentTarget.contains(event.relatedTarget))setDragging(false);}} onDrop={drop}>
-              <div className="viewer-toolbar"><div className="viewport-title"><span className="viewport-led"/> VISOR 3D <span className="viewer-divider">/</span> <span>{model?'MODELO CARGADO':'ESCENA VACÍA'}</span></div><div className="viewer-actions"><button className={grid?'toolbar-btn on':'toolbar-btn'} onClick={toggleGrid} title="Mostrar cuadrícula" aria-label="Cuadrícula"><Grid2X2 size={17}/></button><button className={wireframe?'toolbar-btn on':'toolbar-btn'} onClick={toggleWireframe} title="Vista de malla" aria-label="Vista de malla"><Layers3 size={17}/></button><button className={showBones?'toolbar-btn on':'toolbar-btn'} onClick={toggleBones} title="Visualizar esqueleto" aria-label="Visualizar esqueleto"><Activity size={17}/></button><button className="toolbar-btn" onClick={()=>viewer.current?.resetCamera()} title="Restablecer cámara" aria-label="Restablecer cámara"><RotateCcw size={17}/></button></div></div>
+              <div className="viewer-toolbar"><div className="viewport-title"><span className="viewport-led"/> VISOR 3D <span className="viewer-divider">/</span> <span>{model?'MODELO CARGADO':'ESCENA VACÍA'}</span></div><div className="viewer-actions"><button className={grid?'toolbar-btn on':'toolbar-btn'} onClick={toggleGrid} title="Mostrar cuadrícula" aria-label="Cuadrícula"><Grid2X2 size={17}/></button><button className={wireframe?'toolbar-btn on':'toolbar-btn'} onClick={toggleWireframe} title="Vista de malla" aria-label="Vista de malla"><Layers3 size={17}/></button><button className={showBones?'toolbar-btn on':'toolbar-btn'} onClick={toggleBones} title="Visualizar esqueleto" aria-label="Visualizar esqueleto"><Activity size={17}/></button><button className="toolbar-btn toolbar-btn-label" onClick={focusVisibleCharacter} title="Centrar la cámara usando la geometría visible, no el esqueleto" aria-label="Centrar personaje"><Focus size={17}/><span>Centrar</span></button>{model?.format==='FBX'&&<button className="toolbar-btn" onClick={alignUprightCamera} title="Enderezar SOLO la vista según cabeza y pelvis (no modifica FBX)" aria-label="Enderezar vista del personaje"><MoveUp size={17}/></button>}{model&&<button className="toolbar-btn toolbar-btn-label" onClick={focusFaceCamera} title="Primer plano de la cara; sigue la cabeza sin mover el rig" aria-label="Acercar cámara al rostro"><ScanEye size={17}/><span>Rostro</span></button>}{model&&<button className={faceDockOpen?'toolbar-btn on':'toolbar-btn'} onClick={()=>setFaceDockOpen(v=>!v)} title="Mostrar controles faciales compatibles" aria-label="Controles rápidos de rostro" aria-pressed={faceDockOpen}><SlidersHorizontal size={17}/></button>}</div></div>
               <div className="renderer-mount" ref={mountRef}/>
+              <FaceQuickDock key={'face-dock-'+modelGeneration} getViewer={getViewer} model={model}
+                open={faceDockOpen} onClose={()=>setFaceDockOpen(false)}
+                voiceState={voiceQAState}
+                onSpeak={()=>voiceQARef.current?.play?.()}
+                onStopVoice={()=>voiceQARef.current?.stop?.()}/>
               {!model && <Intro onOpen={()=>fileInput.current?.click()}/>}
               {dragging&&<div className="drag-mask"><UploadCloud size={42}/><strong>Suelta tu archivo 3D</strong><span>Tu archivo se procesa localmente</span></div>}
               {busy&&<div className="busy-mask"><div className="loading-ring"/><strong>{busy}</strong></div>}
@@ -208,10 +325,15 @@ export default function App() {
             {notice&&<div className={`notice ${notice.type}`} role="status">{notice.type==='error'?<XCircle size={18}/>:<CheckCircle2 size={18}/>}<span>{notice.text}</span><button onClick={()=>setNotice(null)} aria-label="Cerrar aviso"><X size={16}/></button></div>}
             <section className="panel animation-panel"><div className="panel-header"><div><div className="section-icon"><Film size={19}/></div><div><h3>Biblioteca de animaciones</h3><p>{clips.length?`${clips.length} movimientos encontrados`:'Los movimientos de tu modelo aparecerán aquí'}</p></div></div><span className="counter">{clips.length.toString().padStart(2,'0')}</span></div>
               {clips.length?<><div className="clips-list">{clips.map(clip=><button className={`clip-row ${activeClip===clip.index?'active':''}`} key={`${clip.index}-${clip.name}`} onClick={()=>chooseClip(clip.index)}><div className="clip-play"><Play size={14} fill={activeClip===clip.index?'currentColor':'none'}/></div><span className="clip-name">{clip.name}<small>{clip.source}</small></span><span className="clip-meta">{clip.duration.toFixed(1)} s</span>{activeClip===clip.index&&<span className="playing-pill">ACTIVA</span>}</button>)}</div><div className="player-controls"><button className="play-btn" onClick={togglePlay} aria-label={playing?'Pausar animación':'Reproducir animación'}>{playing?<Pause size={18} fill="currentColor"/>:<Play size={18} fill="currentColor"/>}</button><div className="now-playing"><small>{playing?'REPRODUCIENDO':'EN PAUSA'}</small><strong>{activeClip!==null?clips[activeClip]?.name:'Selecciona un movimiento'}</strong></div><label className="speed-label">Velocidad <select value={speed} onChange={changeSpeed}><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label></div></>:<div className="no-animation"><div className="no-animation-icon"><Film size={22}/></div><div><strong>{model?'Este modelo no incluye animaciones':'Sin animaciones todavía'}</strong><p>{model?.format==='VRM'?'El VRM puede ser estático. Si tiene animaciones integradas, aparecerán aquí.':model?'Puedes inspeccionar el modelo o agregar animaciones del mismo esqueleto.':'Carga un personaje animado para reproducir sus movimientos.'}</p></div></div>}
+              <MotionExtractor model={model} clips={clips} activeClip={activeClip}
+                busy={busy} onExportRig={exportCleanFBX}
+                onSaveClip={saveExtractedClip}
+                onDownloadRigDiagnostic={downloadRigDiagnostic}/>
             </section>
           </section>
           <aside className="sidebar-panels"><section className="panel inspector-panel"><div className="panel-header"><div><div className="section-icon"><SlidersHorizontal size={19}/></div><div><h3>Inspector 3D</h3><p>Detalles de tu modelo</p></div></div></div>
             {model?<><div className="model-chip"><div className="model-symbol"><Box size={23}/></div><div><strong title={model.filename}>{model.filename}</strong><span>{model.format} · {formatBytes(model.bytes)}</span></div><CheckCircle2 size={17} className="success-ic"/></div><div className="tab-bar"><button className={inspectorTab==='stats'?'active':''} onClick={()=>setInspectorTab('stats')}>Composición</button><button className={inspectorTab==='tree'?'active':''} onClick={()=>setInspectorTab('tree')}>Estructura</button></div>{inspectorTab==='stats'?<div className="stats-grid"><Stat icon={Box} label="Mallas" value={number(model.meshes)}/><Stat icon={Grid2X2} label="Triángulos" value={number(model.triangles)}/><Stat icon={Layers3} label="Materiales" value={number(model.materials)}/><Stat icon={Boxes} label="Texturas" value={number(model.textures)}/><Stat icon={Activity} label="Huesos" value={number(model.bones)}/><Stat icon={Film} label="Animaciones" value={number(clips.length)}/><Stat icon={Eye} label="Nodos" value={number(model.nodes)}/><Stat icon={ScanEye} label="Vértices" value={number(model.vertices)}/></div>:<div className="tree-list">{model.hierarchy.map((node,index)=><div key={index} className="tree-node" style={{paddingLeft:`${Math.min(node.depth,7)*12+8}px`}}><span className="tree-mark">{node.type==='Bone'?'◇':'▸'}</span><span title={node.name}>{node.name}</span><small>{node.type}</small></div>)}{model.nodes>180&&<div className="tree-more">Mostrando los primeros 180 nodos de {model.nodes}.</div>}</div>}</>:<div className="inspector-empty"><Boxes size={32}/><strong>Aún no hay modelo</strong><p>La composición y estructura aparecerán al cargar un archivo.</p></div>}</section>
+          <LivingPresenceLab key={'lp-'+modelGeneration} model={model} generation={modelGeneration} getViewer={getViewer} activeClip={activeClip} voiceQARef={voiceQARef} onVoiceQAState={setVoiceQAState}/>
           <TextureStudio key={modelGeneration} model={model} materials={textureMaterials} busy={busy} onApply={applyTexture} onBatch={batchTexture} onUndo={undoTexture} canUndo={canUndoTextures} onCapture={id=>viewer.current.captureMaterialViews(id)}/>
           <section className="panel integrate-panel"><div className="panel-header"><div><div className="section-icon mint"><FilePlus2 size={19}/></div><div><h3>Integrar movimientos</h3><p>Animaciones externas del mismo rig</p></div></div></div><div className="compat-note"><ShieldCheck size={17}/><span>{model?.format==='VRM'?'VRM: los movimientos se pueden guardar como GLB estándar aproximado (no como VRM).':'Solo FBX del mismo esqueleto y jerarquía del personaje. No realiza rigging ni retargeting.'}</span></div><button className="outline-btn" onClick={()=>animationInput.current?.click()} disabled={!model||!!busy}><FilePlus2 size={16}/> Añadir animaciones FBX</button>{importResults.length>0&&<div className="results-list">{importResults.map((item,index)=><div key={`${item.name}-${index}`} className={item.ok?'ok':'fail'}>{item.ok?<CheckCircle2 size={15}/>:<XCircle size={15}/>}<span><strong>{item.name}</strong><small>{item.ok?`${item.count} animación(es) añadida(s)`:item.reason}</small>{item.ok&&item.warning&&<small>{item.warning}</small>}</span></div>)}</div>}
             {model?.format==='VRM'&&<label className="vrm-export-warning" style={{display:'flex',alignItems:'flex-start',gap:9,margin:'10px 0',fontSize:12,lineHeight:1.6,color:'#c6d3e4',cursor:'pointer'}}><input type="checkbox" checked={allowVrmExport} onChange={event=>setAllowVrmExport(event.target.checked)} style={{accentColor:'#48d9cb',marginTop:3,flexShrink:0}}/><span>Entiendo que descargaré un <strong>GLB estándar aproximado</strong>, no un VRM. Materiales MToon, expresiones, física y desplazamientos omitidos pueden perderse.</span></label>}

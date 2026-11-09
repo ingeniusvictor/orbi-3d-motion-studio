@@ -2,6 +2,11 @@ import { exportFbx, exportCharacterFbx } from 'three-js-fbx-exporter';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { makeLightweightClone, skinBoneCount, skinnedMeshes } from './lightweight.js';
 import { readPhysicalFbxRig } from './fbxBoneAudit.js';
+import { reconcilePhysicalRigNames } from './fbxRigIdentity.js';
+import { prepareMixamoRig } from './motionExtraction.js';
+import { orientExportUpright } from './uprightExport.js';
+import { detectBodyUpDirection } from './visibleBounds.js';
+import { auditMeshRoundTrip,auditBodyPreparation } from './meshAudit.js';
 
 const magic=[75,97,121,100,97,114,97,32,70,66,88,32,66,105,110,97,114,121,32,32,0,26,0];
 export function isBinaryFBX(bytes) {
@@ -37,23 +42,31 @@ export function validateBinaryFBX(bytes,expectedBones,reference=null) {
   const physicalRig=readPhysicalFbxRig(bytes);
   const rig=physicalRig.size;
   const meshes=skinnedMeshes(group);
-  if(!meshes.length)throw new Error('El FBX binario no conserva una malla vinculada a huesos.');
+  // skinnedMeshes() returns lightweight METADATA records, not Three.js
+  // SkinnedMesh objects. Identity reconciliation needs actual skeletons.
+  const actualSkins=[];
+  group.traverse(node=>{
+    if(node.isSkinnedMesh&&node.geometry?.getAttribute('position')?.count)
+      actualSkins.push(node);
+  });
+  if(!meshes.length||!actualSkins.length)
+    throw new Error('El FBX binario no conserva una malla vinculada a huesos.');
   if(rig!==expectedBones)throw new Error(
     'El FBX binario contiene '+rig+' huesos físicos LimbNode, pero se esperaban '+
     expectedBones+'. No se descargará.');
+  let identity={renamedBones:[],warnings:[]};
   if(reference) {
     const expected=rigSignature(reference);
-    if(expected.size!==expectedBones)throw new Error('La referencia no tiene un rig único que pueda verificarse.');
-    for(const [name,parent] of expected) {
-      if(!physicalRig.has(name))throw new Error('El FBX perdió o renombró el hueso físico «'+name+'».');
-      if(physicalRig.get(name)!==parent)
-        throw new Error('La jerarquía física del hueso «'+name+'» cambió al generar el FBX.');
-    }
-    // The FBXLoader can clone each skin's bone objects internally; never
-    // treat those runtime proxies as additional physical bones.
-    if(physicalRig.size!==expected.size)throw new Error('Aparecieron huesos físicos adicionales en el FBX.');
+    if(expected.size!==expectedBones)throw new Error(
+      'El personaje contiene '+expectedBones+' objetos de hueso vinculados, pero solo '+
+      expected.size+' nombres óseos únicos. Las copias de esqueleto no son equivalentes o no se pudieron consolidar. No se exportó un rig ambiguo.');
+    // A physical root may be renamed if it clashes with a static FBX
+    // group. Only accept the change if its FULL bone-parent graph and
+    // skinned binding can be proven equivalent, never by counts alone.
+    identity=reconcilePhysicalRigNames(expected,physicalRig,actualSkins);
   }
-  return {bones:rig,meshBoneProxies:skinBoneCount(group),meshes:meshes.length,model:group};
+  return {bones:rig,meshBoneProxies:skinBoneCount(group),
+    meshes:meshes.length,model:group,identity};
 }
 export function lightweightBinaryFBX(source,ids) {
   const prepared=makeLightweightClone(source,ids);
@@ -90,4 +103,85 @@ export function animatedBinaryFBX(model,clips) {
   if(!verified.model.animations?.length)warnings.push(
     'El FBX conserva el skin, pero este lector no pudo verificar sus clips. Revísalos en Blender.');
   return {bytes,bytesLength:bytes.byteLength,bones:verified.bones,meshes:verified.meshes,warnings};
+}
+
+/**
+ * MOTION-05: export an existing rigged character in its original reference
+ * pose or an explicitly calibrated A/T pose, without clips. Never mutate the model.
+ */
+export function cleanRiggedMixamoFBX(source,referencePose,{
+  pose='reference',accessoryHandling='strict',orientation='keep',
+  integrityMode='strict',
+}={}){
+  const prepared=prepareMixamoRig(source,referencePose,{pose,accessoryHandling});
+  const bodyPreparation=auditBodyPreparation(source,prepared.model);
+  const oriented=orientExportUpright(prepared.model,{mode:orientation});
+  const warnings=[];
+  const bytes=exportFbx(oriented.model,{
+    format:'binary',version:7400,target:'threejs',
+    animations:[],bakeAnimations:false,
+    embedTextures:false,
+    onWarning:warning=>warnings.push(String(warning?.message||warning)),
+  });
+  const verified=validateBinaryFBX(bytes,prepared.bones,oriented.model);
+  warnings.push(...verified.identity.warnings);
+  // FBXExporter/FBXLoader can preserve the 340-bone hierarchy while losing
+  // a subset of the body surface. Check EVERY mesh and local spatial coverage
+  // against what we actually prepared for export, before downloading.
+  if(!['strict','report'].includes(integrityMode))
+    throw new Error('Modo de auditoría geométrica no reconocido.');
+  let integrity;
+  try{
+    integrity=auditMeshRoundTrip(oriented.model,verified.model);
+    warnings.push(...integrity.warnings);
+  }catch(error){
+    // Report mode is EXCLUSIVELY for existing structural-regression tests
+    // and optional explicit investigation; NOT the certified FBX path.
+    if(integrityMode==='strict'||!String(error?.message||'')
+      .startsWith('Auditoría de geometría FBX:'))throw error;
+    integrity={passed:false,meshCount:0,details:[],
+      failure:error.message,mode:'diagnostic-unverified'};
+    warnings.push('FBX NO CERTIFICADO: '+error.message+
+      ' Esta salida solo sirve para diagnosticar y no debe cargarse en Mixamo.');
+  }
+  if(orientation==='upright'){
+    const outputAxis=detectBodyUpDirection(verified.model);
+    if(!outputAxis||outputAxis.angleToWorldY>5)
+      throw new Error('El FBX reimportado volvió a una orientación horizontal '+
+        '(ángulo '+(outputAxis?.angleToWorldY?.toFixed(1)||'?')+
+        '°). Se detuvo para evitar un archivo que no esté realmente erguido.');
+    oriented.report.roundTripAngle=Number(outputAxis.angleToWorldY.toFixed(3));
+  }
+  if(verified.model.animations?.length)
+    throw new Error('El FBX todavía contiene animaciones. Se canceló la descarga.');
+  if(verified.meshes<1)
+    throw new Error('El FBX perdió todas las mallas riggeadas.');
+  if(prepared.accessory?.handling==='rigid'&&prepared.accessory.changed){
+    const staticMeshes=[];
+    verified.model.traverse(n=>{
+      if(n.isMesh&&!n.isSkinnedMesh&&n.geometry?.getAttribute('position')?.count)
+        staticMeshes.push(n);
+    });
+    if(!staticMeshes.some(n=>n.name===prepared.accessory.accessoryName||
+      n.name.includes(prepared.accessory.accessoryName)))
+      throw new Error('El FBX reimportado perdió el adorno rígido «'+
+        prepared.accessory.accessoryName+'». Se canceló para no perder piezas.');
+    warnings.push('El accesorio '+prepared.accessory.accessoryName+
+      ' se conservó visualmente como malla rígida unida al torso. Sus  movimientos internos de tela ya no son animables.');
+  }
+  if(prepared.accessory?.handling==='exclude'&&prepared.accessory.changed)
+    warnings.push('Se excluyó el accesorio '+prepared.accessory.accessoryName+
+      ' SOLO de esta copia para Mixamo. El FBX original no se modificó.');
+  const physicalRig=readPhysicalFbxRig(bytes);
+  const roots=[...physicalRig.values()].filter(parent=>parent===null);
+  if(roots.length!==1)
+    throw new Error('El FBX limpio tiene '+roots.length+
+      ' raíces óseas distintas. Mixamo necesita un esqueleto principal; no se descargó un personaje multirig como si fuese único.');
+  return {
+    bytes,bytesLength:bytes.byteLength,bones:verified.bones,
+    meshes:verified.meshes,animations:0,pose:prepared.pose,
+    adjustments:prepared.adjustments,consolidation:prepared.consolidation,
+    accessory:prepared.accessory,bind:prepared.bind,
+    orientation:oriented.report,integrity,bodyPreparation,warnings,
+  };
 }
