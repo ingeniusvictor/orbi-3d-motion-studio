@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
-import {autoRigEligibility} from '../src/AutoRigLab.jsx';
+import {autoRigEligibility} from '../src/lib/autoRig/eligibility.js';
 
 const preset=JSON.parse(readFileSync(new URL('../public/autorig01/humanoid_tpose.json',import.meta.url),'utf-8'));
 const py=readFileSync(new URL('../tools/autorig01_blender.py',import.meta.url),'utf-8');
