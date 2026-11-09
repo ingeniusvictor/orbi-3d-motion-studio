@@ -143,8 +143,18 @@ export default function FaceQuickDock({getViewer,model,open,onClose,voiceState,o
           </div>
           <small>Canales actuales: {Object.entries(mapping?.controls||{})
             .filter(([,active])=>active).map(([name])=>name).join(', ')||'ninguno'}.
-            {' '}Si no aparecen huesos relevantes, descarga el diagnóstico
-            del rig desde MOTION-05 para revisar su estructura auténtica.</small>
+            {' '}Los mapeos manuales pertenecen solo a esta sesión de prueba.</small>
+          <button type="button" onClick={async()=>{
+            try{
+              const report=await getViewer()?.exportRigDiagnosticJSON?.();
+              setFeedback(report?.filename
+                ?'Diagnóstico guardado: '+report.filename+
+                  '. Compártelo para preparar el mapeo definitivo de Mint.'
+                :'No se pudo generar el diagnóstico para este archivo.');
+            }catch(error){
+              setFeedback('Falló el diagnóstico: '+(error?.message||error));
+            }
+          }}>Descargar diagnóstico del rig (JSON)</button>
         </div>
       </details>
     </>}
