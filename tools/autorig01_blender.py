@@ -112,6 +112,12 @@ def count_shapes(obj):
     keys = obj.data.shape_keys
     return max(0, len(keys.key_blocks) - 1) if keys else 0
 
+def topology_signature(objects):
+    # Marker edits must never silently modify the actual mesh topology.
+    rows=[(o.name,len(o.data.vertices),len(o.data.polygons),count_shapes(o),
+           len(o.material_slots)) for o in objects]
+    return json.dumps(sorted(rows),ensure_ascii=False)
+
 def inventory(objects):
     mins, maxs = all_bounds(objects)
     return {
@@ -160,6 +166,7 @@ def prepare(input_file, out):
     bpy.context.scene["orbi_autorig_source"] = str(input_file)
     bpy.context.scene["orbi_autorig_sha256"] = sha256(input_file)
     bpy.context.scene["orbi_autorig_mesh_count"] = len(objects)
+    bpy.context.scene["orbi_autorig_topology"] = topology_signature(objects)
     bpy.ops.wm.save_as_mainfile(filepath=str(workspace))
     result = {"status":"MARKERS_PENDING_USER_REVIEW", "source":str(input_file),
               "sha256":bpy.context.scene["orbi_autorig_sha256"],
@@ -322,6 +329,9 @@ def rig(workspace, out):
     require(source_hash==scene["orbi_autorig_sha256"],
             "Cambió el hash del GLB original: cancelar para evitar mezclar versiones.")
     mesh_objects,mins,maxs=origin_inventory()
+    require(len(mesh_objects)==scene["orbi_autorig_mesh_count"] and
+            topology_signature(mesh_objects)==scene.get("orbi_autorig_topology"),
+            "La geometría del workspace cambió desde la preparación. Corrige solo los marcadores en una copia nueva.")
     before=inventory(mesh_objects)
     m=read_markers()
     marker_geometry_check(m,(mins,maxs))
