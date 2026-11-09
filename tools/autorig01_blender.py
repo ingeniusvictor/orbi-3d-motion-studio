@@ -132,8 +132,8 @@ def set_active(obj):
     bpy.context.view_layer.objects.active = obj
 
 def prepare(input_file, out):
-    require(input_file and input_file.is_file() and input_file.suffix.lower() in (".glb", ".gltf"),
-            "Selecciona un GLB/GLTF existente.")
+    require(input_file and input_file.is_file() and input_file.suffix.lower() == ".glb",
+            "Selecciona un GLB autocontenido existente.")
     # External .gltf assets can be referenced; prefer GLB for a self-contained source.
     folder = out
     workspace = folder / "ORBI_AUTORIG_WORKSPACE.blend"
