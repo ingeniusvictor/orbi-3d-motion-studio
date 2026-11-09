@@ -51,3 +51,12 @@ test('LP-03D.2 camera focus on face changes only camera and controls',()=>{
   assert.ok(head.position.equals(original),'camera must not adjust rigging');
   assert.equal(MotionViewer.prototype.focusFace.call({model:null,vrm:null}),false);
 });
+
+test('LP-FBX-02 mouth preview remains locked until reversible facial QA is explicitly enabled',()=>{
+  const data={fbx:true,face:{enabled:false},lip:{active:false,mapping:{a:'jaw'}}};
+  assert.equal(canRunFacialQuickAction({group:'mouth',key:'a'},data),false);
+  data.face.enabled=true;
+  assert.equal(canRunFacialQuickAction({group:'mouth',key:'a'},data),true);
+  data.lip.active=true;
+  assert.equal(canRunFacialQuickAction({group:'mouth',key:'a'},data),false);
+});
