@@ -443,6 +443,11 @@ export class MotionViewer {
       reason:'Carga Vita.vrm para inspeccionar el rostro.',
     };
   }
+  getFbxFaceMapping(){return this.fbxFace?.getMappingConfig()||null;}
+  setFbxFaceMapping(role,boneId){
+    return this.fbxFace?.setManualMapping(role,boneId)||
+      {ok:false,reason:'El modelo actual no contiene un rig facial FBX.'};
+  }
   setLivingFacialEnabled(value){this.facial?.setEnabled(value);this.fbxFace?.setEnabled(value);}
   setLivingFacialIntensity(value){this.facial?.setIntensity(value);this.fbxFace?.setIntensity(value);}
   setLivingFacialMode(mode){return this.facial?.setMode(mode)??this.fbxFace?.setMode(mode)??false;}
