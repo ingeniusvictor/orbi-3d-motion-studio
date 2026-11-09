@@ -20,13 +20,19 @@ function findUnique(bones,aliases){
   return matches.length===1?matches[0]:null;
 }
 const rolePatterns={
-  jaw:[/(?:^|bip\d*|mixamorig|j?bip[c]?|bn)jaw$/, /^lowerjaw$/, /^mandible$/],
-  eyeLeft:[/^(?:left|l)eye(?:ball)?$/, /^eye(?:ball)?(?:left|l)$/, /(?:^|bn)l(?:eft)?eye$/],
-  eyeRight:[/^(?:right|r)eye(?:ball)?$/, /^eye(?:ball)?(?:right|r)$/, /(?:^|bn)r(?:ight)?eye$/],
-  lidLeft:[/^(?:left|l)upper(?:eye)?lid$/, /^upper(?:eye)?lid(?:left|l)$/, /(?:^|bn)l(?:eft)?eyelidupper$/],
-  lidRight:[/^(?:right|r)upper(?:eye)?lid$/, /^upper(?:eye)?lid(?:right|r)$/, /(?:^|bn)r(?:ight)?eyelidupper$/],
-  browLeft:[/^(?:left|l)(?:eye)?brow$/, /^(?:eye)?brow(?:left|l)$/],
-  browRight:[/^(?:right|r)(?:eye)?brow$/, /^(?:eye)?brow(?:right|r)$/],
+  jaw:[/^(?:bn(?:c|center)?|bip\d*|mixamorig|jbipc)?jaw$/, /^lowerjaw$/, /^mandible$/],
+  eyeLeft:[/^(?:left|l)eye(?:ball)?$/, /^eye(?:ball)?(?:left|l)$/,
+    /^bn(?:l|left)eye(?:ball)?$/, /^bneye(?:ball)?(?:l|left)$/],
+  eyeRight:[/^(?:right|r)eye(?:ball)?$/, /^eye(?:ball)?(?:right|r)$/,
+    /^bn(?:r|right)eye(?:ball)?$/, /^bneye(?:ball)?(?:r|right)$/],
+  lidLeft:[/^(?:left|l)upper(?:eye)?lid$/, /^upper(?:eye)?lid(?:left|l)$/,
+    /^bn(?:l|left)(?:eye)?lidupper$/, /^bn(?:l|left)upper(?:eye)?lid$/],
+  lidRight:[/^(?:right|r)upper(?:eye)?lid$/, /^upper(?:eye)?lid(?:right|r)$/,
+    /^bn(?:r|right)(?:eye)?lidupper$/, /^bn(?:r|right)upper(?:eye)?lid$/],
+  browLeft:[/^(?:left|l)(?:eye)?brow$/, /^(?:eye)?brow(?:left|l)$/,
+    /^bn(?:l|left)(?:eye)?brow$/],
+  browRight:[/^(?:right|r)(?:eye)?brow$/, /^(?:eye)?brow(?:right|r)$/,
+    /^bn(?:r|right)(?:eye)?brow$/],
 };
 // Do not infer smile/cheeks/visemes from material names or the 488 bone count.
 export function auditFbxFacialBones(root){
@@ -103,7 +109,7 @@ export class FbxFaceQA{
   }
   previewVowel(vowel){
     if(!this.enabled||!this.audit.controls.jaw||this.speech||
-      !'aeiou'.includes(vowel))return false;
+      !['a','e','i','o','u'].includes(vowel))return false;
     this.preview={action:'vowel',until:this.time+1.1,vowel};return true;
   }
   beginSpeech(token){return Boolean(this.enabled&&this.speech?.token===token);}
@@ -113,7 +119,7 @@ export class FbxFaceQA{
     this.speech={token,source,text:String(text),paused:false};
     this.preview=null;return true;
   }
-  stop(token){if(this.speech?.token!==token)return false;this.speech=null;this.opening=0;this.release();return true;}
+  stop(token){if(this.speech?.token!==token)return false;this.speech=null;this.opening=0;this.lastAudio=0;this.release();return true;}
   pause(token){if(this.speech?.token!==token)return false;this.speech.paused=true;return true;}
   resume(token){if(this.speech?.token!==token)return false;this.speech.paused=false;return true;}
   boundary(token,index){
