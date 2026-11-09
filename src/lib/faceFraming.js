@@ -22,7 +22,7 @@ export function findFaceAnchor(root,vrm=null){
     const name=canonical(b.name);
     if(/adjust|hair|ear|eyebrow|forehead|headtop|headend/.test(name))return {bone:b,score:-1};
     if(name==='head')return {bone:b,score:100};
-    if(/^(?:mixamorig|bip[0-9]*|j?bip[clr]?|bn)head$/.test(name))
+    if(/^(?:mixamorig|bip[0-9]*|j?bip[clr]?|bn[clr]?)head$/.test(name))
       return {bone:b,score:90};
     if(name.endsWith('head')&&!name.includes('ahead'))return {bone:b,score:70};
     return {bone:b,score:0};
