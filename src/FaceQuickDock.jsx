@@ -19,6 +19,7 @@ function snapshot(viewer){
   return {
     face:viewer?.getLivingFacialDiagnostics?.()||null,
     lip:viewer?.getLivingLipDiagnostics?.()||null,
+    fbx:Boolean(viewer?.fbxFace),
     presenceEnabled:Boolean(viewer?.presence?.enabled||viewer?.fbxFace?.enabled),
   };
 }
