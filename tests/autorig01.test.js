@@ -62,3 +62,43 @@ test('AUTORIG-01 runner preserves original and uses two-stage explicit operation
   assert.match(ps1,/--workspace/);
   assert.match(ps1,/\$BlenderExe --background/);
 });
+
+test('AUTORIG-01 distance fallback outputs finite, normalized, max-four vertex weights',t=>{
+  const cmd=process.platform==='win32'?'python':'python3';
+  const testScript=[
+    'import sys,math',
+    'sys.path.insert(0,sys.argv[1])',
+    'from autorig01_weights import segment_weights',
+    'segments=[("left",(-1,0,0),(-1,0,2)),("right",(1,0,0),(1,0,2)),',
+    '("center",(0,0,0),(0,0,2)),("far",(9,0,0),(9,0,2)),',
+    '("other",(0,4,0),(0,4,2))]',
+    'w=segment_weights((-0.94,0,1),segments,softness=.03)',
+    'assert abs(sum(w.values())-1)<1e-9',
+    'assert 1 <= len(w) <= 4',
+    'assert all(math.isfinite(x) and 0<x<=1 for x in w.values())',
+    'assert w.get("left",0)>w.get("right",0)',
+    'assert segment_weights((.94,0,1),segments,softness=.03).get("right",0) > .75',
+    'assert sum(segment_weights((0,0,0),segments,softness=.03,max_influences=2).values())>0.999999',
+    'forbidden=[("zero",(0,0,0),(0,0,0))]',
+    'for bad in [forbidden,[]]:',
+    ' try: segment_weights((0,0,0),bad)',
+    ' except ValueError: pass',
+    ' else: raise AssertionError("invalid skeleton accepted")',
+    'print("DISTANCE_SKIN_QA_PASS")'
+  ].join('\n');
+  const result=spawnSync(cmd,['-c',testScript,fileURLToPath(new URL('../tools/',import.meta.url))],{
+    encoding:'utf8'});
+  if(result.error?.code==='ENOENT'){t.diagnostic('Python absent; numerical test unavailable.');return;}
+  assert.equal(result.status,0,result.stderr||result.stdout);
+  assert.match(result.stdout,/DISTANCE_SKIN_QA_PASS/);
+});
+test('AUTORIG-01 does not silently substitute approximate skin weights',()=>{
+  assert.match(py,/--skin-method/);
+  assert.match(py,/default="auto"/);
+  assert.match(py,/def generate_skin/);
+  assert.match(py,/distance_skin_fallback/);
+  assert.match(py,/fallbackUsed/);
+  assert.match(py,/requiresDeformationQA/);
+  assert.match(ps1,/SkinMethod="auto"/);
+  assert.match(ps1,/--skin-method \$SkinMethod/);
+});
