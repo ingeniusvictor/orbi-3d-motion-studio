@@ -33,13 +33,31 @@ const rolePatterns={
     /^bn(?:l|left)(?:eye)?brow$/],
   browRight:[/^(?:right|r)(?:eye)?brow$/, /^(?:eye)?brow(?:right|r)$/,
     /^bn(?:r|right)(?:eye)?brow$/],
+  mouthLeft:[/^(?:bn)?(?:l|left)(?:mouthcorner|lipcorner|cornerlip)$/,
+    /^(?:bn)?(?:mouthcorner|lipcorner)(?:l|left)$/],
+  mouthRight:[/^(?:bn)?(?:r|right)(?:mouthcorner|lipcorner|cornerlip)$/,
+    /^(?:bn)?(?:mouthcorner|lipcorner)(?:r|right)$/],
+  cheekLeft:[/^(?:bn)?(?:l|left)(?:cheek|cheekraise)$/,
+    /^(?:bn)?(?:cheek|cheekraise)(?:l|left)$/],
+  cheekRight:[/^(?:bn)?(?:r|right)(?:cheek|cheekraise)$/,
+    /^(?:bn)?(?:cheek|cheekraise)(?:r|right)$/],
 };
+export const FBX_FACE_ROLE_LABELS=Object.freeze({
+  eyeLeft:'Ojo izquierdo',eyeRight:'Ojo derecho',
+  lidLeft:'Párpado superior izquierdo',lidRight:'Párpado superior derecho',
+  browLeft:'Ceja izquierda',browRight:'Ceja derecha',
+  jaw:'Mandíbula',mouthLeft:'Comisura izquierda',mouthRight:'Comisura derecha',
+  cheekLeft:'Mejilla izquierda',cheekRight:'Mejilla derecha',
+});
 // Do not infer smile/cheeks/visemes from material names or the 488 bone count.
-export function auditFbxFacialBones(root){
+export function auditFbxFacialBones(root,overrides={}){
   const bones=bodyPalette(root),mapped={};
   for(const [role,patterns] of Object.entries(rolePatterns)){
-    const match=findUnique(bones,patterns);
-    if(match)mapped[role]=match;
+    const requested=Object.hasOwn(overrides,role);
+    const match=requested
+      ?(overrides[role]?bones.find(b=>b.uuid===overrides[role]):null)
+      :findUnique(bones,patterns);
+    if(match&&!Object.values(mapped).includes(match))mapped[role]=match;
   }
   const names=Object.fromEntries(Object.entries(mapped).map(([k,v])=>[k,v.name]));
   const eyePair=Boolean(mapped.eyeLeft&&mapped.eyeRight);
@@ -47,27 +65,65 @@ export function auditFbxFacialBones(root){
   const browPair=Boolean(mapped.browLeft&&mapped.browRight);
   const controls={
     gaze:eyePair,blink:lidPair,jaw:Boolean(mapped.jaw),brows:browPair,
+    smile:Boolean(mapped.mouthLeft&&mapped.mouthRight),
+    cheeks:Boolean(mapped.cheekLeft&&mapped.cheekRight),
   };
   return {bones,roleNodes:mapped,names,controls,
     supported:Object.values(controls).some(Boolean),
-    candidates:bones.filter(b=>/eye|lid|brow|jaw|mouth|lip|blink/i.test(b.name))
+    candidates:bones.filter(b=>/eye|lid|brow|jaw|mouth|lip|blink|cheek/i.test(b.name))
       .slice(0,60).map(b=>b.name),
     reason:'FBX utiliza huesos sin metadatos de expresiones VRM. Solo las parejas reconocidas inequívocamente habilitan pruebas reversibles; los ejes todavía requieren calibración visual.'};
 }
 export class FbxFaceQA{
   constructor(root){
     this.root=root;
-    this.audit=auditFbxFacialBones(root);
+    this.overrides={};
+    this.audit=auditFbxFacialBones(root,this.overrides);
     this.enabled=false; // explicit opt-in, never modify new import automatically
     this.intensity=.45;this.mode='resting';
     this.time=0;this.preview=null;this.modified=new Map();
     this.speech=null;this.opening=0;this.strength=.72;
     this.lastAudio=0;
   }
+  getMappingConfig(){
+    const bones=this.audit.bones.map(b=>({
+      id:b.uuid,name:b.name||'(hueso sin nombre)',
+    })).sort((a,b)=>{
+      const relevant=n=>/eye|lid|brow|jaw|mouth|lip|cheek|face|pupil|blink/i.test(n)?1:0;
+      return relevant(b.name)-relevant(a.name)||a.name.localeCompare(b.name);
+    });
+    return {
+      roles:FBX_FACE_ROLE_LABELS,
+      bones,mapping:Object.fromEntries(
+        Object.entries(this.audit.roleNodes).map(([role,b])=>[role,b.uuid])),
+      names:this.audit.names,
+      manual:Object.keys(this.overrides),
+      controls:this.audit.controls,
+      totalBones:this.audit.bones.length,
+    };
+  }
+  setManualMapping(role,boneId){
+    if(!Object.hasOwn(FBX_FACE_ROLE_LABELS,role))
+      return {ok:false,reason:'Rol facial desconocido.'};
+    if(this.speech)return {ok:false,reason:'Detén la voz antes de modificar el mapeo.'};
+    const bone=boneId?this.audit.bones.find(b=>b.uuid===boneId):null;
+    if(boneId&&!bone)return {ok:false,reason:'Ese hueso no pertenece al esqueleto corporal cargado.'};
+    if(bone&&Object.entries(this.audit.roleNodes).some(([k,v])=>k!==role&&v===bone))
+      return {ok:false,reason:'El hueso ya se utiliza para otro rol facial.'};
+    this.release();
+    this.preview=null;
+    this.overrides={...this.overrides,[role]:bone?.uuid||null};
+    this.audit=auditFbxFacialBones(this.root,this.overrides);
+    return {ok:true,reason:bone
+      ?'Asignado «'+bone.name+'» a '+FBX_FACE_ROLE_LABELS[role]+'. Comprueba el sentido de giro antes de continuar.'
+      :'Rol '+FBX_FACE_ROLE_LABELS[role]+' desactivado.'};
+  }
   getDiagnostics(){
     const {controls,names,candidates,reason,supported}=this.audit;
     return {supported,enabled:this.enabled,channels:{
       ...(controls.brows?{browLift:names.browLeft+' / '+names.browRight}:{}),
+      ...(controls.smile?{smile:names.mouthLeft+' / '+names.mouthRight}:{}),
+      ...(controls.cheeks?{cheeks:names.cheekLeft+' / '+names.cheekRight}:{}),
       ...(controls.jaw?{jaw:names.jaw}:{}),
       ...(controls.blink?{leftSquint:names.lidLeft,rightSquint:names.lidRight}:{}),
     },independent:Object.keys(controls).filter(k=>controls[k]),
@@ -92,7 +148,7 @@ export class FbxFaceQA{
   setStrength(value){this.strength=clamp(value);}
   previewFeature(key){
     if(!this.enabled||this.speech)return false;
-    const map={brows:'brows',jaw:'jaw',eyelids:'blink'};
+    const map={brows:'brows',jaw:'jaw',eyelids:'blink',smile:'smile',cheeks:'cheeks'};
     const action=map[key];
     if(!action||!this.audit.controls[action])return false;
     this.preview={action,until:this.time+1.2};
@@ -164,6 +220,12 @@ export class FbxFaceQA{
     }
     if(command?.action==='brows'){
       this.turn('browLeft',Z,.06);this.turn('browRight',Z,-.06);
+    }
+    if(command?.action==='smile'){
+      this.turn('mouthLeft',Z,.045);this.turn('mouthRight',Z,-.045);
+    }
+    if(command?.action==='cheeks'){
+      this.turn('cheekLeft',X,.04);this.turn('cheekRight',X,.04);
     }
     if(command?.action==='jaw'||command?.action==='vowel'){
       this.opening=command.action==='vowel'?.4:.65;
