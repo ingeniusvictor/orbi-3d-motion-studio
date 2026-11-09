@@ -26,7 +26,7 @@ Se abrirá un diálogo para elegir el GLB original. El script crea una carpeta `
    - caderas, rodillas, tobillos y puntas de pies (izquierda/derecha).
    - El preset fue construido para un personaje humanoide en **T-Pose**. No aceptes codos, muñecas o pies ubicados sobre el aire ni en la extremidad incorrecta.
 
-**Los marcadores iniciales son estimaciones geométricas, NO una detección IA de articulaciones.** Debes revisar la geometría real desde varios ángulos. Si el GLB está en A-Pose o doblado, comienza corrigiendo su postura en Blender sobre una copia; en esta etapa la validación puede bloquearlo. No uses Mint V7/V8 como ejemplo porque esos personajes ya tienen rig.
+**Los marcadores iniciales son estimaciones geométricas, NO una detección IA de articulaciones.** Verifica expresamente izquierda/derecha según la orientación real del modelo: algunos GLB llegan mirando hacia +Y, otros hacia -Y, y el preset puede requerir intercambiar marcadores simétricos. Debes revisar la geometría real desde varios ángulos. Si el GLB está en A-Pose o doblado, comienza corrigiendo su postura en Blender sobre una copia; en esta etapa la validación puede bloquearlo. No uses Mint V7/V8 como ejemplo porque esos personajes ya tienen rig.
 
 5. Guarda el workspace corregido (Ctrl+S). Después, desde PowerShell:
 
