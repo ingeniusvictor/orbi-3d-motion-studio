@@ -82,3 +82,20 @@ No se sobrescriben archivos existentes. El hash del GLB original se comprueba an
 
 - [Object parenting / ARMATURE_AUTO](https://docs.blender.org/api/current/bpy.ops.object.html)
 - [GLB/FBX export operators](https://docs.blender.org/api/current/bpy.ops.export_scene.html)
+
+## AUTORIG-01.1: fallback ante fallo real de pesos por calor (2026-11-09)
+
+Incidente reproducido: Blender 5.2.3 informa que no pudo encontrar solución con pesos por calor y Mesh_0 conserva 0 % de vertices ponderados, aun despues de guardar los marcadores. La geometria concreta causante aun no ha sido determinada; la verificacion ha bloqueado correctamente la exportacion.
+
+El modo predeterminado sigue siendo auto: si Blender ARMATURE_AUTO falla, no produce resultados finales. Solo mediante la opcion explicita -SkinMethod auto-or-distance se permite un metodo geometricamente aproximado (distancia del vertice a 19 segmentos oseos; pesos normalizados y maximo cuatro influencias). Nunca debe confundirse con los pesos por calor ni con un rig listo para animar.
+
+En PowerShell, tras actualizar el repositorio AUTORIG-LAB:
+
+    cd "$env:USERPROFILE\Downloads\ORBI-AUTORIG-LAB"
+    & ".\tools\autorig01_windows.ps1" -Step rig -SkinMethod auto-or-distance -WorkspaceFile "$env:USERPROFILE\Downloads\ORBI_AUTORIG_01_lumia 50k\ORBI_AUTORIG_WORKSPACE.blend"
+
+NO vuelvas a preparar marcadores. El archivo .blend ya guardado es el punto de partida.
+
+El informe debe declarar skinMethod.method = distance-approximation, fallbackUsed = true, heatFailure y requiresDeformationQA = true. Si no existe cobertura de huesos criticos, pesos validos o integridad espacial de las exportaciones, el programa bloquea la salida.
+
+La salida de fallback es unicamente un CANDIDATO a evaluar visualmente con flexiones de hombros, codos, munecas, caderas y rodillas. No se considera un rig completo sin esa inspeccion. El modelo de origen y las versiones certificadas de LUMIA no se editan.
