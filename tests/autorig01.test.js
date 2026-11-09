@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {autoRigEligibility} from '../src/lib/autoRig/eligibility.js';
 
 const preset=JSON.parse(readFileSync(new URL('../public/autorig01/humanoid_tpose.json',import.meta.url),'utf-8'));
@@ -47,7 +48,7 @@ test('AUTORIG-01 rejects rigs or animations at the UI gate',()=>{
 test('AUTORIG-01 Python module parses with Blender-independent Python AST when installed',t=>{
   const cmd=process.platform==='win32'?'python':'python3';
   const result=spawnSync(cmd,['-c','import ast,sys;ast.parse(open(sys.argv[1],encoding="utf-8").read())',
-    new URL('../tools/autorig01_blender.py',import.meta.url).pathname],{encoding:'utf8'});
+    fileURLToPath(new URL('../tools/autorig01_blender.py',import.meta.url))],{encoding:'utf8'});
   if(result.error?.code==='ENOENT'){t.diagnostic('Python not installed; syntax smoke test deferred to CI.');return;}
   assert.equal(result.status,0,result.stderr);
 });
