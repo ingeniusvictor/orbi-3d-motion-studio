@@ -19,7 +19,7 @@ function snapshot(viewer){
   return {
     face:viewer?.getLivingFacialDiagnostics?.()||null,
     lip:viewer?.getLivingLipDiagnostics?.()||null,
-    presenceEnabled:Boolean(viewer?.presence?.enabled),
+    presenceEnabled:Boolean(viewer?.presence?.enabled||viewer?.fbxFace?.enabled),
   };
 }
 export default function FaceQuickDock({getViewer,model,open,onClose,voiceState,onSpeak,onStopVoice}){
@@ -27,7 +27,7 @@ export default function FaceQuickDock({getViewer,model,open,onClose,voiceState,o
   const [data,setData]=useState({face:null,lip:null,presenceEnabled:false});
   const [feedback,setFeedback]=useState('');
   useEffect(()=>{
-    if(!open||model?.format!=='VRM')return;
+    if(!open||!model)return;
     const refresh=()=>setData(snapshot(getViewer()));
     refresh();
     const id=setInterval(refresh,180);
@@ -35,7 +35,7 @@ export default function FaceQuickDock({getViewer,model,open,onClose,voiceState,o
   },[open,model?.format,getViewer]);
   useEffect(()=>{setFeedback('');setTab('face');},[model?.filename]);
 
-  if(!open||model?.format!=='VRM')return null;
+  if(!open||!model)return null;
   const {face,lip,presenceEnabled}=data;
   const speaking=Boolean(lip?.active||face?.speaking);
   const trigger=action=>{
@@ -45,22 +45,27 @@ export default function FaceQuickDock({getViewer,model,open,onClose,voiceState,o
     else if(action.key==='blink')ok=Boolean(viewer?.previewLivingBlink?.());
     else if(action.feature==='gaze')ok=Boolean(viewer?.previewLivingGaze?.(action.key));
     else ok=Boolean(viewer?.previewLivingFace?.(action.key));
-    setFeedback(ok?'Prueba: '+action.label+'. Mira el rostro de Vita.':
-      'No disponible. Revisa los controles del VRM o activa Presencia A/B.');
+    setFeedback(ok?'Prueba: '+action.label+'. Observa el rostro de '+(model?.format==='VRM'?'Vita':'Mint')+'.':
+      'Ese canal no se reconoció o no está activado. Consulta el diagnóstico facial.');
   };
   const status=speaking?
     'Voz activa: observa labios, ojos, cejas y recuperación al finalizar.':
-    (presenceEnabled?'Presencia natural activa':'Activa Presencia natural A/B en el inspector para mirada/parpadeo.');
+    (presenceEnabled?'Control facial de prueba activado':'Activa los controles faciales en LP-03D para realizar pruebas.');
   return <div className="face-quick-dock" role="region" aria-label="Controles rápidos de rostro junto al modelo">
     <div className="face-quick-head">
       <div><strong><ScanFace size={15}/> Rostro · QA rápido</strong>
         <small>Prueba y observa sin desplazarte</small></div>
       <button type="button" className="face-quick-close" onClick={onClose} aria-label="Cerrar controles rápidos"><X size={16}/></button>
     </div>
+    {model?.format!=='VRM'&&<small className="face-quick-voice-hint">
+      FBX · controles óseos experimentales. Solo se activan los canales
+      identificados; los ejes de movimiento requieren comprobación visual.
+      {face?.reason?' '+face.reason:''}
+    </small>}
     <div className="face-quick-camera">
       <button type="button" onClick={()=>{
         const ok=getViewer()?.focusFace?.();
-        setFeedback(ok?'Cámara acercada al rostro de Vita.':'No se pudo localizar la cabeza VRM.');
+        setFeedback(ok?'Cámara centrada en el rostro; sigue la cabeza.':'No se pudo localizar el rostro visible.');
       }}><Focus size={13}/> Acercar rostro</button>
       <button type="button" onClick={()=>{getViewer()?.resetCamera?.();setFeedback('Vista general restaurada.');}}>
         <RotateCcw size={13}/> Vista general
@@ -104,7 +109,7 @@ export default function FaceQuickDock({getViewer,model,open,onClose,voiceState,o
     </div>
     <div className="face-quick-meter">
       <span>{speaking?'HABLANDO':'EN REPOSO'}</span>
-      <span>{lip?.supported?('Labios '+Math.round((lip.opening||0)*100)+' %'):'Sin visemas VRM'}</span>
+      <span>{lip?.supported?('Labios '+Math.round((lip.opening||0)*100)+' %'):'Sin control labial compatible'}</span>
     </div>
   </div>;
 }
