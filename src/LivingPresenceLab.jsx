@@ -204,6 +204,16 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
       <div className="compat-note"><ShieldCheck size={16}/>
         <span>Modo de laboratorio reversible. No edita el VRM, los FBX ni las exportaciones.</span>
       </div>
+      {model?.format==='FBX'&&<div role="status" style={{fontSize:12,lineHeight:1.65,
+        padding:10,border:'1px solid #315064',borderRadius:8}}>
+        <strong>Mint FBX · compatibilidad por capacidades</strong>
+        <div>La cámara «Rostro» y el panel de QA facial funcionan también con FBX.
+          Los controles se habilitan únicamente cuando sus huesos se identifican
+          de forma única. La prueba de voz sigue disponible con o sin boca compatible.</div>
+        <div>El motor corporal LP-02/03 de VRM continúa bloqueado para este rig
+          de 488 huesos hasta calibrar las correspondencias, límites y ejes.
+          No se aplicarán gestos corporales arbitrarios a la animación V8.</div>
+      </div>}
       <button className="outline-btn" disabled={!canUse}
         onClick={inspect}>
         <Activity size={16}/> Auditar esqueleto VRM
