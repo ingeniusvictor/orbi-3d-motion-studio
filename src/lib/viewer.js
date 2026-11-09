@@ -460,7 +460,7 @@ export class MotionViewer {
     };
   }
   setLivingLipStrength(value){this.lipSync?.setStrength(value);this.fbxFace?.setStrength(value);}
-  previewLivingVowel(vowel='a'){return this.lipSync?.preview(vowel)??this.fbxFace?.preview(vowel)??false;}
+  previewLivingVowel(vowel='a'){return this.lipSync?.preview(vowel)??this.fbxFace?.previewVowel(vowel)??false;}
   startLivingLipSync(token,options){return this.lipSync?.start(token,options)??this.fbxFace?.start(token,options)??false;}
   pauseLivingLipSync(token){return this.lipSync?.pause(token)??this.fbxFace?.pause(token)??false;}
   resumeLivingLipSync(token){return this.lipSync?.resume(token)??this.fbxFace?.resume(token)??false;}
