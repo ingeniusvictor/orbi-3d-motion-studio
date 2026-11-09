@@ -50,6 +50,9 @@ def args():
     p.add_argument("--input", help="GLB/GLTF input for prepare")
     p.add_argument("--workspace", help="Manually inspected .blend workspace for rig")
     p.add_argument("--output-dir", required=True)
+    p.add_argument("--skin-method", choices=("auto","auto-or-distance"),
+                   default="auto",
+                   help="Explicitly authorize a distance-weight fallback if heat fails.")
     return p.parse_args(sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else [])
 
 def require(condition, message):
@@ -253,6 +256,86 @@ def apply_auto_skin(mesh_objects, arm):
         require("FINISHED" in result, "Blender rechazó el skinning automático: "+obj.name)
     bpy.context.view_layer.update()
 
+def distance_skin_fallback(mesh_objects, arm):
+    """Build explicit bone groups on the in-memory copy, never on source GLB.
+
+    This method uses segment-distance only and MUST NOT be described as
+    Blender heat weights, high-fidelity facial rigging, or Mixamo-certified.
+    """
+    sys.path.insert(0,str(Path(__file__).resolve().parent))
+    from autorig01_weights import segment_weights
+    names={b.name for b in arm.data.bones}
+    segments=[(b.name,tuple(arm.matrix_world @ b.head_local),
+               tuple(arm.matrix_world @ b.tail_local))
+              for b in arm.data.bones]
+    bounds=all_bounds(mesh_objects)
+    height=(bounds[1]-bounds[0]).z
+    softness=max(height*.017,1e-6)
+    stats={}
+    for obj in mesh_objects:
+        # A failed heat attempt can still have created empty vertex groups
+        # and an Armature modifier. Remove only the new bone groups.
+        world=obj.matrix_world.copy()
+        if obj.parent != arm:
+            obj.parent=arm
+            obj.matrix_world=world
+        mod=next((mod for mod in obj.modifiers
+                  if mod.type=="ARMATURE" and mod.object==arm),None)
+        if mod is None:
+            mod=obj.modifiers.new("ORBI_AutoRig_Armature","ARMATURE")
+            mod.object=arm
+        mod.use_vertex_groups=True
+        mod.use_bone_envelopes=False
+        for group in list(obj.vertex_groups):
+            if group.name in names:
+                obj.vertex_groups.remove(group)
+        groups={name:obj.vertex_groups.new(name=name) for name in names}
+        bone_totals={name:0.0 for name in names}
+        for vertex in obj.data.vertices:
+            coords=tuple(obj.matrix_world @ vertex.co)
+            weights=segment_weights(coords,segments,softness=softness)
+            for name,weight in weights.items():
+                groups[name].add([vertex.index],weight,"REPLACE")
+                bone_totals[name]+=weight
+        bpy.context.view_layer.update()
+        used=sorted(name for name,total in bone_totals.items() if total>=.25)
+        # One tiny face/garment bone may legitimately be unused; limbs cannot.
+        critical=("hips","head","leftUpperArm","leftLowerArm","rightUpperArm",
+                  "rightLowerArm","leftUpperLeg","leftLowerLeg",
+                  "rightUpperLeg","rightLowerLeg")
+        missing=[name for name in critical if bone_totals.get(name,0)<.25]
+        require(not missing,"El método de distancia no pudo asociar huesos críticos en "
+                +obj.name+": "+", ".join(missing))
+        stats[obj.name]={"weightedVertices":len(obj.data.vertices),
+                         "usedBones":used,"usedBoneCount":len(used),
+                         "method":"distance-approximation",
+                         "softnessWorldUnits":softness}
+    return stats
+
+def generate_skin(mesh_objects, arm, method):
+    require(method in ("auto","auto-or-distance"),"Skinning method invalid.")
+    heat_error=None
+    try:
+        apply_auto_skin(mesh_objects,arm)
+        heat_report=weight_audit(mesh_objects,arm)
+        print("AUTORIG-01: Blender heat weights passed coverage validation.")
+        return heat_report,{"method":"blender-heat",
+                            "fallbackUsed":False}
+    except Exception as exc:
+        heat_error=str(exc)
+        if method=="auto":
+            raise RuntimeError("Blender heat skinning failed; model not exported: "
+                               +heat_error+". Retry with --skin-method auto-or-distance "
+                               "only if you accept an uncalibrated QA-only approximation.") from exc
+    print("AUTORIG-01 WARNING: heat weights failed: "+heat_error)
+    print("AUTORIG-01 WARNING: explicit approximate distance fallback enabled.")
+    fallback_report=distance_skin_fallback(mesh_objects,arm)
+    coverage=weight_audit(mesh_objects,arm)
+    return coverage,{"method":"distance-approximation",
+                     "fallbackUsed":True,"heatFailure":heat_error,
+                     "distanceStats":fallback_report,
+                     "requiresDeformationQA":True}
+
 def weight_audit(mesh_objects, arm):
     names={b.name for b in arm.data.bones}
     report={}
@@ -311,7 +394,7 @@ def clear_and_import(path):
         bpy.ops.import_scene.fbx(filepath=str(path),use_anim=False)
     bpy.context.view_layer.update()
 
-def rig(workspace, out):
+def rig(workspace, out, skin_method="auto"):
     require(workspace and workspace.is_file() and workspace.suffix.lower()==".blend",
             "El workspace .blend editado no existe.")
     folder=out
@@ -336,8 +419,7 @@ def rig(workspace, out):
     m=read_markers()
     marker_geometry_check(m,(mins,maxs))
     arm=rig_from_markers(m)
-    apply_auto_skin(mesh_objects,arm)
-    weights=weight_audit(mesh_objects,arm)
+    weights,skin_details=generate_skin(mesh_objects,arm,skin_method)
     bpy.context.view_layer.update()
     after=inventory(mesh_objects)
     # Check that automatic parenting did not move/sculpt source geometry.
@@ -383,12 +465,14 @@ def rig(workspace, out):
         payload={"status":"CANDIDATE_REQUIRES_VISUAL_QA",
                  "source":str(source),"sourceSha256":source_hash,
                  "workspace":str(workspace),"rigBoneCount":len(BODY_BONES),
-                 "weights":weights,"before":before,"after":after,
+                 "weights":weights,"skinMethod":skin_details,
+                 "before":before,"after":after,
                  "roundTrips":exports,
                  "warnings":[
                      "Los pesos automáticos deben revisarse visualmente (hombros, codos, cadera, rodillas, rostro).",
                      "El esqueleto de 19 huesos no posee dedos ni rig facial.",
-                     "No se ha certificado compatibilidad con Mixamo ni retargeting." ]}
+                     "No se ha certificado compatibilidad con Mixamo ni retargeting.",
+                     "Si hubo fallback de distancia: los pesos son geométricos aproximados, no heat weights; exige revisión de poses antes de usar." ]}
         paths["ORBI_AUTORIG_AUDIT.json"].write_text(
             json.dumps(payload,ensure_ascii=False,indent=2),encoding="utf-8")
         print("AUTORIG-01 RIG SUCCESS (visual QA still required): "+str(out))
@@ -406,10 +490,12 @@ def main():
         if a.mode=="prepare":
             prepare(Path(a.input).expanduser().resolve() if a.input else None,out)
         else:
-            rig(Path(a.workspace).expanduser().resolve() if a.workspace else None,out)
+            rig(Path(a.workspace).expanduser().resolve() if a.workspace else None,
+                out,skin_method=a.skin_method)
     except Exception as e:
         out.mkdir(parents=True,exist_ok=True)
-        audit.write_text(json.dumps({"status":"BLOCKED","phase":a.mode,"error":str(e)},
+        audit.write_text(json.dumps({"status":"BLOCKED","phase":a.mode,
+                                     "skinMethod":a.skin_method,"error":str(e)},
                                     ensure_ascii=False,indent=2),encoding="utf-8")
         traceback.print_exc()
         sys.exit(1)
