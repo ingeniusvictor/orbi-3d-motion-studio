@@ -89,6 +89,6 @@ test('LP-FBX-01 missing or duplicated jaw does not enable fake visemes',()=>{
   meshes[0].skeleton.bones.push(second);
   const qa=new FbxFaceQA(root);
   assert.equal(qa.getLipDiagnostics().supported,false);
-  assert.equal(qa.preview('a'),false);
+  assert.equal(qa.previewVowel('a'),false);
   assert.equal(qa.start(1,{text:'a'}),false);
 });
