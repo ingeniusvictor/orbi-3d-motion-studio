@@ -272,6 +272,7 @@ def distance_skin_fallback(mesh_objects, arm):
     height=(bounds[1]-bounds[0]).z
     softness=max(height*.017,1e-6)
     stats={}
+    total_bone_influence={name:0.0 for name in names}
     for obj in mesh_objects:
         # A failed heat attempt can still have created empty vertex groups
         # and an Armature modifier. Remove only the new bone groups.
@@ -297,19 +298,21 @@ def distance_skin_fallback(mesh_objects, arm):
             for name,weight in weights.items():
                 groups[name].add([vertex.index],weight,"REPLACE")
                 bone_totals[name]+=weight
+                total_bone_influence[name]+=weight
         bpy.context.view_layer.update()
         used=sorted(name for name,total in bone_totals.items() if total>=.25)
-        # One tiny face/garment bone may legitimately be unused; limbs cannot.
-        critical=("hips","head","leftUpperArm","leftLowerArm","rightUpperArm",
-                  "rightLowerArm","leftUpperLeg","leftLowerLeg",
-                  "rightUpperLeg","rightLowerLeg")
-        missing=[name for name in critical if bone_totals.get(name,0)<.25]
-        require(not missing,"El método de distancia no pudo asociar huesos críticos en "
-                +obj.name+": "+", ".join(missing))
         stats[obj.name]={"weightedVertices":len(obj.data.vertices),
                          "usedBones":used,"usedBoneCount":len(used),
                          "method":"distance-approximation",
                          "softnessWorldUnits":softness}
+    # Garments or eye meshes do not need vertices near every limb; check the
+    # total character rather than falsely rejecting individual accessories.
+    critical=("hips","head","leftUpperArm","leftLowerArm","rightUpperArm",
+              "rightLowerArm","leftUpperLeg","leftLowerLeg",
+              "rightUpperLeg","rightLowerLeg")
+    missing=[name for name in critical if total_bone_influence.get(name,0)<.25]
+    require(not missing,"El método de distancia no encontró influencia suficiente "
+            "para estos huesos esenciales: "+", ".join(missing))
     return stats
 
 def generate_skin(mesh_objects, arm, method):
