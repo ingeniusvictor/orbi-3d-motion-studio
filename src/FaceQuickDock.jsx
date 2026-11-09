@@ -26,6 +26,10 @@ export default function FaceQuickDock({getViewer,model,open,onClose,voiceState,o
   const [tab,setTab]=useState('face');
   const [data,setData]=useState({face:null,lip:null,presenceEnabled:false});
   const [feedback,setFeedback]=useState('');
+  const [mapping,setMapping]=useState(null);
+  const [mappingRole,setMappingRole]=useState('eyeLeft');
+  const [boneFilter,setBoneFilter]=useState('');
+  const [boneChoice,setBoneChoice]=useState(null);
   useEffect(()=>{
     if(!open||!model)return;
     const refresh=()=>setData(snapshot(getViewer()));
@@ -33,10 +37,30 @@ export default function FaceQuickDock({getViewer,model,open,onClose,voiceState,o
     const id=setInterval(refresh,180);
     return ()=>clearInterval(id);
   },[open,model?.format,getViewer]);
-  useEffect(()=>{setFeedback('');setTab('face');},[model?.filename]);
+  useEffect(()=>{
+    setFeedback('');setTab('face');setBoneChoice(null);setBoneFilter('');
+    setMapping(model?.format==='VRM'?null:getViewer()?.getFbxFaceMapping?.()||null);
+  },[model?.filename,model?.format,getViewer]);
 
   if(!open||!model)return null;
   const {face,lip,presenceEnabled}=data;
+  const mappedBone=boneChoice===null
+    ?(mapping?.mapping?.[mappingRole]||''):boneChoice;
+  const filteredBones=(mapping?.bones||[]).filter(b=>
+    !boneFilter||b.name.toLowerCase().includes(boneFilter.trim().toLowerCase())
+  ).slice(0,110);
+  const currentBone=(mapping?.bones||[]).find(b=>b.id===mappedBone);
+  const displayBones=currentBone&&!filteredBones.some(b=>b.id===currentBone.id)
+    ?[currentBone,...filteredBones]:filteredBones;
+  const refreshMapping=()=>{
+    setMapping(getViewer()?.getFbxFaceMapping?.()||null);
+    setData(snapshot(getViewer()));
+  };
+  const assignBone=(value)=>{
+    const result=getViewer()?.setFbxFaceMapping?.(mappingRole,value);
+    setFeedback(result?.reason||'No se pudo cambiar el mapeo.');
+    if(result?.ok){setBoneChoice(null);refreshMapping();}
+  };
   const speaking=Boolean(lip?.active||face?.speaking);
   const trigger=action=>{
     const viewer=getViewer();
@@ -57,11 +81,73 @@ export default function FaceQuickDock({getViewer,model,open,onClose,voiceState,o
         <small>Prueba y observa sin desplazarte</small></div>
       <button type="button" className="face-quick-close" onClick={onClose} aria-label="Cerrar controles rápidos"><X size={16}/></button>
     </div>
-    {model?.format!=='VRM'&&<small className="face-quick-voice-hint">
-      FBX · controles óseos experimentales. Solo se activan los canales
-      identificados; los ejes de movimiento requieren comprobación visual.
-      {face?.reason?' '+face.reason:''}
-    </small>}
+    {model?.format!=='VRM'&&<>
+      <small className="face-quick-voice-hint">
+        FBX · conectores óseos de prueba. La detección por nombres es
+        orientativa; no equivale a un rig VRM. La animación V8 permanece intacta.
+      </small>
+      <label style={{display:'flex',alignItems:'center',gap:6,fontSize:11,
+        color:'#d9f4ff',margin:'6px 0'}}>
+        <input type="checkbox" checked={Boolean(face?.enabled)}
+          disabled={!face?.supported}
+          onChange={e=>{
+            getViewer()?.setLivingFacialEnabled?.(e.target.checked);
+            setData(snapshot(getViewer()));
+          }}/>
+        Activar pruebas faciales reversibles
+      </label>
+      <details className="lp-accordion">
+        <summary>Mapear huesos faciales · {mapping?.totalBones||0} disponibles</summary>
+        <div style={{display:'grid',gap:7,padding:'10px 4px',fontSize:11}}>
+          <small>Selecciona el rol, busca el hueso por su nombre y asígnalo.
+            Para ojos, párpados, cejas, sonrisa y mejillas se necesitan parejas.
+            Las direcciones aún requieren inspección visual; los controles
+            se aplican solo durante la prueba y no se exportan.</small>
+          <label style={{display:'grid',gap:4}}>
+            Región facial
+            <select style={{width:'100%',background:'#17273b',color:'#e1f3fa',
+              border:'1px solid #315064',borderRadius:5,padding:5}}
+              value={mappingRole} onChange={e=>{
+                setMappingRole(e.target.value);setBoneFilter('');setBoneChoice(null);
+              }}>
+              {Object.entries(mapping?.roles||{}).map(([role,label])=>
+                <option key={role} value={role}>{label}</option>)}
+            </select>
+          </label>
+          <label style={{display:'grid',gap:4}}>
+            Filtrar huesos ({mapping?.bones?.length||0})
+            <input type="search" value={boneFilter}
+              placeholder="Buscar eye, lip, jaw, brow..."
+              onChange={e=>setBoneFilter(e.target.value)}
+              style={{width:'100%',background:'#17273b',color:'#e1f3fa',
+                border:'1px solid #315064',borderRadius:5,padding:5}}/>
+          </label>
+          <select aria-label="Hueso asignado a la región facial"
+            value={mappedBone}
+            onChange={e=>setBoneChoice(e.target.value)}
+            style={{width:'100%',background:'#17273b',color:'#e1f3fa',
+              border:'1px solid #315064',borderRadius:5,padding:5}}>
+            <option value="">Sin asignar</option>
+            {displayBones.map(b=><option key={b.id} value={b.id}>
+              {b.name}</option>)}
+          </select>
+          <small>Actual: {mapping?.names?.[mappingRole]||'sin hueso reconocido'}.
+            {' '}Las primeras coincidencias son sugerencias, no asignaciones verificadas.</small>
+          <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+            <button type="button" disabled={!mappedBone}
+              onClick={()=>assignBone(mappedBone)}>Asignar hueso</button>
+            <button type="button" onClick={()=>assignBone('')}>Desactivar rol</button>
+            <button type="button" onClick={()=>assignBone('auto')}>
+              Detectar automáticamente
+            </button>
+          </div>
+          <small>Canales actuales: {Object.entries(mapping?.controls||{})
+            .filter(([,active])=>active).map(([name])=>name).join(', ')||'ninguno'}.
+            {' '}Si no aparecen huesos relevantes, descarga el diagnóstico
+            del rig desde MOTION-05 para revisar su estructura auténtica.</small>
+        </div>
+      </details>
+    </>}
     <div className="face-quick-camera">
       <button type="button" onClick={()=>{
         const ok=getViewer()?.focusFace?.();
