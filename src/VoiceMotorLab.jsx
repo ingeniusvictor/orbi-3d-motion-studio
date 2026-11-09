@@ -48,9 +48,20 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
   const [faceMode,setFaceMode]=useState('resting');
   const [faceFeedback,setFaceFeedback]=useState('');
   const [lipReadout,setLipReadout]=useState(null);
+  const [fbxFaceSnapshot,setFbxFaceSnapshot]=useState(null);
   const origin=typeof window==='undefined'?'':window.location.origin;
   const lipInfo=lipReadout||getViewer()?.getLivingLipDiagnostics?.()||null;
-  const faceInfo=getViewer()?.getLivingFacialDiagnostics?.()||null;
+  const faceInfo=(model?.format!=='VRM'&&fbxFaceSnapshot)
+    ||getViewer()?.getLivingFacialDiagnostics?.()||null;
+  const faceActive=model?.format==='VRM'?faceEnabled:Boolean(faceInfo?.enabled);
+  useEffect(()=>{
+    if(!model||model.format==='VRM'){setFbxFaceSnapshot(null);return;}
+    const refresh=()=>setFbxFaceSnapshot(
+      getViewer()?.getLivingFacialDiagnostics?.()||null);
+    refresh();
+    const timer=setInterval(refresh,550);
+    return ()=>clearInterval(timer);
+  },[model?.filename,model?.format,generation,getViewer]);
   useEffect(()=>{
     if(voiceStatus!=='speaking'&&!lipReadout?.preview)return;
     const handle=setInterval(()=>setLipReadout(getViewer()?.getLivingLipDiagnostics?.()||null),250);
@@ -90,11 +101,13 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
     setIntent(null);setMessage('');
   },[generation,activeClip,getViewer]);
   useEffect(()=>{
-    setFaceEnabled(true);setFaceIntensity(46);setFaceMode('resting');
-    getViewer()?.setLivingFacialEnabled?.(true);
+    const vrm=model?.format==='VRM';
+    setFaceEnabled(vrm);setFaceIntensity(46);setFaceMode('resting');
+    // VRM keeps historical defaults; uncalibrated FBX requires explicit opt-in.
+    getViewer()?.setLivingFacialEnabled?.(vrm);
     getViewer()?.setLivingFacialIntensity?.(0.46);
     getViewer()?.setLivingFacialMode?.('resting');
-  },[generation,getViewer]);
+  },[generation,getViewer,model?.format]);
   // Release object URLs and browser speech only when the component unmounts.
   useEffect(()=>()=> {
     controller.current?.abort();
@@ -295,7 +308,7 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
         La animación original tiene prioridad y no se exportan estas pruebas.
       </small>
       <label style={{display:'flex',gap:8,alignItems:'center',fontSize:12}}>
-        <input type="checkbox" checked={faceEnabled} disabled={!model||!['VRM','FBX','GLB','GLTF'].includes(model?.format)||!faceInfo?.supported}
+        <input type="checkbox" checked={faceActive} disabled={!model||!['VRM','FBX','GLB','GLTF'].includes(model?.format)||!faceInfo?.supported}
           onChange={e=>{
             const next=e.target.checked;setFaceEnabled(next);
             getViewer()?.setLivingFacialEnabled?.(next);
@@ -305,7 +318,7 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
       <label style={{display:'grid',gap:5,fontSize:12}}>
         Intensidad facial: {faceIntensity} %
         <input type="range" min="0" max="100" step="5" value={faceIntensity}
-          disabled={!faceEnabled||!faceInfo?.supported}
+          disabled={!faceActive||!faceInfo?.supported}
           onChange={e=>{
             const next=Number(e.target.value);setFaceIntensity(next);
             getViewer()?.setLivingFacialIntensity?.(next/100);
@@ -354,7 +367,7 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
           ['jaw','Probar mandíbula',Boolean(faceInfo?.channels?.jaw)],
         ].map(([key,label,available])=>
           <button key={key} type="button" className="outline-btn"
-            style={{fontSize:11,padding:'8px 5px'}} disabled={!faceEnabled||!available||voiceStatus!=='idle'}
+            style={{fontSize:11,padding:'8px 5px'}} disabled={!faceActive||!available||voiceStatus!=='idle'}
             onClick={()=>{
               const ok=getViewer()?.previewLivingFace?.(key);
               setFaceFeedback(ok?label+': inspecciona el rostro de '+(model?.format==='VRM'?'Vita':'Mint')+'.':
@@ -362,7 +375,7 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
             }}>{label}</button>
         )}
         <button type="button" className="outline-btn"
-          style={{fontSize:11,padding:'8px 5px'}} disabled={!faceInfo?.blink||voiceStatus!=='idle'}
+          style={{fontSize:11,padding:'8px 5px'}} disabled={!faceActive||!faceInfo?.blink||voiceStatus!=='idle'}
           onClick={()=>{
             const ok=getViewer()?.previewLivingBlink?.();
             setFaceFeedback(ok?'Parpadeo de prueba solicitado.':
@@ -372,7 +385,7 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
           ['left','Mirar izquierda'],['right','Mirar derecha'],
         ].map(([direction,label])=><button key={direction} type="button"
           className="outline-btn" style={{fontSize:11,padding:'8px 5px'}}
-          disabled={!faceInfo?.gaze||voiceStatus!=='idle'}
+          disabled={!faceActive||!faceInfo?.gaze||voiceStatus!=='idle'}
           onClick={()=>{
             const ok=getViewer()?.previewLivingGaze?.(direction);
             setFaceFeedback(ok?label+': observa las pupilas.':
@@ -388,7 +401,7 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
       </div>
     </details>
     <details className="lp-accordion">
-      <summary>LP-03C.2 · Opciones de labios y visemas</summary>
+      <summary>LP-03C.2 · Labios VRM / mandíbula FBX (experimental)</summary>
       <div style={{display:'grid',gap:7,padding:10}}>
       <strong style={{fontSize:12}}>LP-03C.2 · Boca y labios (visemas)</strong>
       <small style={{lineHeight:1.5,opacity:0.86}}>
