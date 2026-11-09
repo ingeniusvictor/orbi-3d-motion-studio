@@ -194,7 +194,13 @@ def marker_geometry_check(m, bounds):
                 ("rightHip","rightKnee"),("rightKnee","rightAnkle")):
         require(m[a].z > m[b].z + height*.006,
                 "Marcadores invertidos o demasiado juntos: "+a+" / "+b)
-    for side,sign in (("left",-1),("right",1)):
+    # Blender assets do not have one universal forward axis: anatomical
+    # left may be +X or -X. Validate opposing sides, not an assumed sign.
+    left_sign = 1 if m["leftShoulder"].x > m["pelvis"].x else -1
+    right_sign = 1 if m["rightShoulder"].x > m["pelvis"].x else -1
+    require(left_sign != right_sign,
+            "Los hombros derecho/izquierdo deben estar a lados opuestos.")
+    for side,sign in (("left",left_sign),("right",right_sign)):
         for role in ("Shoulder","Elbow","Wrist","Hand"):
             require((m[side+role].x - m["pelvis"].x)*sign > height*.012,
                     "El marcador "+side+role+" está en el lado incorrecto de la pelvis.")
