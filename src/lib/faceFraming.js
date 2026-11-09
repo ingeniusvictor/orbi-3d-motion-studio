@@ -45,7 +45,8 @@ export function getFaceFraming(root,vrm=null){
     target=anchor.node.getWorldPosition(new THREE.Vector3());
     // Head joint is near the neck/skull base in many FBX rigs.
     // Target near the eyes; keep within visible body bounds.
-    target.y=Math.min(box.max.y,Math.max(box.min.y,target.y+height*.055));
+    if(anchor.method==='fbx-head')
+      target.y=Math.min(box.max.y,Math.max(box.min.y,target.y+height*.055));
   }else{
     // Fallback for rigs with nonstandard names. No assumption about a head
     // bone is used to animate; this is merely a camera targeting point.
