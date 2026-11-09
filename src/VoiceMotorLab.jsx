@@ -290,12 +290,12 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
       <strong style={{fontSize:12}}>LP-03D.1 · Expresión facial integral</strong>
       <small style={{fontSize:11,lineHeight:1.6,opacity:0.82}}>
         Coordina microexpresiones, cejas, mejillas, párpados y mandíbula
-        según los controles verdaderamente disponibles del VRM.
-        La mirada y el parpadeo siguen funcionando incluso con un FBX de
-        acción, sin modificar los huesos corporales.
+        según los controles reales del modelo. VRM dispone de expresiones;
+        FBX usa pruebas óseas pequeñas, reversibles y sujetas a reconocimiento de nombres.
+        La animación original tiene prioridad y no se exportan estas pruebas.
       </small>
       <label style={{display:'flex',gap:8,alignItems:'center',fontSize:12}}>
-        <input type="checkbox" checked={faceEnabled} disabled={!model||model?.format!=='VRM'}
+        <input type="checkbox" checked={faceEnabled} disabled={!model||!['VRM','FBX','GLB','GLTF'].includes(model?.format)||!faceInfo?.supported}
           onChange={e=>{
             const next=e.target.checked;setFaceEnabled(next);
             getViewer()?.setLivingFacialEnabled?.(next);
@@ -305,7 +305,7 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
       <label style={{display:'grid',gap:5,fontSize:12}}>
         Intensidad facial: {faceIntensity} %
         <input type="range" min="0" max="100" step="5" value={faceIntensity}
-          disabled={!faceEnabled||model?.format!=='VRM'}
+          disabled={!faceEnabled||!faceInfo?.supported}
           onChange={e=>{
             const next=Number(e.target.value);setFaceIntensity(next);
             getViewer()?.setLivingFacialIntensity?.(next/100);
@@ -325,8 +325,8 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
         </select>
       </label>
       <small style={{opacity:0.78,lineHeight:1.6}}>
-        Ojos: {faceInfo?.gaze?'VRMLookAt detectado':'sin controlador compatible'}.
-        {' '}Parpadeo: {faceInfo?.blink?'expresiones disponibles':'sin preset compatible'}.
+        Ojos: {faceInfo?.gaze?(model?.format==='VRM'?'VRMLookAt detectado':'huesos oculares candidatos identificados'):'sin controlador compatible'}.
+        {' '}Parpadeo: {faceInfo?.blink?'control detectado':'sin control compatible'}.
         {' '}Cejas: {faceInfo?.channels?.browLift||faceInfo?.channels?.browFrown||'sin control'}.
         {' '}Mejillas: {faceInfo?.channels?.cheeks||'sin morph localizado'}.
         {' '}Sonrisa: {faceInfo?.channels?.smile||'sin control'}.
@@ -338,6 +338,12 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
         Control facial aproximado mediante emociones VRM:
         {' '}{faceInfo.proxies.join(', ')}. Esos presets pueden afectar varias zonas
         a la vez; no sustituyen morphs anatómicos independientes.
+      </small>}
+      {model?.format==='FBX'&&<small style={{opacity:0.78,lineHeight:1.5}}>
+        Huesos faciales FBX candidatos: {faceInfo?.candidates?.length
+          ?faceInfo.candidates.slice(0,18).join(', '):'no reconocidos'}. Solo se
+        activan controles con nombres únicos. La mandíbula y los ojos requieren
+        confirmar la dirección de giro visualmente; no se fuerzan sonrisas o mejillas.
       </small>}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
         {[
@@ -351,8 +357,8 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
             style={{fontSize:11,padding:'8px 5px'}} disabled={!faceEnabled||!available||voiceStatus!=='idle'}
             onClick={()=>{
               const ok=getViewer()?.previewLivingFace?.(key);
-              setFaceFeedback(ok?label+': inspecciona el rostro de Vita.':
-                'Esa expresión facial no está disponible en este VRM.');
+              setFaceFeedback(ok?label+': inspecciona el rostro de '+(model?.format==='VRM'?'Vita':'Mint')+'.':
+                'Esa expresión no está disponible en el rig actual.');
             }}>{label}</button>
         )}
         <button type="button" className="outline-btn"
@@ -376,8 +382,8 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
       {faceFeedback&&<small role="status" style={{lineHeight:1.5}}>{faceFeedback}</small>}
       <small style={{opacity:0.76,fontSize:11,lineHeight:1.5}}>
         Durante la voz, las microexpresiones pasan a estado de habla.
-        Esta etapa no crea músculos ni blendshapes ausentes; los movimientos
-        exactos del rostro deben validarse con Vita.vrm de cerca.
+        Esta etapa no crea músculos ni blendshapes ausentes. Para FBX los ejes
+        de los huesos aún requieren calibración visual; no es lip-sync fonético.
       </small>
       </div>
     </details>
@@ -387,8 +393,8 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
       <strong style={{fontSize:12}}>LP-03C.2 · Boca y labios (visemas)</strong>
       <small style={{lineHeight:1.5,opacity:0.86}}>
         {lipInfo?.supported
-          ?'Expresiones de boca detectadas: '+lipInfo.names.join(', ')+'. '+lipInfo.reason
-          :(lipInfo?.reason||'Carga un VRM para inspeccionar sus expresiones faciales.')}
+          ?'Control de boca detectado: '+lipInfo.names.join(', ')+'. '+lipInfo.reason
+          :(lipInfo?.reason||'No hay controles labiales compatibles detectados.')}
       </small>
       {lipInfo?.supported&&<>
         <button className="outline-btn" type="button" disabled={voiceStatus!=='idle'}
@@ -396,7 +402,7 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
             const viewer=getViewer();
             const ok=viewer?.previewLivingVowel?.('a');
             setLipReadout(viewer?.getLivingLipDiagnostics?.()||null);
-            setMessage(ok?'Prueba de la vocal A iniciada. Acerca la cámara a la boca de Vita.':
+            setMessage(ok?'Prueba de apertura de boca iniciada. Utiliza «Rostro» para inspeccionar a Mint/Vita.':
               'No se pudo probar la boca mientras hay audio reproduciéndose.');
           }}>
           Probar apertura de boca · Vocal A (sin voz)
