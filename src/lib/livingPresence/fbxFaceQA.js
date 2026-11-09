@@ -101,7 +101,7 @@ export class FbxFaceQA{
       !['left','right','up','down'].includes(direction))return false;
     this.preview={action:'gaze',direction,until:this.time+1.2};return true;
   }
-  preview(vowel){
+  previewVowel(vowel){
     if(!this.enabled||!this.audit.controls.jaw||this.speech||
       !'aeiou'.includes(vowel))return false;
     this.preview={action:'vowel',until:this.time+1.1,vowel};return true;
