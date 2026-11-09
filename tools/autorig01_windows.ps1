@@ -42,7 +42,7 @@ function Choose-File([string]$title,[string]$filter) {
 }
 if ($Step -eq "prepare") {
     if (-not $InputFile) {
-        $InputFile=Choose-File "Selecciona un personaje humanoide GLB SIN esqueleto" "GLB y glTF (*.glb;*.gltf)|*.glb;*.gltf"
+        $InputFile=Choose-File "Selecciona un personaje humanoide GLB SIN esqueleto" "GLB (*.glb)|*.glb"
     }
     if (-not (Test-Path -LiteralPath $InputFile -PathType Leaf)) { throw "No existe $InputFile" }
     if (-not $OutputDirectory) {
