@@ -37,6 +37,12 @@ export default function AutoRigLab({model}){
           <div><strong>5.</strong> Solo si pasa las auditorías habrá candidatos
             <code> ORBI_AUTORIG_RIGGED.glb</code> y <code> .fbx</code>, además de un
             <code> .blend</code> editable y JSON de resultados.</div>
+          <div><strong>Si Blender falla al calcular pesos por calor:</strong> la
+            ejecución estándar bloquea el resultado. Para una prueba expresamente
+            aproximada, sin garantía anatómica, puedes agregar
+            <code> -SkinMethod auto-or-distance</code> al comando <code>-Step rig</code>.
+            Esta variante genera pesos geométricos de distancia y exige revisar
+            las deformaciones en Blender antes de utilizar cualquier exportación.</div>
         </div>
       </details>
       <a className="outline-btn" style={{width:'100%',margin:0,textDecoration:'none'}}
