@@ -7,7 +7,7 @@ import {getFaceFraming,findFaceAnchor} from '../src/lib/faceFraming.js';
 function character(){
   const root=new THREE.Group();
   const hips=new THREE.Bone();hips.name='Bip001 Pelvis';root.add(hips);
-  const head=new THREE.Bone();head.name='Bn_Head';head.position.y=1.4;hips.add(head);
+  const head=new THREE.Bone();head.name='Bn_C_Head';head.position.y=1.4;hips.add(head);
   const jaw=new THREE.Bone();jaw.name='Jaw';jaw.position.y=-.2;head.add(jaw);
   const eyeL=new THREE.Bone();eyeL.name='LeftEye';head.add(eyeL);
   const eyeR=new THREE.Bone();eyeR.name='RightEye';head.add(eyeR);
