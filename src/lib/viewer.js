@@ -11,6 +11,8 @@ import { LivingPresence } from './livingPresence/LivingPresence.js';
 import { MotionComposer } from './livingPresence/motionComposer.js';
 import { LipSyncController } from './livingPresence/lipSync.js';
 import { FacialPresence } from './livingPresence/facialPresence.js';
+import { FbxFaceQA } from './livingPresence/fbxFaceQA.js';
+import { getFaceFraming } from './faceFraming.js';
 import { bakeVrmForGlb, convertVrmMaterials } from './vrmExport.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { catalogMaterials, applyTextureToMaterial } from './textureStudio.js';
@@ -161,6 +163,8 @@ export class MotionViewer {
     this.motionComposer = null;
     this.lipSync = null;
     this.facial = null;
+    this.fbxFace = null;
+    this.faceTracking = null;
     this.presenceSuspendCount = 0;
     this.disposed = false;
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -176,6 +180,7 @@ export class MotionViewer {
         // Undo in reverse overlay order: LivingPresence → FBX softener.
         this.presence?.beforeFrame();
         this.facial?.beforeFrame();
+        this.fbxFace?.beforeFrame();
         this.motionComposer?.beforeFrame();
       }
       if (!this.presenceSuspendCount && this.mixer && this.playing) this.mixer.update(delta);
@@ -192,9 +197,11 @@ export class MotionViewer {
           presenceActive:Boolean(this.presence?.enabled),
           lipOpening:this.lipSync?.opening||0,
         });
+        this.fbxFace?.update(delta);
       }
       // VRM spring bones, constraints and expressions require an update each frame.
       this.vrm?.update(delta);
+      this.followFaceCamera();
       this.controls.update();
       this.renderer.render(this.scene,this.camera);
     };
@@ -206,32 +213,47 @@ export class MotionViewer {
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width,height,false);
   }
-  focusFace(){
-    if(!this.model||!this.vrm)return false;
-    const head=this.vrm.humanoid?.getNormalizedBoneNode?.('head')||
-      this.vrm.humanoid?.getRawBoneNode?.('head');
-    if(!head)return false;
+  followFaceCamera(){
+    const tracking=this.faceTracking;
+    if(!tracking?.anchor||!this.model)return;
     this.model.updateWorldMatrix(true,true);
-    const focus=head.getWorldPosition(new THREE.Vector3());
-    const box=new THREE.Box3().setFromObject(this.model,true);
-    const height=box.getSize(new THREE.Vector3()).y;
-    if(!Number.isFinite(height)||height<=0||
-      ![focus.x,focus.y,focus.z].every(Number.isFinite))return false;
-    const distance=Math.max(height*0.62,0.01);
-    // Preserve the current viewing direction; this is a camera change only,
-    // never a modification to the avatar's head or Mixamo clip.
+    const target=tracking.anchor.getWorldPosition(new THREE.Vector3());
+    // Keep the initial eye-level offset in the target; camera follows only
+    // translation, not head rotation or micro-noise in the local transform.
+    target.add(tracking.offset);
+    if(![target.x,target.y,target.z].every(Number.isFinite))return;
+    const change=target.sub(tracking.last);
+    if(change.lengthSq()<1e-12)return;
+    this.controls.target.add(change);
+    this.camera.position.add(change);
+    tracking.last.add(change);
+  }
+  focusFace(){
+    const view=getFaceFraming(this.model,this.vrm);
+    if(!view)return false;
+    // Camera-only change, compatible with FBX 488-bone and VRM avatars.
+    // Clear damping so a previous orbit does not immediately displace it.
     const look=this.camera.position.clone().sub(this.controls.target);
     if(look.lengthSq()<1e-10)look.set(0,0,1);
     look.normalize();
-    this.controls.target.copy(focus);
-    this.camera.position.copy(focus).addScaledVector(look,distance);
-    this.camera.near=Math.max(distance/1000,0.00001);
-    this.camera.far=Math.max(distance*120,height*20,1);
+    this.camera.up.set(0,1,0);
+    this.controls.target.copy(view.target);
+    this.camera.position.copy(view.target).addScaledVector(look,view.distance);
+    this.camera.near=Math.max(view.distance/1200,0.000001);
+    this.camera.far=Math.max(view.distance*150,view.height*15,1);
     this.camera.updateProjectionMatrix();
+    this.controls.minDistance=Math.max(view.distance*.2,0.0001);
+    this.controls.maxDistance=Math.max(view.distance*25,view.height*10);
     this.controls.update();
+    this.faceTracking=view.anchor?{
+      anchor:view.anchor,offset:view.target.clone().sub(
+        view.anchor.getWorldPosition(new THREE.Vector3())),
+      last:view.target.clone(),
+    }:null;
     return true;
   }
   resetCamera() {
+    this.faceTracking=null;
     if(!this.model){
       this.camera.position.set(3,2.5,5);
       this.controls.target.set(0,1,0);
@@ -331,6 +353,7 @@ export class MotionViewer {
     this.facial = this.vrm ? new FacialPresence(this.vrm,{
       seed:this.presence?.randomSeed||367,
     }) : null;
+    this.fbxFace = !this.vrm ? new FbxFaceQA(this.model) : null;
     this.lastFilename = loaded.name;
     this.lastFormat = loaded.format;
     this.scene.add(this.model);
@@ -345,6 +368,8 @@ export class MotionViewer {
     return {...info, filename:loaded.name, bytes:loaded.bytes, format:loaded.format};
   }
   clearModel() {
+    this.faceTracking=null;
+    this.fbxFace?.dispose();this.fbxFace=null;
     this.facial?.dispose();this.facial=null;
     this.lipSync?.dispose();
     this.lipSync=null;
@@ -412,38 +437,38 @@ export class MotionViewer {
   setLivingSwayIntensity(value){this.presence?.setSwayIntensity(value);}
   setLivingSwaySpeed(value){this.presence?.setSwaySpeed(value);}
   getLivingFacialDiagnostics(){
-    return this.facial?.getDiagnostics()||{
+    return this.facial?.getDiagnostics()||this.fbxFace?.getDiagnostics()||{
       supported:false,channels:{},independent:[],proxies:[],
       missing:[],blink:false,gaze:false,
       reason:'Carga Vita.vrm para inspeccionar el rostro.',
     };
   }
-  setLivingFacialEnabled(value){this.facial?.setEnabled(value);}
-  setLivingFacialIntensity(value){this.facial?.setIntensity(value);}
-  setLivingFacialMode(mode){return this.facial?.setMode(mode)??false;}
-  previewLivingFace(feature){return this.facial?.previewFeature(feature)??false;}
-  previewLivingBlink(){return this.presence?.enabled?
-    (this.presence?.previewBlink()??false):false;}
-  previewLivingGaze(direction){return this.presence?.enabled?
-    (this.presence?.previewGaze(direction)??false):false;}
-  startLivingFaceSpeech(token,options){return this.facial?.beginSpeech(token,options)??false;}
-  stopLivingFaceSpeech(token){return this.facial?.endSpeech(token)??false;}
+  setLivingFacialEnabled(value){this.facial?.setEnabled(value);this.fbxFace?.setEnabled(value);}
+  setLivingFacialIntensity(value){this.facial?.setIntensity(value);this.fbxFace?.setIntensity(value);}
+  setLivingFacialMode(mode){return this.facial?.setMode(mode)??this.fbxFace?.setMode(mode)??false;}
+  previewLivingFace(feature){return this.facial?.previewFeature(feature)??this.fbxFace?.previewFeature(feature)??false;}
+  previewLivingBlink(){return this.fbxFace?.previewBlink()??(this.presence?.enabled?
+    (this.presence?.previewBlink()??false):false);}
+  previewLivingGaze(direction){return this.fbxFace?.previewGaze(direction)??(this.presence?.enabled?
+    (this.presence?.previewGaze(direction)??false):false);}
+  startLivingFaceSpeech(token,options){return this.facial?.beginSpeech(token,options)??this.fbxFace?.beginSpeech(token,options)??false;}
+  stopLivingFaceSpeech(token){return this.facial?.endSpeech(token)??this.fbxFace?.endSpeech(token)??false;}
   getLivingLipDiagnostics(){
-    return this.lipSync?.getDiagnostics()||{
+    return this.lipSync?.getDiagnostics()||this.fbxFace?.getLipDiagnostics()||{
       supported:false,names:[],mapping:{},reason:'Carga un avatar VRM para revisar los visemas.',
       active:false,opening:0,
     };
   }
-  setLivingLipStrength(value){this.lipSync?.setStrength(value);}
-  previewLivingVowel(vowel='a'){return this.lipSync?.preview(vowel)??false;}
-  startLivingLipSync(token,options){return this.lipSync?.start(token,options)??false;}
-  pauseLivingLipSync(token){return this.lipSync?.pause(token)??false;}
-  resumeLivingLipSync(token){return this.lipSync?.resume(token)??false;}
-  boundaryLivingLipSync(token,charIndex){return this.lipSync?.boundary(token,charIndex)??false;}
+  setLivingLipStrength(value){this.lipSync?.setStrength(value);this.fbxFace?.setStrength(value);}
+  previewLivingVowel(vowel='a'){return this.lipSync?.preview(vowel)??this.fbxFace?.preview(vowel)??false;}
+  startLivingLipSync(token,options){return this.lipSync?.start(token,options)??this.fbxFace?.start(token,options)??false;}
+  pauseLivingLipSync(token){return this.lipSync?.pause(token)??this.fbxFace?.pause(token)??false;}
+  resumeLivingLipSync(token){return this.lipSync?.resume(token)??this.fbxFace?.resume(token)??false;}
+  boundaryLivingLipSync(token,charIndex){return this.lipSync?.boundary(token,charIndex)??this.fbxFace?.boundary(token,charIndex)??false;}
   updateLivingLipAudio(token,rms,progress){
-    return this.lipSync?.audioSignal(token,rms,progress)??false;
+    return this.lipSync?.audioSignal(token,rms,progress)??this.fbxFace?.audioSignal(token,rms,progress)??false;
   }
-  stopLivingLipSync(token){return this.lipSync?.stop(token)??false;}
+  stopLivingLipSync(token){return this.lipSync?.stop(token)??this.fbxFace?.stop(token)??false;}
   getLivingSpeechMotorAvailability(){
     if(!this.vrm||!this.presence?.enabled)
       return {available:false,reason:'Activa Presencia natural A/B sobre un VRM.'};
@@ -528,6 +553,7 @@ export class MotionViewer {
       this.motionComposer?.beforeFrame();
       this.lipSync?.release();
       this.facial?.release();
+      this.fbxFace?.release();
       // Three-VRM copies normalized humanoid bones to raw bones during update.
       // Synchronize once BEFORE cloning/exporting the raw skinned model.
       this.vrm?.update(0);
