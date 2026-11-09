@@ -1,0 +1,63 @@
+import {Bone,CheckCircle2,Download,ShieldAlert,ShieldCheck} from 'lucide-react';
+import {autoRigEligibility} from './lib/autoRig/eligibility.js';
+
+const PREPARE='.\\tools\\autorig01_windows.ps1 -Step prepare';
+const RIG='.\\tools\\autorig01_windows.ps1 -Step rig';
+
+export default function AutoRigLab({model}){
+  const eligible=autoRigEligibility(model);
+  return <section className="panel inspector-panel" aria-label="ORBI AutoRig Studio">
+    <div className="panel-header"><div>
+      <div className="section-icon mint"><Bone size={19}/></div>
+      <div><h3>AutoRig Studio</h3><p>AUTORIG-01 · Humanoide experimental</p></div>
+    </div></div>
+    <div style={{padding:'14px 15px',display:'grid',gap:12}}>
+      <div className="compat-note" style={{margin:0,alignItems:'flex-start'}}>
+        {eligible.ok?<ShieldCheck size={17}/>:<ShieldAlert size={17}/>}
+        <span>{eligible.reason}</span>
+      </div>
+      <small style={{fontSize:11,lineHeight:1.6,color:'#a8bdc9'}}>
+        Primera etapa local asistida, similar al sistema de marcadores de Mixamo.
+        Usa Blender instalado en Windows: el navegador no puede ejecutar Blender
+        ni producir pesos de skinning por sí solo. Sin GPU dedicada obligatoria.
+      </small>
+      <details className="lp-accordion">
+        <summary>Preparar personaje y colocar marcadores</summary>
+        <div style={{display:'grid',gap:10,padding:10,fontSize:11,lineHeight:1.6}}>
+          <div><strong>1.</strong> Utiliza un GLB autocontenido sin huesos y vertical en T-Pose.
+            La previsualización no transforma ni modifica el archivo.</div>
+          <div><strong>2.</strong> Abre PowerShell desde el repositorio y ejecuta:</div>
+          <code style={{wordBreak:'break-all',color:'#83ddcd'}}>{PREPARE}</code>
+          <div><strong>3.</strong> Abre el workspace <code>ORBI_AUTORIG_WORKSPACE.blend</code> creado junto al GLB.
+            Ajusta las esferas <code>ORBI_LM_*</code> sobre las articulaciones reales:
+            pelvis, espalda, cuello, cabeza, hombros, codos, muñecas, manos, caderas, rodillas y pies.
+            Guarda con Ctrl+S; no muevas el modelo original.</div>
+          <div><strong>4.</strong> Tras la revisión visual, ejecuta:</div>
+          <code style={{wordBreak:'break-all',color:'#83ddcd'}}>{RIG}</code>
+          <div><strong>5.</strong> Solo si pasa las auditorías habrá candidatos
+            <code> ORBI_AUTORIG_RIGGED.glb</code> y <code> .fbx</code>, además de un
+            <code> .blend</code> editable y JSON de resultados.</div>
+          <div><strong>Si Blender falla al calcular pesos por calor:</strong> la
+            ejecución estándar bloquea el resultado. Para una prueba expresamente
+            aproximada, sin garantía anatómica, puedes agregar
+            <code> -SkinMethod auto-or-distance</code> al comando <code>-Step rig</code>.
+            Esta variante genera pesos geométricos de distancia y exige revisar
+            las deformaciones en Blender antes de utilizar cualquier exportación.</div>
+        </div>
+      </details>
+      <a className="outline-btn" style={{width:'100%',margin:0,textDecoration:'none'}}
+        href="/autorig01/humanoid_tpose.json" download="humanoid_tpose.json">
+        <Download size={15}/> Descargar esquema de marcadores
+      </a>
+      <a href="https://github.com/ingeniusvictor/orbi-3d-motion-studio/blob/feat/autorig-01/docs/AUTORIG-01-SAFE-BLENDER-WORKFLOW.md"
+        target="_blank" rel="noreferrer"
+        style={{fontSize:11,color:'#82daca'}}>Guía detallada y restricciones</a>
+      <div style={{display:'flex',alignItems:'start',gap:7,fontSize:10,lineHeight:1.6,color:'#93aec0'}}>
+        <CheckCircle2 size={14}/>
+        <span>El modelo de origen nunca se sobrescribe. Los archivos V6/V7/V8 de LUMIA
+          permanecen fuera de esta función. El rig corporal inicial tiene 19 huesos;
+          dedos, rostro y retargeting son fases posteriores.</span>
+      </div>
+    </div>
+  </section>;
+}
