@@ -106,6 +106,13 @@ export class FbxFaceQA{
     if(!Object.hasOwn(FBX_FACE_ROLE_LABELS,role))
       return {ok:false,reason:'Rol facial desconocido.'};
     if(this.speech)return {ok:false,reason:'Detén la voz antes de modificar el mapeo.'};
+    if(boneId==='auto'){
+      this.release();this.preview=null;
+      const next={...this.overrides};delete next[role];
+      this.overrides=next;
+      this.audit=auditFbxFacialBones(this.root,this.overrides);
+      return {ok:true,reason:'Reconocimiento automático restaurado para '+FBX_FACE_ROLE_LABELS[role]+'.'};
+    }
     const bone=boneId?this.audit.bones.find(b=>b.uuid===boneId):null;
     if(boneId&&!bone)return {ok:false,reason:'Ese hueso no pertenece al esqueleto corporal cargado.'};
     if(bone&&Object.entries(this.audit.roleNodes).some(([k,v])=>k!==role&&v===bone))
