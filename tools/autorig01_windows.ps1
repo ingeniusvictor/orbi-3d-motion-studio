@@ -6,7 +6,8 @@ param(
     [string]$InputFile="",
     [string]$WorkspaceFile="",
     [string]$OutputDirectory="",
-    [string]$BlenderExe=""
+    [string]$BlenderExe="",
+    [ValidateSet("auto","auto-or-distance")][string]$SkinMethod="auto"
 )
 $ErrorActionPreference="Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
@@ -59,7 +60,10 @@ if ($Step -eq "prepare") {
         $OutputDirectory=Split-Path -Parent $WorkspaceFile
     }
     Write-Host "AUTORIG-01 / Generando candidato de rig..." -ForegroundColor Cyan
-    & $BlenderExe --background --python $scriptPath -- --mode rig --workspace $WorkspaceFile --output-dir $OutputDirectory
+    if ($SkinMethod -eq "auto-or-distance") {
+        Write-Warning "Modo experimental: si falla Heat Weighting, se aplicaran pesos por distancia. Es SOLO un candidato para QA visual."
+    }
+    & $BlenderExe --background --python $scriptPath -- --mode rig --workspace $WorkspaceFile --output-dir $OutputDirectory --skin-method $SkinMethod
 }
 if ($LASTEXITCODE -ne 0) {
     Write-Warning "La etapa $Step no paso las validaciones. Revisa el JSON de fallo de la carpeta de salida."
