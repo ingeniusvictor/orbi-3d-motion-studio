@@ -304,7 +304,7 @@ export default function AutoRigLab({model,getViewer}){
   return <section className="panel inspector-panel" aria-label="ORBI AutoRig Studio">
     <div className="panel-header"><div>
       <div className="section-icon mint"><Bone size={19}/></div>
-      <div><h3>AutoRig Studio</h3><p>AUTORIG-02A/B · Editor nativo experimental</p></div>
+      <div><h3>AutoRig Studio</h3><p>AUTORIG-02C.3 · Rigging y animación corporal sin Blender</p></div>
     </div></div>
     <div style={{padding:'14px 15px',display:'grid',gap:12}}>
       <div className="compat-note" style={{margin:0,alignItems:'flex-start'}}>
@@ -312,9 +312,10 @@ export default function AutoRigLab({model,getViewer}){
         <span>{eligible.reason}</span>
       </div>
       <small style={{fontSize:11,lineHeight:1.65,color:'#a8bdc9'}}>
-        Sin Blender: coloca 22 puntos y crea un esqueleto de 19 huesos en el visor.
-        Etapa 02A/B: NO calcula pesos, NO deforma la malla, NO exporta un personaje riggeado.
-        El GLB original y los rigs de Vita/Mint permanecen intactos.
+        Sin Blender: 22 puntos, 19 huesos, skinning experimental, animación corporal
+        y mapa de pesos. El archivo original se mantiene intacto. La deformación aún
+        necesita QA visual y no hay exportación de GLB riggeado en este piloto.
+        Los rigs existentes de Vita y Mint quedan fuera del alcance.
       </small>
       <button className="outline-btn" style={btn}
         onClick={()=>{setEditing(v=>!v);setError('');setNotice('');}}
