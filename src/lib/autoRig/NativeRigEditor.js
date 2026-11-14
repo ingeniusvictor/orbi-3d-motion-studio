@@ -132,6 +132,9 @@ export class NativeRigEditor{
   }
   updatePreview(){
     if(!this.hasSkeleton)return;
+    const check=validateMarkers(this.getMarkers());
+    if(!check.ok){this.lines.visible=false;return;}
+    this.lines.visible=true;
     const bones=skeletonDraft(this.getMarkers());
     for(const bone of [...this.boneRoot.children])this.boneRoot.remove(bone);
     const map=new Map();
