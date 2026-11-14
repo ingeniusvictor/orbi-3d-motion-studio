@@ -7,6 +7,7 @@ import {
 import {buildBoneSkeleton} from '../src/lib/autoRig/nativeSkinPreview.js';
 import {initialMarkers,skeletonDraft} from '../src/lib/autoRig/nativeRig.js';
 import {readFileSync} from 'node:fs';
+import {loadMixamoMotionFile} from '../src/lib/autoRig/loadMixamoMotion.js';
 
 const labels=[
   'Hips','Spine','Spine1','Neck','Head',
@@ -140,4 +141,27 @@ test('02C.3 playback is separated from source and exposes timeline controls',()=
   assert.match(s,/motionMixer\.uncacheRoot\(boneRoot\)/);
   assert.match(s,/source\.visible=false/);
   assert.doesNotMatch(s,/viewer\.model\.add\(boneRoot\)/);
+});
+
+test('02C.3 local import validates extension and size before parsing',async()=>{
+  await assert.rejects(
+    loadMixamoMotionFile({name:'walking.exe',size:120,arrayBuffer:async()=>new ArrayBuffer(20)}),
+    /Formato no admitido/);
+  await assert.rejects(
+    loadMixamoMotionFile({name:'walking.fbx',size:80*1024*1024,
+      arrayBuffer:async()=>new ArrayBuffer(20)}),
+    /60 MB/);
+  await assert.rejects(
+    loadMixamoMotionFile({name:'empty.glb',size:0,
+      arrayBuffer:async()=>new ArrayBuffer(20)}),
+    /1 byte/);
+});
+test('02C.3 UI includes local Mixamo import, procedural QA, speed and playback',()=>{
+  const s=readFileSync(new URL('../src/AutoRigLab.jsx',import.meta.url),'utf8');
+  assert.match(s,/loadAndRetargetMixamo\(file\)/);
+  assert.match(s,/createOrbiMotionSamples\(\)/);
+  assert.match(s,/Importar animación Mixamo/);
+  assert.match(s,/requestAnimationFrame\(loop\)/);
+  assert.match(s,/setMotionPlaying\(playing\)/);
+  assert.match(s,/setMotionSpeed\(speed\)/);
 });
