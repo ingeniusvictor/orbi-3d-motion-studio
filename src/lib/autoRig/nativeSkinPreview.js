@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {skeletonDraft} from './nativeRig.js';
 import {validateWeightBuffers} from './nativeSkinWeights.js';
+import {boneInfluenceHeatmap,combineInfluenceAudits} from './weightHeatmap.js';
 
 // AUTORIG-02C.1: separate, disposable, experimental skinned VIEW.
 // Absolutely no changes to source vertex buffers, morphs, original mesh or file.
@@ -115,7 +116,19 @@ export async function createNativeSkinPreview(viewer,markers,{
   overlay.name='ORBI_AUTORIG02C_SKIN_PREVIEW_ONLY';
   overlay.add(boneRoot);
   const riggedMeshes=[],audits=[];
+  const originalMaterials=new Map();
+  let heatmapMaterial=null;
   let committed=false;
+  const disposeCandidate=()=>{
+    for(const mesh of riggedMeshes){
+      // Restore the candidate's own cloned materials before disposal; the
+      // diagnostic material is shared and disposed exactly once below.
+      mesh.material=originalMaterials.get(mesh);
+      cleanMeshResources(mesh);
+    }
+    heatmapMaterial?.dispose();
+    skeleton.dispose();
+  };
   const originalVisibility=source.visible;
   try{
     let processed=0;
@@ -147,6 +160,7 @@ export async function createNativeSkinPreview(viewer,markers,{
       rigged.bind(skeleton,new THREE.Matrix4());
       rigged.normalizeSkinWeights();
       riggedMeshes.push(rigged);
+      originalMaterials.set(rigged,materials);
       audits.push({mesh:sourceMesh.name||'malla '+riggedMeshes.length,...result.audit});
       processed+=result.audit.vertices;
       onProgress({meshes:riggedMeshes.length,totalMeshes:meshes.length,
@@ -162,6 +176,35 @@ export async function createNativeSkinPreview(viewer,markers,{
       bones:bones.map(x=>x.name),
       audits,
       vertexCount:total,
+      setWeightHeatmap(boneName=null){
+        if(boneName===null||boneName===''){
+          for(const mesh of riggedMeshes){
+            mesh.material=originalMaterials.get(mesh);
+            mesh.geometry.deleteAttribute('color');
+          }
+          return null;
+        }
+        const boneIndex=bones.findIndex(bone=>bone.name===boneName);
+        if(boneIndex<0)throw new Error('Hueso desconocido para visualizar pesos.');
+        // Prepare all maps before changing a rendered mesh, so malformed
+        // weights cannot leave half the character in heatmap mode.
+        const prepared=riggedMeshes.map(mesh=>({
+          mesh,
+          heatmap:boneInfluenceHeatmap(
+            mesh.geometry.getAttribute('skinIndex').array,
+            mesh.geometry.getAttribute('skinWeight').array,
+            boneIndex),
+        }));
+        heatmapMaterial??=new THREE.MeshBasicMaterial({
+          vertexColors:true,side:THREE.DoubleSide,toneMapped:false,
+        });
+        for(const {mesh,heatmap} of prepared){
+          mesh.geometry.setAttribute('color',
+            new THREE.Float32BufferAttribute(heatmap.colors,3));
+          mesh.material=heatmapMaterial;
+        }
+        return combineInfluenceAudits(prepared.map(item=>item.heatmap.stats));
+      },
       setJointAngle(name,axis,angleDegrees){
         if(!nodeMap.has(name))throw new Error('Articulación desconocida.');
         if(!['X','Y','Z'].includes(axis)||!Number.isFinite(angleDegrees)||
@@ -182,15 +225,13 @@ export async function createNativeSkinPreview(viewer,markers,{
         committed=false;
         overlay.parent?.remove(overlay);
         if(viewer.model===source)source.visible=originalVisibility;
-        for(const m of riggedMeshes)cleanMeshResources(m);
-        skeleton.dispose();
+        disposeCandidate();
       },
     };
     return api;
   }catch(error){
     overlay.parent?.remove(overlay);
-    for(const m of riggedMeshes)cleanMeshResources(m);
-    skeleton.dispose();
+    disposeCandidate();
     if(committed&&viewer.model===source)source.visible=originalVisibility;
     throw error;
   }
