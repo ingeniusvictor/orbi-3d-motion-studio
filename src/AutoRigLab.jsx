@@ -37,8 +37,8 @@ export default function AutoRigLab({model,getViewer}){
     let editor;
     try{
       editor=new NativeRigEditor(viewer,{
-        onMarkers(next)=>{setMarkers(next);setAudit(validateMarkers(next));},
-        onSelect(name)=>setSelected(name),
+        onMarkers: next =>{setMarkers(next);setAudit(validateMarkers(next));},
+        onSelect: name =>setSelected(name),
       });
       editorRef.current=editor;
       setPreview(false);setError('');
