@@ -1,16 +1,21 @@
 import * as THREE from 'three';
 import {TransformControls} from 'three/addons/controls/TransformControls.js';
 import {LANDMARK_NAMES,initialMarkers,mirrorMarker,skeletonDraft,validateMarkers} from './nativeRig.js';
+import {
+  PLACEMENT_MODES,VIEW_PRESETS,constrainMarkerPosition,
+  getViewDirection,getDefaultAxesForView,
+} from './placementConstraints.js';
 
-// Transient overlay on the existing viewer. Never parent it to viewer.model.
-// No vertex groups, skin weights, source transforms or materials are touched.
+// EDITOR-ONLY overlay; never parent controls/bones to the imported model.
 export class NativeRigEditor{
-  constructor(viewer,{onMarkers=()=>{},onSelect=()=>{}}={}){
+  constructor(viewer,{onMarkers=()=>{},onSelect=()=>{},onHistory=()=>{},onView=()=>{}}={}){
     if(!viewer?.model||!viewer.scene||!viewer.camera||!viewer.renderer)
       throw new Error('Abre un personaje GLB estático antes de editar.');
     this.viewer=viewer;
     this.onMarkers=onMarkers;
     this.onSelect=onSelect;
+    this.onHistory=onHistory;
+    this.onView=onView;
     this.disposed=false;
     this.markers=new Map();
     this.box=new THREE.Box3().setFromObject(viewer.model,true);
@@ -47,14 +52,51 @@ export class NativeRigEditor{
     this.root.add(this.boneRoot);
     this.hasSkeleton=false;
 
+    this.cameraSnapshot={
+      position:viewer.camera.position.clone(),
+      up:viewer.camera.up.clone(),
+      near:viewer.camera.near,far:viewer.camera.far,
+      target:viewer.controls.target.clone(),
+      minDistance:viewer.controls.minDistance,
+      maxDistance:viewer.controls.maxDistance,
+      enabled:viewer.controls.enabled,
+    };
+    this.view='front';
+    this.axisMode='XY';
+    this.cameraLock=true;
+    this.undoStack=[];
+    this.redoStack=[];
+    this.dragAnchor=null;
+
     this.transform=new TransformControls(viewer.camera,viewer.renderer.domElement);
     this.transform.setMode('translate');
+    this.transform.setSpace('world');
     this.transform.setSize(.6);
     this.helper=this.transform.getHelper();
     viewer.scene.add(this.helper);
-    this.onDragging=event=>{viewer.controls.enabled=!event.value;};
-    this.onObjectChange=()=>{if(this.disposed)return;this.updatePreview();this.emit();};
+    this.onDragging=event=>{
+      // Never allow OrbitControls to rotate/pan while dragging a joint.
+      viewer.controls.enabled=!event.value&&!this.cameraLock&&this.cameraSnapshot.enabled;
+    };
+    this.onDragStart=()=>{this.dragAnchor=this.getMarkers();};
+    this.onDragEnd=()=>{
+      if(this.dragAnchor){this.recordChange(this.dragAnchor);this.dragAnchor=null;}
+    };
+    this.onObjectChange=()=>{
+      if(this.disposed)return;
+      // Constrain even when a gizmo center/plane attempts to move forbidden axes.
+      const handle=this.markers.get(this.selected);
+      if(handle){
+        const anchor=this.dragAnchor?.[this.selected]||handle.position.toArray();
+        handle.position.fromArray(constrainMarkerPosition(
+          anchor,handle.position.toArray(),this.axisMode));
+      }
+      this.updatePreview();
+      this.emit();
+    };
     this.transform.addEventListener('dragging-changed',this.onDragging);
+    this.transform.addEventListener('mouseDown',this.onDragStart);
+    this.transform.addEventListener('mouseUp',this.onDragEnd);
     this.transform.addEventListener('objectChange',this.onObjectChange);
 
     this.raycaster=new THREE.Raycaster();
@@ -62,9 +104,13 @@ export class NativeRigEditor{
     this.meshes=[];
     viewer.model.traverse(node=>{if(node.isMesh&&node.visible)this.meshes.push(node);});
     this.onPointerDown=this.pointerDown.bind(this);
+    this.onKeyDown=this.keyDown.bind(this);
     viewer.renderer.domElement.addEventListener('pointerdown',this.onPointerDown);
+    window.addEventListener('keydown',this.onKeyDown);
     this.select('pelvis');
+    this.setView('front');
     this.emit();
+    this.emitHistory();
   }
   screenRay(event){
     const rect=this.viewer.renderer.domElement.getBoundingClientRect();
@@ -74,20 +120,76 @@ export class NativeRigEditor{
     this.raycaster.setFromCamera(this.pointer,this.viewer.camera);
     return true;
   }
+  planeIntersection(){
+    const anchor=this.markers.get(this.selected)?.position;
+    if(!anchor)return null;
+    let normal;
+    if(VIEW_PRESETS.includes(this.view))
+      normal=new THREE.Vector3().fromArray(getViewDirection(this.view));
+    else
+      normal=this.viewer.camera.getWorldDirection(new THREE.Vector3());
+    const plane=new THREE.Plane().setFromNormalAndCoplanarPoint(normal,anchor);
+    return this.raycaster.ray.intersectPlane(plane,new THREE.Vector3());
+  }
   pointerDown(event){
     if(this.disposed||event.button!==0||!this.screenRay(event))return;
-    // Shift + click projects the selected joint onto the character surface.
-    // The XYZ gizmo can then move it into the anatomical joint volume.
-    if(event.shiftKey){
-      const hit=this.raycaster.intersectObjects(this.meshes,false)[0];
-      if(hit&&this.selected){
-        this.setMarker(this.selected,hit.point.toArray());
+    if(event.shiftKey&&this.selected){
+      // Shift-click = intersection with the selected landmark's fixed-depth plane,
+      // not a potentially offset garment/surface. Depth cannot jump accidentally.
+      const planePoint=this.planeIntersection();
+      if(planePoint){
+        const old=this.getMarkers()[this.selected];
+        this.setMarker(this.selected,
+          constrainMarkerPosition(old,planePoint.toArray(),this.axisMode));
         event.preventDefault();
       }
       return;
     }
     const hit=this.raycaster.intersectObjects([...this.markers.values()],false)[0];
     if(hit)this.select(hit.object.userData.orbiMarker);
+  }
+  keyDown(event){
+    if(!event.ctrlKey&&!event.metaKey)return;
+    if(event.altKey||event.target?.closest?.('input,textarea,select,[contenteditable=true]'))return;
+    const key=event.key.toLowerCase();
+    if(key==='z'){event.preventDefault();event.shiftKey?this.redo():this.undo();}
+    else if(key==='y'){event.preventDefault();this.redo();}
+  }
+  setCameraLock(locked){
+    this.cameraLock=Boolean(locked);
+    this.viewer.controls.enabled=!this.cameraLock&&this.cameraSnapshot.enabled;
+    this.onView({view:this.view,axes:this.axisMode,cameraLocked:this.cameraLock});
+  }
+  setView(view){
+    if(!VIEW_PRESETS.includes(view))throw new Error('Vista desconocida: '+view);
+    const camera=this.viewer.camera,controls=this.viewer.controls;
+    const direction=new THREE.Vector3().fromArray(getViewDirection(view));
+    const center=this.box.getCenter(new THREE.Vector3());
+    const size=this.box.getSize(new THREE.Vector3());
+    const radius=Math.max(size.length()*.5,.01);
+    const distance=Math.max(
+      radius/Math.sin(THREE.MathUtils.degToRad(camera.fov/2))*1.25,
+      radius*2.5);
+    this.view=view;
+    camera.up.set(0,view==='top'?0:1,view==='top'?-1:0);
+    camera.position.copy(center).addScaledVector(direction,distance);
+    camera.near=Math.max(distance/2000,1e-6);
+    camera.far=Math.max(distance*30,radius*100,2);
+    camera.updateProjectionMatrix();
+    controls.target.copy(center);
+    controls.minDistance=Math.max(distance*.1,1e-5);
+    controls.maxDistance=Math.max(distance*15,1);
+    controls.update();
+    this.setPlacementAxes(getDefaultAxesForView(view));
+    this.setCameraLock(true);
+  }
+  setPlacementAxes(axes){
+    if(!PLACEMENT_MODES.includes(axes))throw new Error('Ejes desconocidos: '+axes);
+    this.axisMode=axes;
+    this.transform.showX=axes.includes('X');
+    this.transform.showY=axes.includes('Y');
+    this.transform.showZ=axes.includes('Z');
+    this.onView({view:this.view,axes:this.axisMode,cameraLocked:this.cameraLock});
   }
   select(name){
     if(!this.markers.has(name))throw new Error('Marcador desconocido: '+name);
@@ -99,23 +201,66 @@ export class NativeRigEditor{
     this.transform.attach(this.markers.get(name));
     this.onSelect(name);
   }
-  setMarker(name,coords){
-    if(!this.markers.has(name)||!Array.isArray(coords)||coords.length!==3||
-       !coords.every(Number.isFinite))
-      throw new Error('Posición de marcador no válida.');
-    this.markers.get(name).position.fromArray(coords);
+  getMarkers(){
+    return Object.fromEntries([...this.markers].map(([name,h])=>[name,h.position.toArray()]));
+  }
+  recordChange(before){
+    if(JSON.stringify(before)===JSON.stringify(this.getMarkers()))return false;
+    this.undoStack.push(before);
+    if(this.undoStack.length>50)this.undoStack.shift();
+    this.redoStack.length=0;
+    this.emitHistory();
+    return true;
+  }
+  emitHistory(){
+    this.onHistory({canUndo:this.undoStack.length>0,canRedo:this.redoStack.length>0,
+      undoCount:this.undoStack.length,redoCount:this.redoStack.length});
+  }
+  applySnapshot(markers){
+    for(const name of LANDMARK_NAMES)this.markers.get(name).position.fromArray(markers[name]);
     this.updatePreview();
     this.emit();
   }
-  getMarkers(){
-    return Object.fromEntries([...this.markers].map(([name,h])=>[name,h.position.toArray()]));
+  undo(){
+    if(!this.undoStack.length)return false;
+    const current=this.getMarkers();
+    this.redoStack.push(current);
+    this.applySnapshot(this.undoStack.pop());
+    this.emitHistory();
+    return true;
+  }
+  redo(){
+    if(!this.redoStack.length)return false;
+    const current=this.getMarkers();
+    this.undoStack.push(current);
+    this.applySnapshot(this.redoStack.pop());
+    this.emitHistory();
+    return true;
+  }
+  setMarker(name,coords,{force=false}={}){
+    if(!this.markers.has(name)||!Array.isArray(coords)||coords.length!==3||
+       !coords.every(Number.isFinite))
+      throw new Error('Posición de marcador no válida.');
+    const before=this.getMarkers();
+    const point=force?coords:constrainMarkerPosition(before[name],coords,this.axisMode);
+    this.markers.get(name).position.fromArray(point);
+    this.updatePreview();
+    this.recordChange(before);
+    this.emit();
   }
   setMarkers(markers){
     const valid=validateMarkers(markers);
     if(!valid.ok)throw new Error(valid.errors.join(' '));
-    for(const name of LANDMARK_NAMES)this.markers.get(name).position.fromArray(markers[name]);
-    this.updatePreview();
-    this.emit();
+    const before=this.getMarkers();
+    this.applySnapshot(markers);
+    this.recordChange(before);
+  }
+  resetSelected(){
+    if(!this.selected)return;
+    this.setMarker(this.selected,this.initial[this.selected],{force:true});
+  }
+  resetAll(){
+    this.setMarkers(this.initial);
   }
   reflectSelected(){
     const next=mirrorMarker(this.getMarkers(),this.selected);
@@ -163,12 +308,25 @@ export class NativeRigEditor{
     if(this.disposed)return;
     this.disposed=true;
     this.viewer.renderer.domElement.removeEventListener('pointerdown',this.onPointerDown);
+    window.removeEventListener('keydown',this.onKeyDown);
     this.transform.removeEventListener('dragging-changed',this.onDragging);
+    this.transform.removeEventListener('mouseDown',this.onDragStart);
+    this.transform.removeEventListener('mouseUp',this.onDragEnd);
     this.transform.removeEventListener('objectChange',this.onObjectChange);
     this.transform.detach();
     this.transform.dispose();
     this.helper.parent?.remove(this.helper);
-    this.viewer.controls.enabled=true;
+    const snap=this.cameraSnapshot,viewer=this.viewer;
+    viewer.camera.position.copy(snap.position);
+    viewer.camera.up.copy(snap.up);
+    viewer.camera.near=snap.near;
+    viewer.camera.far=snap.far;
+    viewer.camera.updateProjectionMatrix();
+    viewer.controls.target.copy(snap.target);
+    viewer.controls.minDistance=snap.minDistance;
+    viewer.controls.maxDistance=snap.maxDistance;
+    viewer.controls.enabled=snap.enabled;
+    viewer.controls.update();
     this.root.parent?.remove(this.root);
     for(const mesh of this.markers.values())mesh.material.dispose();
     this.geometry.dispose();
