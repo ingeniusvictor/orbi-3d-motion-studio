@@ -27,6 +27,8 @@ export default function AutoRigLab({model,getViewer}){
   const [markers,setMarkers]=useState(null);
   const [audit,setAudit]=useState(null);
   const [preview,setPreview]=useState(false);
+  const [viewState,setViewState]=useState({view:'front',axes:'XY',cameraLocked:true});
+  const [history,setHistory]=useState({canUndo:false,canRedo:false,undoCount:0,redoCount:0});
   const [notice,setNotice]=useState('');
   const [error,setError]=useState('');
 
@@ -39,16 +41,39 @@ export default function AutoRigLab({model,getViewer}){
       editor=new NativeRigEditor(viewer,{
         onMarkers: next =>{setMarkers(next);setAudit(validateMarkers(next));},
         onSelect: name =>setSelected(name),
+        onView: state =>setViewState(state),
+        onHistory: state =>setHistory(state),
       });
       editorRef.current=editor;
       setPreview(false);setError('');
-      setNotice('Editor 3D activo. Selecciona un punto y arrastra el control XYZ.');
+      setNotice('Vista frontal y plano XY bloqueados. La profundidad Z no cambiará por accidente.');
     }catch(e){setError(e.message||String(e));setEditing(false);}
     return ()=>{editor?.dispose();if(editorRef.current===editor)editorRef.current=null;};
   },[editing,model,getViewer]);
 
   useEffect(()=>{if(editorRef.current&&selected)editorRef.current.select(selected);},[selected]);
   const selectPoint=name=>{setSelected(name);editorRef.current?.select(name);};
+  const changeView=view=>{
+    try{editorRef.current?.setView(view);setError('');
+      setNotice('Vista '+view+' fijada. Ejes permitidos ajustados automáticamente.');}
+    catch(e){setError(e.message||String(e));}
+  };
+  const changeAxes=axes=>{
+    try{editorRef.current?.setPlacementAxes(axes);setError('');}
+    catch(e){setError(e.message||String(e));}
+  };
+  const changeCameraLock=()=>{
+    const next=!viewState.cameraLocked;
+    editorRef.current?.setCameraLock(next);
+    setNotice(next?'Cámara bloqueada: solo se moverán los marcadores.':
+      'Cámara libre: puedes orbitar. Vuelve a elegir una vista fija para alinearla.');
+  };
+  const undo=()=>{if(editorRef.current?.undo())setNotice('Último movimiento deshecho.');};
+  const redo=()=>{if(editorRef.current?.redo())setNotice('Movimiento restaurado.');};
+  const resetPoint=()=>{
+    editorRef.current?.resetSelected();
+    setNotice('Articulación '+selected+' restaurada a su posición inicial.');
+  };
   const applyMirror=()=>{
     try{
       const partner=editorRef.current?.reflectSelected();
@@ -105,10 +130,49 @@ export default function AutoRigLab({model,getViewer}){
       </button>
       {editing&&<div style={{display:'grid',gap:10}}>
         <div style={{fontSize:11,color:'#b6cbd6',lineHeight:1.6}}>
-          Selecciona una esfera directamente en el visor o elige su nombre.
-          Arrastra las flechas del gizmo para mover el punto.
-          <strong> Mayús + clic</strong> sobre la superficie coloca el punto seleccionado.
-          Gira la cámara para comprobar la profundidad.
+          <strong>Modo seguro:</strong> cámara fija y movimiento limitado por ejes.
+          <strong> Mayús + clic</strong> coloca el marcador sobre el plano de la vista,
+          conservando la coordenada bloqueada. El modelo original permanece inmóvil.
+        </div>
+        <label style={{fontSize:12,color:'#d7eced'}}>Vista fija del personaje</label>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(5,minmax(0,1fr))',gap:4}}>
+          {[['front','Frente'],['back','Atrás'],['left','Izq.'],['right','Der.'],['top','Arriba']].map(([value,label])=>
+            <button key={value} type="button" aria-pressed={viewState.view===value}
+              className="outline-btn"
+              style={{...btn,padding:'7px 3px',fontSize:10,
+                background:viewState.view===value?'#25594f':'#15273a'}}
+              onClick={()=>changeView(value)}>{label}</button>)}
+        </div>
+        <button type="button" className="outline-btn" style={{...btn,
+            background:viewState.cameraLocked?'#214840':'#483926'}}
+          aria-pressed={viewState.cameraLocked} onClick={changeCameraLock}>
+          {viewState.cameraLocked?'🔒 Cámara bloqueada (recomendado)':
+            '🔓 Cámara libre — clic para bloquear'}
+        </button>
+        <label style={{fontSize:12,color:'#d7eced'}}>Movimiento permitido (ejes mundiales)
+          <select style={{...field,marginTop:5}} value={viewState.axes}
+            onChange={e=>changeAxes(e.target.value)}>
+            <option value="XY">Plano XY — izquierda/derecha y altura; Z bloqueado</option>
+            <option value="YZ">Plano YZ — altura y profundidad; X bloqueado</option>
+            <option value="XZ">Plano XZ — horizontal y profundidad; Y bloqueado</option>
+            <option value="X">Solo X — izquierda/derecha</option>
+            <option value="Y">Solo Y — altura</option>
+            <option value="Z">Solo Z — profundidad</option>
+            <option value="XYZ">XYZ — libre (avanzado)</option>
+          </select>
+        </label>
+        <div style={{fontSize:11,color:'#a9d0ca',lineHeight:1.6}}>
+          {viewState.view==='front'||viewState.view==='back'?
+            'Frente/espalda: coloca primero el punto en XY. Para profundidad usa Solo Z.':
+            viewState.view==='left'||viewState.view==='right'?
+            'Perfil: ajusta altura y profundidad en YZ; no se altera X.':
+            'Vista superior: trabaja en XZ; la altura Y queda congelada.'}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+          <button type="button" className="outline-btn" style={btn}
+            disabled={!history.canUndo} onClick={undo}>↶ Deshacer</button>
+          <button type="button" className="outline-btn" style={btn}
+            disabled={!history.canRedo} onClick={redo}>↷ Rehacer</button>
         </div>
         <label style={{fontSize:12,color:'#d7eced'}}>Articulación seleccionada
           <select value={selected} onChange={e=>selectPoint(e.target.value)} style={{...field,marginTop:5}}>
@@ -119,6 +183,8 @@ export default function AutoRigLab({model,getViewer}){
           {['X','Y','Z'].map((axis,index)=><label key={axis} style={{color:'#9eb8c7',fontSize:10}}>
             {axis} (m)
             <input type="number" step="any"
+              disabled={!viewState.axes.includes(axis)}
+              title={viewState.axes.includes(axis)?'Eje editable':'Eje bloqueado por el modo de colocación'}
               key={selected+'-'+axis+'-'+(markers?.[selected]?.[index]??'')}
               style={{...field,padding:6,marginTop:3,fontSize:11}}
               defaultValue={markers?.[selected]?.[index]??''}
@@ -131,14 +197,16 @@ export default function AutoRigLab({model,getViewer}){
               }}/>
           </label>)}
         </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
-          <button className="outline-btn" style={btn}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:5}}>
+          <button type="button" className="outline-btn" style={{...btn,padding:5,fontSize:11}}
             disabled={!selected.startsWith('left')&&!selected.startsWith('right')}
-            onClick={applyMirror}>Reflejar simetría</button>
-          <button className="outline-btn" style={btn}
-            onClick={()=>{editorRef.current?.setMarkers(editorRef.current.initial);
-              setNotice('Restaurado el preset geométrico de este modelo.');}}>
-            Restaurar puntos</button>
+            onClick={applyMirror}>Espejo</button>
+          <button type="button" className="outline-btn" style={{...btn,padding:5,fontSize:11}}
+            onClick={resetPoint}>Restaurar punto</button>
+          <button type="button" className="outline-btn" style={{...btn,padding:5,fontSize:11}}
+            onClick={()=>{editorRef.current?.resetAll();
+              setNotice('Restaurados los 22 puntos. Puedes deshacer esta acción.');}}>
+            Restaurar todos</button>
         </div>
         <div style={{fontSize:11,color:audit?.ok?'#72d9b4':'#ffad95'}}>
           {audit?.ok?'22 marcadores finitos · esqueleto candidato':
@@ -180,8 +248,9 @@ export default function AutoRigLab({model,getViewer}){
       </a>
       <div style={{display:'flex',gap:7,fontSize:10,lineHeight:1.6,color:'#93aec0'}}>
         <CheckCircle2 size={14}/>
-        <span>Solo GLB sin rig ni animaciones. El editor es temporal: guarda JSON
-          antes de cerrar o cambiar el modelo. No modifica archivos de origen.</span>
+        <span>Solo GLB sin rig ni animaciones. Cámara fija por defecto; para recuperar
+          un punto usa Deshacer o Restaurar punto. Guarda JSON antes de cerrar.
+          No modifica archivos de origen.</span>
       </div>
     </div>
   </section>;
