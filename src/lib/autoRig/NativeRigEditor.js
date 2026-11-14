@@ -60,6 +60,9 @@ export class NativeRigEditor{
       minDistance:viewer.controls.minDistance,
       maxDistance:viewer.controls.maxDistance,
       enabled:viewer.controls.enabled,
+      enableRotate:viewer.controls.enableRotate,
+      enablePan:viewer.controls.enablePan,
+      enableZoom:viewer.controls.enableZoom,
     };
     this.view='front';
     this.axisMode='XY';
@@ -76,7 +79,7 @@ export class NativeRigEditor{
     viewer.scene.add(this.helper);
     this.onDragging=event=>{
       // Never allow OrbitControls to rotate/pan while dragging a joint.
-      viewer.controls.enabled=!event.value&&!this.cameraLock&&this.cameraSnapshot.enabled;
+      viewer.controls.enabled=!event.value&&this.cameraSnapshot.enabled;
     };
     this.onDragStart=()=>{this.dragAnchor=this.getMarkers();};
     this.onDragEnd=()=>{
@@ -124,7 +127,7 @@ export class NativeRigEditor{
     const anchor=this.markers.get(this.selected)?.position;
     if(!anchor)return null;
     let normal;
-    if(VIEW_PRESETS.includes(this.view))
+    if(this.cameraLock&&VIEW_PRESETS.includes(this.view))
       normal=new THREE.Vector3().fromArray(getViewDirection(this.view));
     else
       normal=this.viewer.camera.getWorldDirection(new THREE.Vector3());
@@ -157,7 +160,12 @@ export class NativeRigEditor{
   }
   setCameraLock(locked){
     this.cameraLock=Boolean(locked);
-    this.viewer.controls.enabled=!this.cameraLock&&this.cameraSnapshot.enabled;
+    const controls=this.viewer.controls,original=this.cameraSnapshot;
+    // Keep wheel zoom available, but disallow camera rotation and panning.
+    controls.enabled=original.enabled;
+    controls.enableRotate=locked?false:original.enableRotate;
+    controls.enablePan=locked?false:original.enablePan;
+    controls.enableZoom=original.enableZoom;
     this.onView({view:this.view,axes:this.axisMode,cameraLocked:this.cameraLock});
   }
   setView(view){
@@ -326,6 +334,9 @@ export class NativeRigEditor{
     viewer.controls.minDistance=snap.minDistance;
     viewer.controls.maxDistance=snap.maxDistance;
     viewer.controls.enabled=snap.enabled;
+    viewer.controls.enableRotate=snap.enableRotate;
+    viewer.controls.enablePan=snap.enablePan;
+    viewer.controls.enableZoom=snap.enableZoom;
     viewer.controls.update();
     this.root.parent?.remove(this.root);
     for(const mesh of this.markers.values())mesh.material.dispose();
