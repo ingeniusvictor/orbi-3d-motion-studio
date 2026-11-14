@@ -2,6 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {Bone,CheckCircle2,Download,ShieldAlert,ShieldCheck,MousePointer2} from 'lucide-react';
 import {autoRigEligibility} from './lib/autoRig/eligibility.js';
 import {NativeRigEditor} from './lib/autoRig/NativeRigEditor.js';
+import {createNativeSkinPreview} from './lib/autoRig/nativeSkinPreview.js';
 import {LANDMARK_NAMES,validateMarkers,exportRigDraft,importRigDraft} from './lib/autoRig/nativeRig.js';
 
 const PREPARE='.\\tools\\autorig01_windows.ps1 -Step prepare';
@@ -22,11 +23,15 @@ export default function AutoRigLab({model,getViewer}){
   const eligible=autoRigEligibility(model);
   const editorRef=useRef(null);
   const fileRef=useRef(null);
+  const skinRef=useRef(null);
+  const skinAbortRef=useRef(null);
   const [editing,setEditing]=useState(false);
   const [selected,setSelected]=useState('pelvis');
   const [markers,setMarkers]=useState(null);
   const [audit,setAudit]=useState(null);
   const [preview,setPreview]=useState(false);
+  const [skin,setSkin]=useState({status:'idle',progress:null,audits:null,vertices:0});
+  const [pose,setPose]=useState({joint:'leftLowerArm',axis:'Z',angle:0});
   const [viewState,setViewState]=useState({view:'front',axes:'XY',cameraLocked:true});
   const [history,setHistory]=useState({canUndo:false,canRedo:false,undoCount:0,redoCount:0});
   const [notice,setNotice]=useState('');
@@ -39,7 +44,15 @@ export default function AutoRigLab({model,getViewer}){
     let editor;
     try{
       editor=new NativeRigEditor(viewer,{
-        onMarkers: next =>{setMarkers(next);setAudit(validateMarkers(next));},
+        onMarkers: next =>{
+          setMarkers(next);setAudit(validateMarkers(next));
+          if(skinRef.current||skinAbortRef.current){
+            skinAbortRef.current?.abort();skinAbortRef.current=null;
+            skinRef.current?.dispose();skinRef.current=null;
+            editorRef.current?.setEditingPaused(false);
+            setSkin({status:'idle',progress:null,audits:null,vertices:0});
+          }
+        },
         onSelect: name =>setSelected(name),
         onView: state =>setViewState(state),
         onHistory: state =>setHistory(state),
@@ -48,7 +61,12 @@ export default function AutoRigLab({model,getViewer}){
       setPreview(false);setError('');
       setNotice('Vista frontal y plano XY bloqueados. La profundidad Z no cambiará por accidente.');
     }catch(e){setError(e.message||String(e));setEditing(false);}
-    return ()=>{editor?.dispose();if(editorRef.current===editor)editorRef.current=null;};
+    return ()=>{
+      skinAbortRef.current?.abort();skinAbortRef.current=null;
+      skinRef.current?.dispose();skinRef.current=null;
+      editor?.dispose();
+      if(editorRef.current===editor)editorRef.current=null;
+    };
   },[editing,model,getViewer]);
 
   useEffect(()=>{if(editorRef.current&&selected)editorRef.current.select(selected);},[selected]);
@@ -87,6 +105,57 @@ export default function AutoRigLab({model,getViewer}){
       setError('');
       setNotice(bones.length+' huesos generados en vista previa, SIN skinning ni cambios al GLB.');
     }catch(e){setError(e.message);}
+  };
+  const stopSkin=()=>{
+    skinAbortRef.current?.abort();
+    skinAbortRef.current=null;
+    skinRef.current?.dispose();
+    skinRef.current=null;
+    editorRef.current?.setEditingPaused(false);
+    setSkin({status:'idle',progress:null,audits:null,vertices:0});
+    setPose({joint:'leftLowerArm',axis:'Z',angle:0});
+    setNotice('Vista experimental cerrada. Modelo y marcadores originales restaurados.');
+  };
+  const generateSkin=async()=>{
+    const editor=editorRef.current,viewer=getViewer?.();
+    if(!editor||!viewer)return;
+    const controller=new AbortController();
+    skinAbortRef.current?.abort();
+    skinAbortRef.current=controller;
+    setError('');
+    setSkin({status:'working',progress:null,audits:null,vertices:0});
+    setNotice('Calculando influencias por vértice en CPU local, sin Blender.');
+    try{
+      const pilot=await createNativeSkinPreview(viewer,editor.getMarkers(),{
+        signal:controller.signal,
+        onProgress: progress=>{
+          if(!controller.signal.aborted)setSkin(current=>({...current,progress}));
+        },
+      });
+      if(controller.signal.aborted||editorRef.current!==editor){
+        pilot.dispose();
+        return;
+      }
+      skinRef.current=pilot;
+      editor.setEditingPaused(true);
+      setPose({joint:'leftLowerArm',axis:'Z',angle:0});
+      setSkin({status:'ready',progress:null,audits:pilot.audits,
+        vertices:pilot.vertexCount});
+      setNotice('Vista de skinning experimental preparada. Dobla una articulación y revisa deformaciones.');
+    }catch(e){
+      if(!controller.signal.aborted){
+        setError('No se generó la vista de skinning: '+(e.message||String(e)));
+        setSkin({status:'idle',progress:null,audits:null,vertices:0});
+      }
+    }finally{
+      if(skinAbortRef.current===controller)skinAbortRef.current=null;
+    }
+  };
+  const updatePose=(field,value)=>{
+    const next={...pose,[field]:field==='angle'?Number(value):value};
+    setPose(next);
+    try{skinRef.current?.setJointAngle(next.joint,next.axis,next.angle);}
+    catch(e){setError(e.message||String(e));}
   };
   const exportDraft=()=>{
     try{
@@ -220,7 +289,71 @@ export default function AutoRigLab({model,getViewer}){
           <Bone size={16}/> {preview?'Actualizar':'Generar'} esqueleto de 19 huesos
         </button>
         {preview&&<div style={{fontSize:11,color:'#a6d2cc'}}>
-          Esqueleto anatómico en vista previa. Los huesos aún NO controlan la malla.
+          Esqueleto anatómico preliminar preparado: 19 huesos.
+        </div>}
+        {preview&&<div style={{border:'1px solid #315064',borderRadius:10,
+          padding:10,display:'grid',gap:9}}>
+          <strong style={{fontSize:12,color:'#a8e9df'}}>
+            AUTORIG-02C.1 · Prueba local de pesos y deformaciones
+          </strong>
+          <small style={{color:'#b8cbd3',lineHeight:1.5}}>
+            Cálculo experimental por proximidad sobre una COPIA temporal.
+            No se exporta un GLB riggeado, no modifica la geometría original
+            y todavía requiere inspección anatómica, ropa y rostro.
+          </small>
+          {skin.status!=='ready'?<button type="button" className="outline-btn"
+            style={btn} onClick={generateSkin} disabled={!audit?.ok||skin.status==='working'}>
+            {skin.status==='working'?'Calculando pesos localmente…':
+              'Calcular pesos y activar vista de deformación'}
+          </button>:null}
+          {skin.status==='working'&&<div style={{fontSize:11,color:'#9db9ca'}}>
+            {skin.progress?
+              'Procesadas '+skin.progress.meshes+'/'+skin.progress.totalMeshes+
+              ' mallas; '+skin.progress.vertices+'/'+skin.progress.totalVertices+' vértices.':
+              'Preparando cálculo…'}
+            <button type="button" className="outline-btn"
+              style={{...btn,marginTop:7}} onClick={stopSkin}>Cancelar</button>
+          </div>}
+          {skin.status==='ready'&&<>
+            <div style={{color:'#a8d8d0',fontSize:11}}>
+              {skin.vertices.toLocaleString('es-CL')} vértices · {skin.audits.length} mallas
+              · pesos normalizados (máximo 4 influencias).
+            </div>
+            <label style={{fontSize:11,color:'#d7eced'}}>Articulación
+              <select style={{...field,marginTop:4}} value={pose.joint}
+                onChange={e=>updatePose('joint',e.target.value)}>
+                {['leftUpperArm','rightUpperArm','leftLowerArm','rightLowerArm',
+                  'leftUpperLeg','rightUpperLeg','leftLowerLeg','rightLowerLeg',
+                  'neck','head','spine','chest'].map(j=>
+                  <option key={j} value={j}>{j}</option>)}
+              </select>
+            </label>
+            <label style={{fontSize:11,color:'#d7eced'}}>Eje de rotación
+              <select style={{...field,marginTop:4}} value={pose.axis}
+                onChange={e=>updatePose('axis',e.target.value)}>
+                {['X','Y','Z'].map(axis=><option key={axis} value={axis}>{axis}</option>)}
+              </select>
+            </label>
+            <label style={{fontSize:11,color:'#d7eced'}}>
+              Flexión experimental: {pose.angle}°
+              <input type="range" min="-75" max="75" step="5" value={pose.angle}
+                onChange={e=>updatePose('angle',e.target.value)}
+                style={{width:'100%',marginTop:8}}/>
+            </label>
+            <div style={{fontSize:10,color:'#edc991',lineHeight:1.55}}>
+              Si ves ropa, articulaciones o piel deformadas, NO aceptes los pesos
+              como definitivos. Corrige marcadores y repite el cálculo.
+            </div>
+            <button type="button" className="outline-btn" style={btn}
+              onClick={()=>{skinRef.current?.resetPose();
+                setPose(p=>({...p,angle:0}));}}>
+              Restablecer T-Pose
+            </button>
+            <button type="button" className="outline-btn" style={btn}
+              onClick={stopSkin}>
+              Cerrar prueba y recuperar marcadores originales
+            </button>
+          </>}
         </div>}
         <button className="outline-btn" style={btn} disabled={!audit?.ok}
           onClick={exportDraft}><Download size={16}/> Guardar proyecto AUTORIG-02 (JSON)</button>
