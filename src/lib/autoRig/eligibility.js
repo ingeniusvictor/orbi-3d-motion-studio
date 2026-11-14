@@ -8,5 +8,5 @@ export function autoRigEligibility(model){
   if(model.animations>0)return {
     ok:false,reason:'Este modelo contiene animaciones; AUTORIG-01 no las sobrescribe.'};
   if(model.meshes<1)return {ok:false,reason:'El modelo no tiene ninguna malla.'};
-  return {ok:true,reason:'Compatible para preparar marcadores; la T-Pose y la calidad del skinning todavía deben verificarse en Blender.'};
+  return {ok:true,reason:'Compatible con editor nativo de marcadores y esqueleto en vista previa; el skinning todavía no está implementado.'};
 }
