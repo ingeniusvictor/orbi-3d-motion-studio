@@ -84,6 +84,11 @@ export function validateMarkers(markers){
   }
   if(markers.leftShoulder[0]>=markers.rightShoulder[0])
     warnings.push('Revisar orientación izquierda/derecha del personaje.');
+  const nonFootDepth=names.filter(name=>!name.endsWith('Toe'))
+    .map(name=>markers[name][2]);
+  if(Math.max(...nonFootDepth)-Math.min(...nonFootDepth)<height*.002)
+    warnings.push('Casi todas las articulaciones comparten la misma profundidad Z. Revisa la vista lateral antes del skinning.');
+
   return {ok:errors.length===0,errors,warnings};
 }
 
