@@ -183,7 +183,7 @@ export async function createNativeSkinPreview(viewer,markers,{
       audits,
       vertexCount:total,
       loadMotion(clip){
-        if(!clip?.isAnimationClip||!Number.isFinite(clip.duration)||
+        if(!(clip instanceof THREE.AnimationClip)||!Number.isFinite(clip.duration)||
           clip.duration<=0||clip.duration>600)
           throw new Error('Clip de animación inválido.');
         const valid=new Set(bones.map(x=>x.name));
@@ -206,6 +206,8 @@ export async function createNativeSkinPreview(viewer,markers,{
       setMotionPlaying(playing){
         if(!currentMotion)throw new Error('Selecciona primero una animación.');
         motionPlaying=Boolean(playing);
+        if(motionPlaying&&activeAction&&!activeAction.isRunning())
+          activeAction.reset().play();
         return motionPlaying;
       },
       setMotionSpeed(value){
@@ -225,6 +227,8 @@ export async function createNativeSkinPreview(viewer,markers,{
         if(!currentMotion)throw new Error('Primero selecciona una animación.');
         if(!Number.isFinite(time)||time<0)throw new Error('Tiempo inválido.');
         motionPlaying=false;
+        if(activeAction&&!activeAction.isRunning())
+          activeAction.reset().play();
         const t=Math.min(time,Math.max(0,currentMotion.duration-1e-6));
         motionMixer.setTime(t);
         boneRoot.updateMatrixWorld(true);skeleton.update();
