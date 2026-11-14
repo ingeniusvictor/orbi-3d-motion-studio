@@ -117,6 +117,8 @@ export async function createNativeSkinPreview(viewer,markers,{
   overlay.add(boneRoot);
   const riggedMeshes=[],audits=[];
   const originalMaterials=new Map();
+  const motionMixer=new THREE.AnimationMixer(boneRoot);
+  let currentMotion=null,activeAction=null,motionPlaying=false,motionSpeed=1;
   let heatmapMaterial=null;
   let committed=false;
   const disposeCandidate=()=>{
@@ -126,6 +128,10 @@ export async function createNativeSkinPreview(viewer,markers,{
       mesh.material=originalMaterials.get(mesh);
       cleanMeshResources(mesh);
     }
+    motionPlaying=false;
+    motionMixer.stopAllAction();
+    if(currentMotion)motionMixer.uncacheClip(currentMotion);
+    motionMixer.uncacheRoot(boneRoot);
     heatmapMaterial?.dispose();
     skeleton.dispose();
   };
@@ -176,6 +182,64 @@ export async function createNativeSkinPreview(viewer,markers,{
       bones:bones.map(x=>x.name),
       audits,
       vertexCount:total,
+      loadMotion(clip){
+        if(!(clip instanceof THREE.AnimationClip)||!Number.isFinite(clip.duration)||
+          clip.duration<=0||clip.duration>600)
+          throw new Error('Clip de animación inválido.');
+        const valid=new Set(bones.map(x=>x.name));
+        for(const track of clip.tracks){
+          const match=/^(.+)\.quaternion$/.exec(track.name);
+          if(!match||!valid.has(match[1]))
+            throw new Error('Pista no compatible con este esqueleto: '+track.name);
+        }
+        motionPlaying=false;
+        motionMixer.stopAllAction();
+        if(currentMotion)motionMixer.uncacheClip(currentMotion);
+        currentMotion=clip;
+        for(const bone of nodeMap.values())bone.quaternion.identity();
+        activeAction=motionMixer.clipAction(clip,boneRoot);
+        activeAction.reset().setLoop(THREE.LoopRepeat,Infinity).play();
+        motionMixer.setTime(0);
+        boneRoot.updateMatrixWorld(true);skeleton.update();
+        return {name:clip.name,duration:clip.duration,tracks:clip.tracks.length};
+      },
+      setMotionPlaying(playing){
+        if(!currentMotion)throw new Error('Selecciona primero una animación.');
+        motionPlaying=Boolean(playing);
+        if(motionPlaying&&activeAction&&!activeAction.isRunning())
+          activeAction.reset().play();
+        return motionPlaying;
+      },
+      setMotionSpeed(value){
+        if(!Number.isFinite(value)||value<.25||value>2)
+          throw new Error('La velocidad debe estar entre 0,25 y 2.');
+        motionSpeed=value;
+      },
+      updateMotion(delta){
+        if(currentMotion&&motionPlaying&&Number.isFinite(delta)&&delta>0){
+          motionMixer.update(Math.min(delta,.12)*motionSpeed);
+          boneRoot.updateMatrixWorld(true);
+          skeleton.update();
+        }
+        return activeAction?.time||0;
+      },
+      seekMotion(time){
+        if(!currentMotion)throw new Error('Primero selecciona una animación.');
+        if(!Number.isFinite(time)||time<0)throw new Error('Tiempo inválido.');
+        motionPlaying=false;
+        if(activeAction&&!activeAction.isRunning())
+          activeAction.reset().play();
+        const t=Math.min(time,Math.max(0,currentMotion.duration-1e-6));
+        motionMixer.setTime(t);
+        boneRoot.updateMatrixWorld(true);skeleton.update();
+        return activeAction?.time||0;
+      },
+      stopMotion(){
+        motionPlaying=false;
+        motionMixer.stopAllAction();
+        for(const bone of nodeMap.values())bone.quaternion.identity();
+        boneRoot.updateMatrixWorld(true);skeleton.update();
+      },
       setWeightHeatmap(boneName=null){
         if(boneName===null||boneName===''){
           for(const mesh of riggedMeshes){
@@ -210,12 +274,16 @@ export async function createNativeSkinPreview(viewer,markers,{
         if(!['X','Y','Z'].includes(axis)||!Number.isFinite(angleDegrees)||
             Math.abs(angleDegrees)>90)
           throw new Error('Rotación de prueba inválida.');
+        motionPlaying=false;
+        motionMixer.stopAllAction();
         for(const bone of nodeMap.values())bone.rotation.set(0,0,0);
         nodeMap.get(name).rotation[axis.toLowerCase()]=THREE.MathUtils.degToRad(angleDegrees);
         boneRoot.updateMatrixWorld(true);
         skeleton.update();
       },
       resetPose(){
+        motionPlaying=false;
+        motionMixer.stopAllAction();
         for(const bone of nodeMap.values())bone.rotation.set(0,0,0);
         boneRoot.updateMatrixWorld(true);
         skeleton.update();
