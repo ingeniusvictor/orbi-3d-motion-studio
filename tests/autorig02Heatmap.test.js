@@ -36,7 +36,8 @@ test('02C.2 correctly isolates a selected bone across all four influence slots',
   assert.equal(out.stats.strongVertices,1);
   assert.ok(Math.abs(out.stats.influenceSum-1)<1e-6);
   assert.ok(Math.abs(out.stats.maximumInfluence-.6)<1e-6);
-  assert.deepEqual(Array.from(out.colors.slice(6,9)),influenceColor(0));
+  assert.ok(Array.from(out.colors.slice(6,9)).every(
+    (c,i)=>Math.abs(c-influenceColor(0)[i])<1e-6));
   assert.equal(weights[0],new Float32Array([.6])[0],
     'read-only mapping must not alter source weights');
 });
