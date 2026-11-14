@@ -118,9 +118,12 @@ export default function AutoRigLab({model,getViewer}){
         <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:6}}>
           {['X','Y','Z'].map((axis,index)=><label key={axis} style={{color:'#9eb8c7',fontSize:10}}>
             {axis} (m)
-            <input type="number" step="any" style={{...field,padding:6,marginTop:3,fontSize:11}}
-              value={markers?.[selected]?.[index]??''}
-              onChange={e=>{
+            <input type="number" step="any"
+              key={selected+'-'+axis+'-'+(markers?.[selected]?.[index]??'')}
+              style={{...field,padding:6,marginTop:3,fontSize:11}}
+              defaultValue={markers?.[selected]?.[index]??''}
+              onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur();}}
+              onBlur={e=>{
                 const value=Number(e.target.value);
                 if(e.target.value.trim()===''||!Number.isFinite(value))return;
                 const point=[...(editorRef.current?.getMarkers()[selected]||[0,0,0])];
