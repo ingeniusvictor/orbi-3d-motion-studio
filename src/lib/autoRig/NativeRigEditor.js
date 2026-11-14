@@ -311,6 +311,11 @@ export class NativeRigEditor{
     this.lineGeometry.attributes.position.needsUpdate=true;
     this.lineGeometry.computeBoundingSphere();
   }
+  setEditingPaused(paused){
+    this.root.visible=!paused;
+    this.helper.visible=!paused;
+    this.transform.enabled=!paused;
+  }
   emit(){this.onMarkers(this.getMarkers());}
   dispose(){
     if(this.disposed)return;
