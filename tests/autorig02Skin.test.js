@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import {initialMarkers,skeletonDraft} from '../src/lib/autoRig/nativeRig.js';
+import {initialMarkers,skeletonDraft,validateMarkers} from '../src/lib/autoRig/nativeRig.js';
 import {computeSkinWeights,validateWeightBuffers,prepareBoneSegments} from '../src/lib/autoRig/nativeSkinWeights.js';
 import {buildBoneSkeleton,collectStaticMeshes} from '../src/lib/autoRig/nativeSkinPreview.js';
 
@@ -27,6 +27,13 @@ test('02C computes max-four finite normalized influences on a realistic skeleton
     assert.ok(Math.abs([...w].reduce((a,b)=>a+b,0)-1)<1e-5);
     assert.ok([...w].every(x=>x>=0&&Number.isFinite(x)));
   }
+});
+
+test('02C warns about default planar joint depths without blocking the skeleton',()=>{
+  const m=initialMarkers(bounds);
+  const result=validateMarkers(m);
+  assert.equal(result.ok,true);
+  assert.ok(result.warnings.some(w=>w.includes('profundidad Z')));
 });
 
 test('02C favors anatomically nearby arm and leg chains',()=>{
