@@ -42,6 +42,20 @@ Se utiliza el mismo visor Three.js de ORBI (sin WebGL adicional), con 22 marcado
 - Asegurar que original y versiones LUMIA V6/V7/V8 mantienen idénticos bytes.
 - Ejecutar `npm test` y `npm run build`.
 
+## AUTORIG-02A.1 — colocación segura por vistas y ejes
+
+Corrección de UX motivada por la prueba humana del editor: los giros accidentales de cámara y los cambios inadvertidos de profundidad volvían muy difícil volver a ubicar una articulación.
+
+- **Al activar el editor** se centra la vista **frontal** y se **bloquea la cámara**. Girar accidentalmente el mouse ya no orbita la escena. Se permite liberar la cámara explícitamente.
+- **Vistas fijas:** frente, espalda, izquierda, derecha y superior. Cada botón reorienta únicamente cámara y controles (nunca modifica el personaje) y activa el plano de trabajo compatible: XY, YZ o XZ.
+- **Bloqueo XYZ:** modos XY, YZ, XZ, X, Y, Z y XYZ avanzado. El manipulador y el cálculo final del desplazamiento respetan las coordenadas congeladas; los campos numéricos de esos ejes se desactivan.
+- **Mayús + clic:** proyección sobre un **plano que pasa por el punto seleccionado**, no sobre la superficie externa de ropa/cabello. Así, cuando se trabaja en XY desde frente, la profundidad Z del punto permanece constante. En perfil permite corregir Z trabajando con YZ.
+- **Recuperación inmediata:** Deshacer y Rehacer, Ctrl+Z / Ctrl+Y (fuera de campos de texto), restaurar solo el punto seleccionado, o restaurar los 22 puntos. Los movimientos completos con TransformControls cuentan como una acción.
+- **Limpieza:** al abandonar el editor se restaura la posición y la orientación de cámara originales, además del estado anterior de OrbitControls.
+- **Sin skinning:** todos los huesos siguen siendo guías temporales de un esqueleto preliminar; JSON es un borrador, no avatar de producción.
+
+Prueba recomendada: cargar LUMIA 50K GLB en T-Pose, elegir **Frente** + **XY** y colocar hombro/codo/muñeca sin que Z cambie. Seleccionar **Derecha** + **YZ** para ajustar profundidad. Deshacer/rehacer y restaurar punto; cerrar editor y confirmar que la cámara vuelve a su posición anterior.
+
 ## Etapas siguientes (NO realizadas)
 
 **AUTORIG-02C:** motor nativo de pesos (inicial geométrico, después topológico), máximo 4 influencias, conservación de geometría y shape keys, pincel de corrección, auditoría de cobertura.
