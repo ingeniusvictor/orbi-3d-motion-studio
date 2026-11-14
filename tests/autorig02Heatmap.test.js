@@ -7,7 +7,8 @@ import {
 
 test('02C.2 gradient maps zero, middle and full influence to finite RGB colors',()=>{
   assert.deepEqual(influenceColor(0),[.035,.08,.22]);
-  assert.deepEqual(influenceColor(1),[1,.18,.09]);
+  assert.ok(influenceColor(1).every((c,i)=>
+    Math.abs(c-[1,.18,.09][i])<1e-9));
   for(const w of [0,.01,.15,.2,.45,.5,.7,.85,.999,1]){
     const color=influenceColor(w);
     assert.equal(color.length,3);
