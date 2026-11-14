@@ -53,10 +53,10 @@ test('editor disables camera by default and restores original state on disposal'
   const s=readFileSync(new URL('../src/lib/autoRig/NativeRigEditor.js',import.meta.url),'utf8');
   assert.match(s,/this\.cameraLock=true/);
   assert.match(s,/this\.setView\('front'\)/);
-  assert.match(s,/controls\\.enableRotate=locked\\?false:original\\.enableRotate/);
-  assert.match(s,/controls\\.enablePan=locked\\?false:original\\.enablePan/);
-  assert.match(s,/controls\\.enableZoom=original\\.enableZoom/);
-  assert.match(s,/viewer\\.controls\\.enableRotate=snap\\.enableRotate/);
+  assert.match(s,/controls\.enableRotate=locked\?false:original\.enableRotate/);
+  assert.match(s,/controls\.enablePan=locked\?false:original\.enablePan/);
+  assert.match(s,/controls\.enableZoom=original\.enableZoom/);
+  assert.match(s,/viewer\.controls\.enableRotate=snap\.enableRotate/);
   assert.match(s,/viewer\.controls\.enabled=snap\.enabled/);
   assert.match(s,/viewer\.controls\.target\.copy\(snap\.target\)/);
   assert.match(s,/constrainMarkerPosition\(/);
