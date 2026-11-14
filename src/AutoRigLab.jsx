@@ -174,6 +174,11 @@ export default function AutoRigLab({model,getViewer}){
       setNotice('Rig experimental listo: LUMIA está reproduciendo una marcha completa de diagnóstico.');
     }catch(e){
       if(!controller.signal.aborted){
+        if(editorRef.current===editor&&skinRef.current){
+          skinRef.current.dispose();
+          skinRef.current=null;
+          editor.setEditingPaused(false);
+        }
         setError('No se generó la vista de skinning: '+(e.message||String(e)));
         setSkin({status:'idle',progress:null,audits:null,vertices:0});
       }
