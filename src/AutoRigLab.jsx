@@ -32,6 +32,8 @@ export default function AutoRigLab({model,getViewer}){
   const [preview,setPreview]=useState(false);
   const [skin,setSkin]=useState({status:'idle',progress:null,audits:null,vertices:0});
   const [pose,setPose]=useState({joint:'leftLowerArm',axis:'Z',angle:0});
+  const [heatmapBone,setHeatmapBone]=useState('');
+  const [heatmapStats,setHeatmapStats]=useState(null);
   const [viewState,setViewState]=useState({view:'front',axes:'XY',cameraLocked:true});
   const [history,setHistory]=useState({canUndo:false,canRedo:false,undoCount:0,redoCount:0});
   const [notice,setNotice]=useState('');
@@ -51,6 +53,7 @@ export default function AutoRigLab({model,getViewer}){
             skinRef.current?.dispose();skinRef.current=null;
             editorRef.current?.setEditingPaused(false);
             setSkin({status:'idle',progress:null,audits:null,vertices:0});
+            setHeatmapBone('');setHeatmapStats(null);
           }
         },
         onSelect: name =>setSelected(name),
@@ -113,6 +116,7 @@ export default function AutoRigLab({model,getViewer}){
     skinRef.current=null;
     editorRef.current?.setEditingPaused(false);
     setSkin({status:'idle',progress:null,audits:null,vertices:0});
+    setHeatmapBone('');setHeatmapStats(null);
     setPose({joint:'leftLowerArm',axis:'Z',angle:0});
     setNotice('Vista experimental cerrada. Modelo y marcadores originales restaurados.');
   };
@@ -124,6 +128,7 @@ export default function AutoRigLab({model,getViewer}){
     skinAbortRef.current=controller;
     setError('');
     setSkin({status:'working',progress:null,audits:null,vertices:0});
+    setHeatmapBone('');setHeatmapStats(null);
     setNotice('Calculando influencias por vértice en CPU local, sin Blender.');
     try{
       const pilot=await createNativeSkinPreview(viewer,editor.getMarkers(),{
@@ -156,6 +161,14 @@ export default function AutoRigLab({model,getViewer}){
     setPose(next);
     try{skinRef.current?.setJointAngle(next.joint,next.axis,next.angle);}
     catch(e){setError(e.message||String(e));}
+  };
+  const changeHeatmap=boneName=>{
+    try{
+      const result=skinRef.current?.setWeightHeatmap(boneName||null)??null;
+      setHeatmapBone(boneName);
+      setHeatmapStats(result);
+      setError('');
+    }catch(e){setError('No se pudo visualizar pesos: '+(e.message||String(e)));}
   };
   const exportDraft=()=>{
     try{
@@ -318,6 +331,39 @@ export default function AutoRigLab({model,getViewer}){
             <div style={{color:'#a8d8d0',fontSize:11}}>
               {skin.vertices.toLocaleString('es-CL')} vértices · {skin.audits.length} mallas
               · pesos normalizados (máximo 4 influencias).
+            </div>
+            <div style={{display:'grid',gap:7,padding:9,
+              border:'1px solid #345365',borderRadius:8}}>
+              <strong style={{fontSize:12,color:'#b2ebeb'}}>
+                AUTORIG-02C.2 · Mapa de pesos por hueso
+              </strong>
+              <label style={{fontSize:11,color:'#d7eced'}}>Visualizar influencia
+                <select value={heatmapBone} style={{...field,marginTop:4}}
+                  onChange={e=>changeHeatmap(e.target.value)}>
+                  <option value="">Apariencia original (sin mapa)</option>
+                  {skinRef.current?.bones.map(name=>
+                    <option key={name} value={name}>{name}</option>)}
+                </select>
+              </label>
+              {!!heatmapBone&&<div style={{display:'grid',gap:5}}>
+                <div style={{height:9,borderRadius:4,
+                  background:'linear-gradient(to right, #091438, #0a52d6, #05d6b8, #facb1f, #ff2e17)'}}/>
+                <div style={{display:'flex',justifyContent:'space-between',
+                  fontSize:10,color:'#acc1ca'}}>
+                  <span>0 % (azul)</span><span>50 %</span><span>100 % (rojo)</span>
+                </div>
+                {heatmapStats&&<div style={{fontSize:11,color:'#b9d9d8',lineHeight:1.6}}>
+                  Influencia detectada en {heatmapStats.influencedVertices.toLocaleString('es-CL')}
+                  {' / '}{heatmapStats.vertices.toLocaleString('es-CL')} vértices.
+                  {' '}{heatmapStats.strongVertices.toLocaleString('es-CL')}
+                  {' '}tienen influencia igual o superior al 50 %.
+                </div>}
+                <small style={{color:'#e7c995',fontSize:10,lineHeight:1.5}}>
+                  Los colores solo indican pesos numéricos. Una zona roja no
+                  garantiza una deformación correcta; revisa también rostro,
+                  ropa, hombros y articulaciones desde varios ángulos.
+                </small>
+              </div>}
             </div>
             <label style={{fontSize:11,color:'#d7eced'}}>Articulación
               <select style={{...field,marginTop:4}} value={pose.joint}
