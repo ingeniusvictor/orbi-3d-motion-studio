@@ -3,6 +3,8 @@ import {Bone,CheckCircle2,Download,ShieldAlert,ShieldCheck,MousePointer2} from '
 import {autoRigEligibility} from './lib/autoRig/eligibility.js';
 import {NativeRigEditor} from './lib/autoRig/NativeRigEditor.js';
 import {createNativeSkinPreview} from './lib/autoRig/nativeSkinPreview.js';
+import {createOrbiMotionSamples} from './lib/autoRig/fullBodyMotion.js';
+import {loadAndRetargetMixamo} from './lib/autoRig/loadMixamoMotion.js';
 import {LANDMARK_NAMES,validateMarkers,exportRigDraft,importRigDraft} from './lib/autoRig/nativeRig.js';
 
 const PREPARE='.\\tools\\autorig01_windows.ps1 -Step prepare';
@@ -25,6 +27,8 @@ export default function AutoRigLab({model,getViewer}){
   const fileRef=useRef(null);
   const skinRef=useRef(null);
   const skinAbortRef=useRef(null);
+  const motionFileRef=useRef(null);
+  const motionClipsRef=useRef([]);
   const [editing,setEditing]=useState(false);
   const [selected,setSelected]=useState('pelvis');
   const [markers,setMarkers]=useState(null);
@@ -34,6 +38,10 @@ export default function AutoRigLab({model,getViewer}){
   const [pose,setPose]=useState({joint:'leftLowerArm',axis:'Z',angle:0});
   const [heatmapBone,setHeatmapBone]=useState('');
   const [heatmapStats,setHeatmapStats]=useState(null);
+  const [motionOptions,setMotionOptions]=useState([]);
+  const [motion,setMotion]=useState({
+    selected:'',playing:false,speed:1,time:0,duration:0,importing:false,warning:'',
+  });
   const [viewState,setViewState]=useState({view:'front',axes:'XY',cameraLocked:true});
   const [history,setHistory]=useState({canUndo:false,canRedo:false,undoCount:0,redoCount:0});
   const [notice,setNotice]=useState('');
@@ -54,6 +62,9 @@ export default function AutoRigLab({model,getViewer}){
             editorRef.current?.setEditingPaused(false);
             setSkin({status:'idle',progress:null,audits:null,vertices:0});
             setHeatmapBone('');setHeatmapStats(null);
+            motionClipsRef.current=[];setMotionOptions([]);
+            setMotion({selected:'',playing:false,speed:1,time:0,duration:0,
+              importing:false,warning:''});
           }
         },
         onSelect: name =>setSelected(name),
@@ -117,6 +128,9 @@ export default function AutoRigLab({model,getViewer}){
     editorRef.current?.setEditingPaused(false);
     setSkin({status:'idle',progress:null,audits:null,vertices:0});
     setHeatmapBone('');setHeatmapStats(null);
+    motionClipsRef.current=[];setMotionOptions([]);
+    setMotion({selected:'',playing:false,speed:1,time:0,duration:0,
+      importing:false,warning:''});
     setPose({joint:'leftLowerArm',axis:'Z',angle:0});
     setNotice('Vista experimental cerrada. Modelo y marcadores originales restaurados.');
   };
@@ -129,6 +143,7 @@ export default function AutoRigLab({model,getViewer}){
     setError('');
     setSkin({status:'working',progress:null,audits:null,vertices:0});
     setHeatmapBone('');setHeatmapStats(null);
+    motionClipsRef.current=[];setMotionOptions([]);
     setNotice('Calculando influencias por vértice en CPU local, sin Blender.');
     try{
       const pilot=await createNativeSkinPreview(viewer,editor.getMarkers(),{
@@ -144,9 +159,19 @@ export default function AutoRigLab({model,getViewer}){
       skinRef.current=pilot;
       editor.setEditingPaused(true);
       setPose({joint:'leftLowerArm',axis:'Z',angle:0});
+      const demos=createOrbiMotionSamples().map((clip,i)=>({
+        id:'orbi-'+i,kind:'demo',label:clip.name,clip,
+        warning:'Animación original de diagnóstico ORBI, no un clip descargado de Mixamo.',
+      }));
+      motionClipsRef.current=demos;
+      setMotionOptions(demos.map(({id,label})=>({id,label})));
+      const first=pilot.loadMotion(demos[0].clip);
+      pilot.setMotionPlaying(true);
+      setMotion({selected:demos[0].id,playing:true,speed:1,time:0,
+        duration:first.duration,importing:false,warning:demos[0].warning});
       setSkin({status:'ready',progress:null,audits:pilot.audits,
         vertices:pilot.vertexCount});
-      setNotice('Vista de skinning experimental preparada. Dobla una articulación y revisa deformaciones.');
+      setNotice('Rig experimental listo: LUMIA está reproduciendo una marcha completa de diagnóstico.');
     }catch(e){
       if(!controller.signal.aborted){
         setError('No se generó la vista de skinning: '+(e.message||String(e)));
@@ -159,9 +184,95 @@ export default function AutoRigLab({model,getViewer}){
   const updatePose=(field,value)=>{
     const next={...pose,[field]:field==='angle'?Number(value):value};
     setPose(next);
-    try{skinRef.current?.setJointAngle(next.joint,next.axis,next.angle);}
+    try{
+      skinRef.current?.setJointAngle(next.joint,next.axis,next.angle);
+      setMotion(m=>({...m,playing:false}));
+    }catch(e){setError(e.message||String(e));}
+  };
+  const selectFullBodyMotion=id=>{
+    const pilot=skinRef.current,chosen=motionClipsRef.current.find(x=>x.id===id);
+    if(!pilot||!chosen)return;
+    try{
+      const info=pilot.loadMotion(chosen.clip);
+      pilot.setMotionSpeed(motion.speed);
+      pilot.setMotionPlaying(true);
+      setMotion(m=>({...m,selected:id,playing:true,time:0,
+        duration:info.duration,warning:chosen.warning}));
+      setError('');
+    }catch(e){setError('Animación no compatible: '+(e.message||String(e)));}
+  };
+  const toggleMotion=()=>{
+    try{
+      const playing=!motion.playing;
+      skinRef.current?.setMotionPlaying(playing);
+      setMotion(m=>({...m,playing}));
+    }catch(e){setError(e.message||String(e));}
+  };
+  const changeMotionSpeed=value=>{
+    const speed=Number(value);
+    try{skinRef.current?.setMotionSpeed(speed);
+      setMotion(m=>({...m,speed}));}
     catch(e){setError(e.message||String(e));}
   };
+  const seekMotion=value=>{
+    try{
+      const time=skinRef.current?.seekMotion(Number(value))??0;
+      setMotion(m=>({...m,time,playing:false}));
+    }catch(e){setError(e.message||String(e));}
+  };
+  const importMixamo=async file=>{
+    if(!file||!skinRef.current)return;
+    const pilot=skinRef.current;
+    setMotion(m=>({...m,importing:true}));setError('');
+    try{
+      const result=await loadAndRetargetMixamo(file);
+      if(pilot!==skinRef.current)return;
+      const imported=result.compatible.map((item,i)=>({
+        id:'mixamo-'+i,kind:'imported',
+        label:'Mixamo / '+result.filename+' / '+item.clip.name,
+        clip:item.clip,warning:item.warning,
+      }));
+      motionClipsRef.current=[
+        ...motionClipsRef.current.filter(item=>item.kind==='demo'),
+        ...imported,
+      ];
+      setMotionOptions(motionClipsRef.current.map(({id,label})=>({id,label})));
+      const first=imported[0];
+      const info=pilot.loadMotion(first.clip);
+      pilot.setMotionSpeed(motion.speed);
+      pilot.setMotionPlaying(true);
+      setMotion(m=>({...m,selected:first.id,playing:true,time:0,
+        duration:info.duration,warning:first.warning,importing:false}));
+      setNotice(result.compatible.length+' animación(es) Mixamo adaptada(s). '+
+        (result.skipped.length?result.skipped.length+' descartada(s). ':'')+
+        'Verifica cuerpo completo, ropa, articulaciones y perfil.');
+    }catch(e){
+      if(pilot===skinRef.current){
+        setError('No se pudo importar Mixamo: '+(e.message||String(e)));
+        setMotion(m=>({...m,importing:false}));
+      }
+    }
+  };
+  useEffect(()=>{
+    if(skin.status!=='ready')return;
+    let raf=0,last=0,lastUi=0,active=true;
+    const loop=now=>{
+      if(!active)return;
+      const delta=last?Math.min((now-last)/1000,.12):0;
+      last=now;
+      const pilot=skinRef.current;
+      if(pilot){
+        const time=pilot.updateMotion(delta);
+        if(now-lastUi>180){
+          setMotion(m=>m.playing?({...m,time}):m);
+          lastUi=now;
+        }
+      }
+      raf=requestAnimationFrame(loop);
+    };
+    raf=requestAnimationFrame(loop);
+    return ()=>{active=false;cancelAnimationFrame(raf);};
+  },[skin.status]);
   const changeHeatmap=boneName=>{
     try{
       const result=skinRef.current?.setWeightHeatmap(boneName||null)??null;
@@ -332,6 +443,64 @@ export default function AutoRigLab({model,getViewer}){
               {skin.vertices.toLocaleString('es-CL')} vértices · {skin.audits.length} mallas
               · pesos normalizados (máximo 4 influencias).
             </div>
+            <div style={{display:'grid',gap:8,padding:10,
+              border:'1px solid #466763',borderRadius:9}}>
+              <strong style={{color:'#c7eee8',fontSize:12}}>
+                AUTORIG-02C.3 · Animación corporal completa (Mixamo / ORBI)
+              </strong>
+              <small style={{color:'#b0cbd4',lineHeight:1.55}}>
+                Reproduce todos los huesos simultáneamente. La marcha, sentadilla
+                y saludo incluidos son animaciones ORIGINALES de diagnóstico ORBI.
+                También puedes cargar tu propio FBX descargado de Mixamo.
+              </small>
+              <label style={{fontSize:11,color:'#d7eced'}}>Movimiento de prueba
+                <select value={motion.selected} style={{...field,marginTop:5}}
+                  onChange={e=>selectFullBodyMotion(e.target.value)}>
+                  {motionOptions.map(({id,label})=>
+                    <option key={id} value={id}>{label}</option>)}
+                </select>
+              </label>
+              <button type="button" className="outline-btn" style={btn}
+                disabled={motion.importing}
+                onClick={()=>motionFileRef.current?.click()}>
+                {motion.importing?'Importando animación…':
+                  'Importar animación Mixamo (.fbx o .glb)'}
+              </button>
+              <input type="file" ref={motionFileRef} hidden accept=".fbx,.glb"
+                onChange={e=>{importMixamo(e.target.files?.[0]);e.target.value='';}}/>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+                <button type="button" className="outline-btn" style={btn}
+                  onClick={toggleMotion}>
+                  {motion.playing?'⏸ Pausar animación':'▶ Reproducir animación'}
+                </button>
+                <button type="button" className="outline-btn" style={btn}
+                  onClick={()=>seekMotion(0)}>↶ Volver al inicio</button>
+              </div>
+              <label style={{fontSize:11,color:'#d7eced'}}>
+                Línea de tiempo: {motion.time.toFixed(2)} /
+                {' '}{motion.duration.toFixed(2)} s
+                <input type="range" min="0" max={motion.duration||1}
+                  step=".02" value={Math.min(motion.time,motion.duration||1)}
+                  onChange={e=>seekMotion(e.target.value)}
+                  style={{width:'100%',marginTop:7}}/>
+              </label>
+              <label style={{fontSize:11,color:'#d7eced'}}>Velocidad
+                <select style={{...field,marginTop:4}} value={motion.speed}
+                  onChange={e=>changeMotionSpeed(e.target.value)}>
+                  {[.25,.5,.75,1,1.25,1.5,2].map(speed=>
+                    <option key={speed} value={speed}>{speed}×</option>)}
+                </select>
+              </label>
+              {!!motion.warning&&<small style={{color:'#f1c98c',lineHeight:1.5}}>
+                {motion.warning}
+              </small>}
+              <small style={{color:'#aecbd2',lineHeight:1.5}}>
+                Mientras el clip se reproduce, observa en movimiento hombros,
+                codos, caderas, rodillas, tobillos, rostro y ropa.
+                Las animaciones Mixamo se adaptan de forma aproximada y sin
+                desplazamiento de raíz. No es una exportación final.
+              </small>
+            </div>
             <div style={{display:'grid',gap:7,padding:9,
               border:'1px solid #345365',borderRadius:8}}>
               <strong style={{fontSize:12,color:'#b2ebeb'}}>
@@ -392,6 +561,7 @@ export default function AutoRigLab({model,getViewer}){
             </div>
             <button type="button" className="outline-btn" style={btn}
               onClick={()=>{skinRef.current?.resetPose();
+                setMotion(m=>({...m,playing:false,time:0}));
                 setPose(p=>({...p,angle:0}));}}>
               Restablecer T-Pose
             </button>
