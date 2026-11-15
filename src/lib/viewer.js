@@ -26,6 +26,7 @@ import { extensionOf, formatBytes, inspectRigCompatibility, uniqueClipName, summ
 import {loadCompatibleModel} from './loadCompatibleModel.js';
 import {choosePrimaryModel,VIEWABLE_EXTENSIONS,explainImportError} from './viewerCompatibility.js';
 import {prepareStaticRigPreview,describeViewerRenderableState} from './staticRigPreview.js';
+import {rendererPreset} from './viewerGraphicSafety.js';
 
 const EMPTY_INFO = { meshes: 0, vertices: 0, triangles: 0, materials: 0, bones: 0, animations: 0, nodes: 0, textures: 0, hierarchy: [] };
 
@@ -115,9 +116,16 @@ async function loadObject(files, { animationSource = false, renderer = null } = 
 }
 
 export class MotionViewer {
-  constructor(mount, notify = () => {}) {
+  constructor(mount, notify = () => {},{
+    safeMode=false,onGraphicsStatus=()=>{},
+  }={}) {
     this.mount = mount;
     this.notify = notify;
+    this.safeMode=Boolean(safeMode);
+    this.onGraphicsStatus=onGraphicsStatus;
+    this.graphicsState='ready';
+    this.lastGraphicsError=null;
+    this.contextLossCount=0;
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color('#0b1220');
     // Fixed-distance fog made centimeter-scale FBX models vanish entirely.
@@ -125,8 +133,42 @@ export class MotionViewer {
     this.scene.fog = null;
     this.camera = new THREE.PerspectiveCamera(38, 1, 0.01, 2000);
     this.camera.position.set(3,2.5,5);
-    this.renderer = new THREE.WebGLRenderer({antialias:true, alpha:false, powerPreference:'high-performance'});
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+    // Recovery mode changes only renderer settings. Do not simplify, rebake
+    // or overwrite the artistic GLB/FBX: original materials and morphs remain.
+    const preset=rendererPreset({
+      safeMode:this.safeMode,
+      devicePixelRatio:typeof devicePixelRatio==='number'?devicePixelRatio:1,
+    });
+    this.renderer = new THREE.WebGLRenderer(preset.options);
+    this.renderer.setPixelRatio(preset.pixelRatio);
+    this.canvas=this.renderer.domElement;
+    this.handleContextLost=event=>{
+      event.preventDefault(); // Browser may restore this context.
+      if(this.disposed||this.graphicsState==='lost')return;
+      this.contextLossCount++;
+      this.graphicsState='lost';
+      this.playing=false;
+      cancelAnimationFrame(this.raf);
+      this.onGraphicsStatus({
+        type:'lost',safeMode:this.safeMode,
+        message:'Chrome perdió el contexto WebGL. El visor se puede reiniciar sin recargar la página.',
+        diagnostics:this.getGraphicsDiagnostics(),
+      });
+    };
+    this.handleContextRestored=()=>{
+      if(this.disposed)return;
+      this.graphicsState='ready';
+      this.lastGraphicsError=null;
+      this.clock?.getDelta();
+      this.onGraphicsStatus({
+        type:'restored',safeMode:this.safeMode,
+        message:'Chrome restauró WebGL. Se reanudó el renderizado.',
+        diagnostics:this.getGraphicsDiagnostics(),
+      });
+      this.animate();
+    };
+    this.canvas.addEventListener('webglcontextlost',this.handleContextLost,false);
+    this.canvas.addEventListener('webglcontextrestored',this.handleContextRestored,false);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.4;
@@ -178,8 +220,9 @@ export class MotionViewer {
     this.resizeObserver.observe(mount);
     this.resize();
     this.animate = () => {
-      if (this.disposed) return;
+      if (this.disposed||this.graphicsState!=='ready') return;
       this.raf = requestAnimationFrame(this.animate);
+      try{
       const delta = Math.min(this.clock.getDelta(),0.1);
       // Ownership order: remove prior overlay → FBX mixer → masked procedural
       // deltas → VRM constraints/expressions/springbones → render.
@@ -211,10 +254,37 @@ export class MotionViewer {
       this.followFaceCamera();
       this.controls.update();
       this.renderer.render(this.scene,this.camera);
+      }catch(error){
+        cancelAnimationFrame(this.raf);
+        if(this.disposed||this.graphicsState!=='ready')return;
+        this.graphicsState='render-error';
+        this.lastGraphicsError=error?.message||String(error);
+        this.onGraphicsStatus({
+          type:'render-error',safeMode:this.safeMode,
+          message:'Falló el renderizado WebGL: '+this.lastGraphicsError,
+          diagnostics:this.getGraphicsDiagnostics(),
+        });
+      }
     };
     this.animate();
   }
+  getGraphicsDiagnostics(){
+    const r=this.renderer;
+    return {
+      type:this.graphicsState,safeMode:this.safeMode,
+      contextLossCount:this.contextLossCount,
+      lastError:this.lastGraphicsError,
+      pixelRatio:r?.getPixelRatio?.()||null,
+      textures:r?.info?.memory?.textures??null,
+      geometries:r?.info?.memory?.geometries??null,
+      maxTextureSize:r?.capabilities?.maxTextureSize??null,
+      modelLoaded:Boolean(this.model),
+      animationCount:this.clips?.length||0,
+      file:this.lastFilename||null,
+    };
+  }
   resize() {
+    if(this.disposed||this.graphicsState==='lost')return;
     const width = Math.max(this.mount.clientWidth,1), height = Math.max(this.mount.clientHeight,1);
     this.camera.aspect = width/height;
     this.camera.updateProjectionMatrix();
@@ -387,6 +457,8 @@ export class MotionViewer {
     stage('Leyendo y decodificando modelo 3D…');
     const loaded = await loadObject(files,{renderer:this.renderer});
     if (this.disposed || request !== this.loadSequence) return null;
+    if(this.graphicsState!=='ready')
+      throw new Error('WebGL dejó de funcionar durante la carga. Utiliza «Recuperar visor» en modo seguro.');
     stage('Preparando huesos, materiales y expresiones…');
     // Allow React/Chrome to paint the new loading stage before any expensive
     // synchronous initialization. A synchronous stall remains diagnosable.
@@ -436,6 +508,8 @@ export class MotionViewer {
     this.setWireframe(this.wireframe);
     stage('Verificando geometría y esqueleto…');
     const info = inspect(this.model,this.clips);
+    if(this.graphicsState!=='ready')
+      throw new Error('WebGL perdió el contexto al visualizar el modelo. Reinicia el visor en modo seguro.');
     this.notify();
     return {...info,filename:loaded.name,bytes:loaded.bytes,format:loaded.format,
       staticModel:loaded.staticModel,diagnostics:this.lastImportDiagnostics};
@@ -1120,13 +1194,22 @@ export class MotionViewer {
     });
   }
   dispose() {
+    if(this.disposed)return;
     this.disposed=true;
     this.loadSequence +=1;
     cancelAnimationFrame(this.raf);
-    this.resizeObserver.disconnect();
-    this.clearModel();
-    this.controls.dispose();
-    this.renderer.dispose();
-    this.renderer.domElement.remove();
+    this.resizeObserver?.disconnect();
+    this.canvas?.removeEventListener('webglcontextlost',this.handleContextLost,false);
+    this.canvas?.removeEventListener('webglcontextrestored',this.handleContextRestored,false);
+    // Context loss can leave WebGL disposal calls unusable. Always remove
+    // the canvas and release UI controls even if GPU cleanup throws.
+    try{this.clearModel();}
+    finally{
+      try{this.controls?.dispose();}
+      finally{
+        try{this.renderer?.dispose();}
+        finally{this.canvas?.remove();}
+      }
+    }
   }
 }

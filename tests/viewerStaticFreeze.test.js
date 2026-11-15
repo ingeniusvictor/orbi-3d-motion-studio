@@ -91,7 +91,8 @@ test('STATIC-FREEZE-02 shows load phase and yields before heavy initialization',
   const app=readFileSync(new URL('../src/App.jsx',import.meta.url),'utf8');
   const viewer=readFileSync(new URL('../src/lib/viewer.js',import.meta.url),'utf8');
   for(const snippet of [
-    "onProgress:message=>setBusy(message)",
+    "onProgress:message=>{",
+    "setBusy(message)",
   ]) assert.ok(app.includes(snippet),snippet);
   for(const snippet of [
     "stage('Leyendo y decodificando modelo 3D",
