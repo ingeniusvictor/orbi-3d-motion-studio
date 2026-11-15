@@ -1,4 +1,4 @@
-export const SUPPORTED_EXTENSIONS = new Set(['glb', 'gltf', 'fbx', 'vrm']);
+export const SUPPORTED_EXTENSIONS = new Set(['glb','gltf','fbx','vrm','obj','stl','ply','dae','3ds']);
 export const extensionOf = (name = '') => name.split('.').pop()?.toLowerCase() || '';
 export const isSupportedModel = (name) => SUPPORTED_EXTENSIONS.has(extensionOf(name));
 export const formatBytes = (value) => {
@@ -190,7 +190,7 @@ export const inspectRigCompatibility = (base, imported, clips) => {
 export const summarizeRenderableGeometry = root => {
   let meshes = 0, drawableMeshes = 0, vertices = 0;
   root?.traverse?.(node => {
-    if (!node.isMesh) return;
+    if (!node.isMesh && !node.isPoints) return;
     meshes += 1;
     const count = node.geometry?.getAttribute?.('position')?.count || 0;
     vertices += count;
