@@ -138,3 +138,32 @@
   .viewport-motion-dock.dock-left{left:9px}
   .viewport-motion-dock.dock-right{right:9px}
 }
+
+
+/* VIEWER-03 — WebGL context failure remains actionable outside dead canvas */
+.graphics-main-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.graphics-main-actions .subtle-btn{white-space:nowrap;min-height:36px}
+.graphics-recovery-overlay{
+  position:absolute;inset:0;z-index:9;
+  display:flex;flex-direction:column;justify-content:center;align-items:center;
+  gap:13px;padding:25px;text-align:center;background:#081421f2;
+  color:#f2fafa;
+}
+.graphics-recovery-overlay>svg{color:#ffb9ac}
+.graphics-recovery-overlay strong{font-size:15px}
+.graphics-recovery-overlay p{
+  max-width:450px;line-height:1.65;font-size:12px;color:#b9cad4;margin:0
+}
+.graphics-recovery-overlay .primary-btn{
+  width:auto;max-width:100%;margin-top:6px;
+}
+.graphics-recovery-summary{
+  display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;
+  align-items:center;padding:10px;border-radius:9px;
+  border:1px solid #8b5c58;color:#ffd1c9;background:#35222a;font-size:11px;
+}
+.graphics-recovery-summary .subtle-btn{min-height:30px}
+@media(max-width:700px){
+ .graphics-main-actions{width:100%;justify-content:flex-start}
+ .graphics-recovery-overlay{padding:15px}
+}
