@@ -865,6 +865,18 @@ export class MotionViewer {
     return {name:current.name,duration:output.clip.duration,
       targets:output.targets,changed:output.changed};
   }
+  seekExistingRigAnimation(index,seconds){
+    const clip=this.clips[index]?.clip;
+    if(!clip||!this.mixer||!Number.isFinite(seconds))
+      throw new Error('No se puede recorrer una animación inexistente.');
+    if(this.current!==index)this.play(index);
+    const bounded=Math.max(0,Math.min(seconds,
+      Math.max(0,clip.duration-0.0001)));
+    this.mixer.setTime(bounded);
+    this.playing=false;
+    this.notify();
+    return bounded;
+  }
   getClips() { return this.clips.map(({name,clip,source,modified},index)=>({name,source,index,modified:Boolean(modified),duration:Number(clip.duration.toFixed(2)),tracks:clip.tracks.length})); }
   getInfo() { return this.model ? inspect(this.model,this.clips) : EMPTY_INFO; }
   async addAnimations(files) {
