@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 import {
   prepareStaticRigPreview,describeViewerRenderableState,
 } from '../src/lib/staticRigPreview.js';
-import {computeVisibleCharacterBounds} from '../src/lib/visibleBounds.js';
+import {computeVisibleCharacterBounds,fastStaticGeometryBounds} from '../src/lib/visibleBounds.js';
 
 function staticFixture(){
   const root=new THREE.Group();
@@ -71,6 +71,15 @@ test('STATIC-FREEZE-02 camera sampling skips CPU skinning and morph targets in s
   computeVisibleCharacterBounds(root,{deformed:true,maxSamplesPerMesh:30});
   assert.ok(calls>0);
 });
+test('STATIC-FREEZE-02 static fallback bounding boxes never evaluate CPU skinned vertices',()=>{
+  const {root,mesh}=staticFixture();
+  let calls=0;
+  mesh.getVertexPosition=()=>{calls++;throw Error('Expensive skinning forbidden');};
+  const box=fastStaticGeometryBounds(root);
+  assert.equal(calls,0);
+  assert.equal(box.method,'static-geometry-box-fast');
+  assert.ok(box.box.max.y>=1.79);
+});
 test('STATIC-FREEZE-02 still reports static geometry without synthetic clips',()=>{
   const {root}=staticFixture();
   const status=describeViewerRenderableState(root,[]);
@@ -82,6 +91,7 @@ test('STATIC-FREEZE-02 camera fit defaults to fast path only for zero clips',()=
   const code=readFileSync(new URL('../src/lib/viewer.js',import.meta.url),'utf8');
   assert.match(code,/const staticModel=!this\.clips\?\.length/);
   assert.match(code,/deformed:!staticModel/);
+  assert.match(code,/fastStaticGeometryBounds/);
   assert.match(code,/maxSamplesPerMesh:staticModel\?1600:4800/);
   const staticCode=readFileSync(new URL('../src/lib/staticRigPreview.js',import.meta.url),'utf8');
   assert.doesNotMatch(staticCode,/node\.computeBoundingSphere\s*\(/);
