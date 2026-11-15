@@ -59,7 +59,7 @@ export function adjustHumanoidMotionClip(source,options={}){
   for(let i=0;i<=frames;i++)times[i]=duration*i/frames;
   const hasRole=new Set();
   const tracks=[];
-  const delta=new THREE.Quaternion(),q=new THREE.Quaternion();
+  const delta=new THREE.Quaternion(),q=new THREE.Quaternion(),original=new THREE.Quaternion();
   const space=armSpaceRadians(settings.armSpace);
   const look=THREE.MathUtils.degToRad((settings.look-50)*.5);
   const build=(role,interpolant=null)=>{
@@ -78,8 +78,10 @@ export function adjustHumanoidMotionClip(source,options={}){
         q.set(q.x,-q.y,-q.z,q.w);
       }
       const isUpperArm=mapped==='leftUpperArm'||mapped==='rightUpperArm';
-      if(isUpperArm&&settings.armSwing!==100)
-        q.slerpQuaternions(IDENTITY,q,settings.armSwing/100);
+      if(isUpperArm&&settings.armSwing!==100){
+        original.copy(q);
+        q.slerpQuaternions(IDENTITY,original,settings.armSwing/100);
+      }
       if(isUpperArm&&space!==0){
         const sign=mapped==='leftUpperArm'?-1:1;
         delta.setFromAxisAngle(AXIS_Z,sign*space);
