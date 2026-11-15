@@ -879,6 +879,49 @@ export class MotionViewer {
   }
   getClips() { return this.clips.map(({name,clip,source,modified},index)=>({name,source,index,modified:Boolean(modified),duration:Number(clip.duration.toFixed(2)),tracks:clip.tracks.length})); }
   getInfo() { return this.model ? inspect(this.model,this.clips) : EMPTY_INFO; }
+  // MOTION-06: opt-in conversion into an isolated AnimationClip.
+  // The existing model, bind matrices, weights and earlier clips are never rebound.
+  async addLumiaMixamoRetarget(file,{pivot='anchored',toes='auto'}={}) {
+    if(!this.model||!file)throw new Error('Carga primero LUMIA V06B y un FBX Mixamo.');
+    if(this.vrm)throw new Error('El perfil adulto V06B requiere el GLB maestro, no un VRM.');
+    if(extensionOf(file.name)!=='fbx')throw new Error('Se necesita un archivo FBX animado.');
+    let source=null;
+    try {
+      source=await loadObject([file],{animationSource:true});
+      if(source.clips.length!==1)
+        throw new Error('Selecciona un FBX que contenga exactamente una animación.');
+      const {retargetMixamoToV06B}=await import('./autoRig/mixamoRetargetV06.js');
+      // Compute from the same untouched reference pose captured at load time,
+      // not from whichever animation frame the viewer is currently displaying.
+      const targetAtRest=cloneAtReferencePose(this.model,this.referencePose);
+      const sourceNodes=[],copyNodes=[];
+      this.model.traverse(node=>sourceNodes.push(node));
+      targetAtRest.traverse(node=>copyNodes.push(node));
+      if(sourceNodes.length!==copyNodes.length)
+        throw new Error('La copia del personaje cambió su jerarquía; transferencia bloqueada.');
+      const uuidMap=new Map(copyNodes.map((n,i)=>[n.uuid,sourceNodes[i].uuid]));
+      const {clip,report}=retargetMixamoToV06B({
+        sourceRoot:source.model,sourceClip:source.clips[0],targetRoot:targetAtRest,pivot,toes,
+      });
+      for(const track of clip.tracks){
+        const dot=track.name.lastIndexOf('.');
+        if(dot<0 || !uuidMap.has(track.name.slice(0,dot)))
+          throw new Error('Pista no asociada al esqueleto maestro: '+track.name);
+        track.name=uuidMap.get(track.name.slice(0,dot))+track.name.slice(dot);
+      }
+      if(!clip.tracks.length||!Number.isFinite(clip.duration))
+        throw new Error('La conversión no generó una animación válida.');
+      const name=uniqueClipName(this.clips.map(c=>c.name),
+        file.name.replace(/\.fbx$/i,'')+' [MOTION-06 experimental]');
+      clip.name=name;
+      this.clips.push({name,clip,source:'LUMIA Mixamo retarget experimental',modified:true});
+      this.play(this.clips.length-1);
+      this.notify();
+      return {...report,name};
+    }finally {
+      if(source?.model)VRMUtils.deepDispose(source.model);
+    }
+  }
   async addAnimations(files) {
     if (!this.model) throw new Error('Primero carga el personaje base.');
     // VRM is also rigged: accept FBX only when its raw bone hierarchy matches.
