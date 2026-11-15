@@ -49,7 +49,12 @@ segundo caso entrega `bones` y `clips`, por lo que no falla.
 3. La solución conserva **sin cambios** GLTFLoader, materiales, pesos,
    esqueleto, morphs y todas las animaciones fuente. El panel flotante,
    AUTORIG-02F, MOTION-06 y las demás funciones se mantienen.
-4. Se agrega `tests/viewer04ZeroClipsReact.test.js`: prueba del contrato
+4. Se añade `PanelErrorBoundary` a los editores de animación, rostro,
+   AutoRig y Living Presence. Si cualquiera de esos paneles React falla en
+   el futuro, la aplicación mantiene la interfaz y muestra un error local
+   dentro de ese panel en lugar de desmontar todo el estudio. El modelo,
+   el canvas y la biblioteca de movimientos no se sobrescriben.
+5. Se agrega `tests/viewer04ZeroClipsReact.test.js`: prueba del contrato
    y prueba de renderización SSR del **componente real React** con dock
    cerrado/abierto, estado completo y estado antiguo que omite arrays.
    Esto valida la interacción que faltaba en las regresiones anteriores.
