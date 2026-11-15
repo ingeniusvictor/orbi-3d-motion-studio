@@ -137,13 +137,19 @@ export default function App() {
     }
   },[syncPlayer,onGraphicsStatus]);
   const openFiles = useCallback(async files => {
-    if (!files?.length || !viewer.current) return;
+    const instance=viewer.current;
+    if (!files?.length || !instance) return;
     setBusy('Abriendo modelo…');setNotice(null);setImportResults([]);setAllowVrmExport(false);setFinalFormat('glb');setLightMeshes([]);setLightBoneCount(0);setTextureMaterials([]);setCanUndoTextures(false);setMotionDockOpen(false);
     try {
-      const info = await viewer.current.open(files,{
-        onProgress:message=>setBusy(message),
+      const info = await instance.open(files,{
+        onProgress:message=>{
+          if(viewer.current===instance)setBusy(message);
+        },
       });
-      if (info) { setFaceDockOpen(['VRM','FBX','GLB','GLTF'].includes(info.format));setModel(info);setLightMeshes(viewer.current.getLightMeshes());setLightBoneCount(viewer.current.getLightBoneCount());setTextureMaterials(viewer.current.getTextureMaterials());setModelGeneration(n=>n+1);syncPlayer();const axis=viewer.current.getCharacterOrientationInfo();
+      // A failed WebGL context may be rebuilt while an async loader is
+      // still decoding. Never let stale import callbacks corrupt the new UI.
+      if(viewer.current!==instance)return;
+      if (info) { setFaceDockOpen(['VRM','FBX','GLB','GLTF'].includes(info.format));setModel(info);setLightMeshes(instance.getLightMeshes());setLightBoneCount(instance.getLightBoneCount());setTextureMaterials(instance.getTextureMaterials());setModelGeneration(n=>n+1);syncPlayer();const axis=instance.getCharacterOrientationInfo();
         const note=axis&&axis.angleToWorldY>45?
           ' El eje cabeza-pelvis está inclinado '+axis.angleToWorldY+
           '° respecto al eje Y. Usa «Enderezar vista» para inspeccionarlo; '+
@@ -152,8 +158,11 @@ export default function App() {
           (info.staticModel?' Modelo sin animaciones: se puede visualizar en reposo.':'')+
           (info.diagnostics?.staticPreview?.cullingBypassed?
             ' Vista segura para mallas skinned activada.':'')+note}); }
-    } catch(error) {setNotice({type:'error',text:error.message||String(error)});}
-    finally {setBusy('');}
+    } catch(error) {
+      if(viewer.current===instance)
+        setNotice({type:'error',text:error.message||String(error)});
+    }
+    finally {if(viewer.current===instance)setBusy('');}
   },[syncPlayer]);
   const importAnimations = async files => {
     if (!files?.length || !viewer.current) return;
