@@ -39,6 +39,34 @@ def ensure_safe_paths(source: Path, target: Path, output: Path):
     if output.suffix.lower() != '.glb':
         raise ValueError('El resultado debe ser un nuevo .glb.')
 
+def compare_golden_with_extracted_reader(generated, reference, directory):
+    """Match all clip channels against the actual user-approved GLB, not screenshots."""
+    import numpy as np
+    from scipy.spatial.transform import Rotation
+    sys.path.insert(0, str(directory))
+    from gltf_io import read_glb, tracks_by_name
+    generated_tracks = tracks_by_name(*read_glb(generated))
+    approved_tracks = tracks_by_name(*read_glb(reference))
+    if set(generated_tracks) != set(approved_tracks):
+        raise AssertionError('Diferencia en los canales de animación del Golden.')
+    max_translation, max_angle = 0., 0.
+    for key, (values, *_) in generated_tracks.items():
+        ref_values = approved_tracks[key][0]
+        if values.shape != ref_values.shape:
+            raise AssertionError('Diferencia en las muestras del Golden: ' + str(key))
+        if key[1] == 'rotation':
+            angles = (Rotation.from_quat(values) *
+                      Rotation.from_quat(ref_values).inv()).magnitude()
+            max_angle = max(max_angle, float(np.max(np.rad2deg(angles))))
+        else:
+            max_translation = max(max_translation, float(np.max(abs(values - ref_values))))
+    if max_angle > .001 or max_translation > 1e-5:
+        raise AssertionError(
+            f'Golden distinto: {max_angle:.6f} grados, {max_translation:.8f} m')
+    return {'status':'MATCH','tracks':len(generated_tracks),
+            'max_angle_deg':max_angle,'max_translation_m':max_translation}
+
+
 def main():
     p = argparse.ArgumentParser(description='ORBI MOTION-06: retarget local con perfiles LUMIA probados')
     p.add_argument('--profile', required=True, choices=['original-155', 'adult-d-162'])
@@ -92,6 +120,9 @@ def main():
                 print(run([sys.executable, str(base / 'corregir_dedos_pies.py'),
                     str(temp_pivot), str(output), '--mode',
                     'auto' if args.toes == 'auto' else 'lock']))
+            if args.golden:
+                print(json.dumps({'golden_d162':compare_golden_with_extracted_reader(
+                    output, args.golden.resolve(), base)}, indent=2))
     if not output.exists() or output.stat().st_size == 0:
         raise RuntimeError('El motor no produjo un GLB válido.')
     print(json.dumps({'status':'GENERADO_PENDIENTE_QA_VISUAL',
