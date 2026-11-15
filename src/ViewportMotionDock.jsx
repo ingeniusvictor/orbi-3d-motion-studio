@@ -35,7 +35,7 @@ export default function ViewportMotionDock({model,getViewer,open,onClose,generat
     </header>
     <div className="viewport-motion-dock-scroll">
       <ExistingRigMotionLab key={'rig-motion-'+generation} model={model}
-        getViewer={getViewer} compact active={open}/>
+        getViewer={getViewer} compact visible={open}/>
     </div>
   </section>;
 }
