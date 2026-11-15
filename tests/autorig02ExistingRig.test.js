@@ -5,7 +5,7 @@ import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {
   existingRigBones,detectExistingRigRoles,captureExistingRigRest,
-  editExistingRigClip,
+  editExistingRigClip,prepareExistingRigClipForExport,
 } from '../src/lib/autoRig/existingRigMotion.js';
 import {MotionViewer} from '../src/lib/viewer.js';
 import {readFileSync} from 'node:fs';
@@ -269,6 +269,56 @@ test('02D real GLB roundtrip retains edited animation and original skin',async()
   }finally{
     if(!previousReader)delete globalThis.FileReader;
   }
+});
+
+
+test('02D preserves ALL Mixamo namespaced clips in two-clip binary GLB',async()=>{
+  const {model,clip,l,r}=buildFixture();
+  l.name='mixamorig:LeftArm';r.name='mixamorig:RightArm';
+  for(const track of clip.tracks){
+    if(track.name.startsWith('mixamorig'))
+      track.name=track.name.replace('mixamorig','mixamorig:');
+  }
+  const rest=captureExistingRigRest(model);
+  const edited=editExistingRigClip(clip,model,{
+    rest,settings:{armSpace:70,overdrive:1.25},
+  }).clip;
+  const untouched=clip.clone();
+  untouched.name='Second Original Animation';
+  const normalizedOriginal=prepareExistingRigClipForExport(untouched,model);
+  assert.notEqual(normalizedOriginal,untouched);
+  assert.equal(normalizedOriginal.tracks.length,untouched.tracks.length);
+  assert.ok(normalizedOriginal.tracks.every(t=>!t.name.includes(':')));
+  assert.ok(untouched.tracks.some(t=>t.name.includes(':')),
+    'source clip names must be untouched');
+  const oldReader=globalThis.FileReader;
+  if(!oldReader)globalThis.FileReader=class{
+    result=null;
+    async readAsArrayBuffer(blob){
+      try{this.result=await blob.arrayBuffer();this.onloadend?.({target:this});}
+      catch(e){this.onerror?.(e);}
+    }
+    async readAsDataURL(blob){
+      try{
+        this.result='data:'+(blob.type||'application/octet-stream')+';base64,'+
+          Buffer.from(await blob.arrayBuffer()).toString('base64');
+        this.onloadend?.({target:this});
+      }catch(e){this.onerror?.(e);}
+    }
+  };
+  try{
+    const binary=await new GLTFExporter().parseAsync(model,{
+      binary:true,trs:true,onlyVisible:false,
+      animations:[edited,normalizedOriginal],
+    });
+    const loaded=await new GLTFLoader().parseAsync(binary,'');
+    assert.equal(loaded.animations.length,2);
+    assert.equal(loaded.animations[0].tracks.length,clip.tracks.length);
+    assert.equal(loaded.animations[1].tracks.length,clip.tracks.length);
+    assert.ok(Math.abs(loaded.animations[0].duration-1.6)<.04);
+    let skinned=0;loaded.scene.traverse(n=>{if(n.isSkinnedMesh)skinned++;});
+    assert.equal(skinned,1);
+  }finally{if(!oldReader)delete globalThis.FileReader;}
 });
 
 test('02D visible editor and export use current viewer clips, not AUTORIG-01',()=>{
