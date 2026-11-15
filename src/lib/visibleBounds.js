@@ -10,6 +10,9 @@ const quantile=(arr,f)=>{
 };
 function boundsOf(points,{trim=0.002}={}){
   if(!points.length)return null;
+  // Sparse point clouds must retain their extremes. A 0.2% quantile on 3
+  // points removes the highest vertex and can hide an entire point model.
+  if(points.length<500)trim=0;
   const xs=points.map(p=>p.x).sort((a,b)=>a-b);
   const ys=points.map(p=>p.y).sort((a,b)=>a-b);
   const zs=points.map(p=>p.z).sort((a,b)=>a-b);
