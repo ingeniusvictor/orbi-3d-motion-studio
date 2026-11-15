@@ -25,12 +25,12 @@ export function existingRigBones(model){
   model.traverse(node=>{if(node.isBone)bones.push(node);});
   return bones;
 }
-// Names differ across Mixamo, Blender, VRM, Character Creator and
-// custom FBX rigs. Never guess between equally plausible candidate bones.
+// Rig naming varies across Mixamo, Blender, VRM and Character Creator.
+// Keep ambiguous matches unresolved: a wrong assignment damages motion.
 export function scoreExistingRigRole(name,role){
   const raw=String(name||'').split(/[|:]/).pop();
   const canonical=raw.replace(/[^a-z0-9]/gi,'').toLowerCase();
-  const stripped=canonical.replace(/^mixamorig\\d*/,'')
+  const stripped=canonical.replace(/^mixamorig[0-9]*/,'')
     .replace(/^ccbase/,'').replace(/^def/,'').replace(/^org/,'');
   const candidates=[canonical,stripped];
   if(role==='head'){
@@ -38,20 +38,39 @@ export function scoreExistingRigRole(name,role){
       return 0;
     if(candidates.some(value=>ROLE_ALIASES.head.map(key).includes(value)))
       return 100;
-    return /^head(jnt|joint|bone|ctrl)?$/.test(stripped)?88:0;
+    return /^head(jnt|joint|bone|ctrl|[0-9]+)?$/.test(stripped)?88:0;
   }
-  if(!['leftUpperArm','rightUpperArm'].includes(role))return 0;
+  if(role!=='leftUpperArm'&&role!=='rightUpperArm')return 0;
   if(/forearm|lowerarm|elbow|hand|finger|shoulder|clavicle|twist|end|nub|ik|pole|helper|socket/.test(stripped))
     return 0;
   const exacts=ROLE_ALIASES[role].map(key);
   if(candidates.some(value=>exacts.includes(value)))return 100;
-  const side=role==='leftUpperArm'?'left':'right';
-  const letter=side[0];
-  // FBX: mixamorig1LeftArm, CC_Base_L_Upperarm, DEF-upper_arm.L,
-  // Bip01 L UpperArm, UpperArm_Right and authored names with suffixes.
-  const sidePattern=new RegExp(
-    '(?:'+side+'(?:upperarm|uparm|arm)|(?:upperarm|uparm|arm)'+side+
-    '|(?:^|bip\\d*|base|upperarm|arm)'+letter+'(?:upperarm|uparm|arm)?
+  const left=role==='leftUpperArm';
+  const generic=left?
+    /^(?:left(?:upperarm|uparm|arm)|(?:upperarm|uparm|arm)left|l(?:upperarm|uparm|arm)|(?:upperarm|uparm|arm)l)(?:jnt|joint|bone|[0-9]+)?$/:
+    /^(?:right(?:upperarm|uparm|arm)|(?:upperarm|uparm|arm)right|r(?:upperarm|uparm|arm)|(?:upperarm|uparm|arm)r)(?:jnt|joint|bone|[0-9]+)?$/;
+  if(generic.test(stripped))return 86;
+  const bip=left?/^bip[0-9]*l(?:upperarm|arm)$/:/^bip[0-9]*r(?:upperarm|arm)$/;
+  if(bip.test(stripped))return 82;
+  return 0;
+}
+export function detectExistingRigRoles(model){
+  const bones=existingRigBones(model);
+  const detected={leftUpperArm:'',rightUpperArm:'',head:''};
+  const ambiguous=[];
+  for(const role of roles){
+    const candidates=bones.map(bone=>({
+      bone,score:scoreExistingRigRole(bone.name,role),
+    })).filter(item=>item.score>0).sort((a,b)=>b.score-a.score);
+    if(!candidates.length)continue;
+    if(candidates.length>1&&candidates[0].score===candidates[1].score){
+      ambiguous.push(role);
+      continue;
+    }
+    detected[role]=candidates[0].bone.name;
+  }
+  return {detected,ambiguous,bones:bones.map(b=>({name:b.name,uuid:b.uuid}))};
+}
 // Called only BEFORE starting the original AnimationMixer; the source rest
 // transformations should not be inferred from a currently animated frame.
 export function captureExistingRigRest(model){
