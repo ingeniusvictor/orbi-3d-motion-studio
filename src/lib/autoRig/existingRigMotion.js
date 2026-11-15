@@ -25,14 +25,51 @@ export function existingRigBones(model){
   model.traverse(node=>{if(node.isBone)bones.push(node);});
   return bones;
 }
+// Rig naming varies across Mixamo, Blender, VRM and Character Creator.
+// Keep ambiguous matches unresolved: a wrong assignment damages motion.
+export function scoreExistingRigRole(name,role){
+  const raw=String(name||'').split(/[|:]/).pop();
+  const canonical=raw.replace(/[^a-z0-9]/gi,'').toLowerCase();
+  const stripped=canonical.replace(/^mixamorig[0-9]*/,'')
+    .replace(/^ccbase/,'').replace(/^def/,'').replace(/^org/,'');
+  const candidates=[canonical,stripped];
+  if(role==='head'){
+    if(/eye|hair|face|jaw|tongue|neck|headend|headtop|headtip|nub|twist|ik/.test(stripped))
+      return 0;
+    if(candidates.some(value=>ROLE_ALIASES.head.map(key).includes(value)))
+      return 100;
+    return /^head(jnt|joint|bone|ctrl|[0-9]+)?$/.test(stripped)?88:0;
+  }
+  if(role!=='leftUpperArm'&&role!=='rightUpperArm')return 0;
+  if(/forearm|lowerarm|elbow|hand|finger|shoulder|clavicle|twist|end|nub|ik|pole|helper|socket/.test(stripped))
+    return 0;
+  const exacts=ROLE_ALIASES[role].map(key);
+  if(candidates.some(value=>exacts.includes(value)))return 100;
+  const left=role==='leftUpperArm';
+  const generic=left?
+    /^(?:left(?:upperarm|uparm|arm)|(?:upperarm|uparm|arm)left|l(?:upperarm|uparm|arm)|(?:upperarm|uparm|arm)l)(?:jnt|joint|bone|[0-9]+)?$/:
+    /^(?:right(?:upperarm|uparm|arm)|(?:upperarm|uparm|arm)right|r(?:upperarm|uparm|arm)|(?:upperarm|uparm|arm)r)(?:jnt|joint|bone|[0-9]+)?$/;
+  if(generic.test(stripped))return 86;
+  const bip=left?/^bip[0-9]*l(?:upperarm|arm)$/:/^bip[0-9]*r(?:upperarm|arm)$/;
+  if(bip.test(stripped))return 82;
+  return 0;
+}
 export function detectExistingRigRoles(model){
   const bones=existingRigBones(model);
   const detected={leftUpperArm:'',rightUpperArm:'',head:''};
+  const ambiguous=[];
   for(const role of roles){
-    const matches=bones.filter(b=>ROLE_ALIASES[role].map(key).includes(key(b.name)));
-    if(matches.length===1)detected[role]=matches[0].name;
+    const candidates=bones.map(bone=>({
+      bone,score:scoreExistingRigRole(bone.name,role),
+    })).filter(item=>item.score>0).sort((a,b)=>b.score-a.score);
+    if(!candidates.length)continue;
+    if(candidates.length>1&&candidates[0].score===candidates[1].score){
+      ambiguous.push(role);
+      continue;
+    }
+    detected[role]=candidates[0].bone.name;
   }
-  return {detected,bones:bones.map(b=>({name:b.name,uuid:b.uuid}))};
+  return {detected,ambiguous,bones:bones.map(b=>({name:b.name,uuid:b.uuid}))};
 }
 // Called only BEFORE starting the original AnimationMixer; the source rest
 // transformations should not be inferred from a currently animated frame.
@@ -51,8 +88,9 @@ export function captureExistingRigRest(model){
   }
   return rest;
 }
+const trackCanonical=name=>key(name).replace(/^mixamorig[0-9]*/,'');
 function indexBones(model){
-  const exact=new Map(),uuids=new Map(),canon=new Map();
+  const exact=new Map(),uuids=new Map(),canon=new Map(),aliases=new Map();
   for(const bone of existingRigBones(model)){
     if(!exact.has(bone.name))exact.set(bone.name,[]);
     exact.get(bone.name).push(bone);
@@ -60,8 +98,11 @@ function indexBones(model){
     const k=key(bone.name);
     if(!canon.has(k))canon.set(k,[]);
     canon.get(k).push(bone);
+    const alias=trackCanonical(bone.name);
+    if(!aliases.has(alias))aliases.set(alias,[]);
+    aliases.get(alias).push(bone);
   }
-  return {exact,uuids,canon};
+  return {exact,uuids,canon,aliases};
 }
 function lookupBone(index,trackNode){
   if(index.uuids.has(trackNode))return index.uuids.get(trackNode);
@@ -74,6 +115,10 @@ function lookupBone(index,trackNode){
   const all=String(trackNode||'').replace(/[^a-z0-9]/gi,'').toLowerCase();
   const second=index.canon.get(all);
   if(second?.length===1)return second[0];
+  // Same rig may be imported as "mixamorig:LeftArm" while a clip names
+  // "mixamorigLeftArm" (or vice versa). Match only unique normalized bones.
+  const alternate=index.aliases.get(trackCanonical(trackNode));
+  if(alternate?.length===1)return alternate[0];
   return null;
 }
 function selectRoleBones(index,roleNames){
@@ -182,7 +227,7 @@ export function editExistingRigClip(original,model,{
     // Three.js PropertyBinding uses ':' and '|' as reserved path separators.
     // Resolve such names through a stable bone UUID on the edited COPY only,
     // otherwise browser playback and GLTFExporter can silently skip the track.
-    if(sourceBone&&/[:|]/.test(node))
+    if(sourceBone&&(node!==sourceBone.name||/[:|]/.test(node)))
       resized.name=sourceBone.uuid+'.'+property;
     if(sourceBone && v.mirror){
       const opposite=mirrorBoneName(sourceBone.name,index);
@@ -230,6 +275,42 @@ export function editExistingRigClip(original,model,{
     used.add(resized.name);
     out.push(resized);
   }
+  // Some imported animations never key the head or an upper arm.
+  // For static Look / Arm-Space corrections, create a new quaternion channel
+  // from the captured bind pose instead of accepting a slider as a no-op.
+  for(const role of roles){
+    const required=role==='head'?v.look!==50:needsArm;
+    if(!required||targets.has(role))continue;
+    const bone=resolved[role];
+    if(!bone)continue;
+    const hasEuler=original.tracks.some(track=>{
+      const path=nameProperty(track.name);
+      return path.property==='rotation'&&lookupBone(index,path.node)===bone;
+    });
+    if(hasEuler)throw new Error(
+      'La animación utiliza ángulos Euler para '+bone.name+
+      '. No se modificará sin conversión segura a cuaterniones.');
+    if(role!=='head'&&v.armSwing!==100&&v.armSpace===50)
+      throw new Error('La animación no contiene rotaciones para '+bone.name+
+        '; no se puede modificar la amplitud Arms de ese hueso.');
+    const ref=rest?.get(bone.uuid);
+    if(!ref)throw new Error('No se encontró la pose de reposo de '+bone.name);
+    qRest.fromArray(ref.local);
+    qParent.fromArray(ref.parentWorld);
+    const axis=(role==='head'?yAxis:zAxis).clone()
+      .applyQuaternion(qParent.clone().invert()).normalize();
+    const offset=role==='head'?THREE.MathUtils.degToRad((v.look-50)*.5):
+      armSpaceRad(v.armSpace)*(role==='leftUpperArm'?-1:1);
+    if(offset===0)continue;
+    worldCorrection.setFromAxisAngle(axis,offset);
+    q.copy(qRest).premultiply(worldCorrection).normalize();
+    const path=bone.uuid+'.quaternion';
+    if(used.has(path))throw new Error('Canal duplicado para '+bone.name);
+    out.push(new THREE.QuaternionKeyframeTrack(path,[0,duration],
+      [...q.toArray(),...q.toArray()]));
+    used.add(path);
+    targets.add(role);
+  }
   const clip=new THREE.AnimationClip(original.name,duration,out);
   return {clip,changed:true,targets:[...targets],settings:{...v,overdrive}};
 }
@@ -246,10 +327,10 @@ export function prepareExistingRigClipForExport(original,model){
   let fixed=0;
   const tracks=original.tracks.map(track=>{
     const {node,property}=nameProperty(track.name);
-    if(!/[:|]/.test(node))return track;
     const bound=lookupBone(index,node)||objects.find(obj=>
       obj.name===node);
-    if(!bound)return track; // QA roundtrip will reject any lost track.
+    if(!bound||(!/[:|]/.test(node)&&node===bound.name))
+      return track; // QA roundtrip will reject any lost track.
     const copy=track.clone();
     copy.name=bound.uuid+'.'+property;
     fixed++;

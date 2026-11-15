@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {
-  existingRigBones,detectExistingRigRoles,captureExistingRigRest,
+  existingRigBones,detectExistingRigRoles,scoreExistingRigRole,captureExistingRigRest,
   editExistingRigClip,prepareExistingRigClipForExport,
 } from '../src/lib/autoRig/existingRigMotion.js';
 import {MotionViewer} from '../src/lib/viewer.js';
@@ -55,6 +55,42 @@ function buildFixture(){
 const map=clip=>new Map(clip.tracks.map(t=>[t.name,t]));
 const quaternionAt=(clip,name,time)=>new THREE.Quaternion().fromArray(
   map(clip).get(name).createInterpolant().evaluate(time));
+
+test('02F detects bone names across Mixamo, FBX, VRM and Blender without picking forearms',()=>{
+  const variants=[
+    ['mixamorig1LeftArm','mixamorig1RightArm','mixamorig:Head'],
+    ['CC_Base_L_Upperarm','CC_Base_R_Upperarm','Head'],
+    ['DEF-upper_arm.L','DEF-upper_arm.R','DEF-head'],
+    ['Bip01 L UpperArm','Bip01 R UpperArm','Head_JNT'],
+    ['LeftUpperArm_Jnt','RightUpperArm_Jnt','head01'],
+    ['UpperArm_Left','UpperArm_Right','Head'],
+  ];
+  for(const [left,right,head] of variants){
+    const root=new THREE.Group();
+    for(const name of [left,right,head,'LeftForeArm','RightHand','HairHead']){
+      const bone=new THREE.Bone();bone.name=name;root.add(bone);
+    }
+    const {detected}=detectExistingRigRoles(root);
+    assert.equal(detected.leftUpperArm,left,'left arm variant '+left);
+    assert.equal(detected.rightUpperArm,right,'right arm variant '+right);
+    assert.equal(detected.head,head,'head variant '+head);
+  }
+  assert.equal(scoreExistingRigRole('LeftForeArm','leftUpperArm'),0);
+  assert.equal(scoreExistingRigRole('LeftShoulder','leftUpperArm'),0);
+  assert.equal(scoreExistingRigRole('EyeHead','head'),0);
+  assert.equal(scoreExistingRigRole('UpperArmRight','leftUpperArm'),0);
+});
+
+test('02F ambiguous duplicate arm candidates require manual mapping rather than guessing',()=>{
+  const root=new THREE.Group();
+  for(const name of ['DEF-upper_arm.L','DEF-upper_arm.L',
+    'DEF-upper_arm.R','Head']){
+    const bone=new THREE.Bone();bone.name=name;root.add(bone);
+  }
+  const roles=detectExistingRigRoles(root);
+  assert.equal(roles.detected.leftUpperArm,'');
+  assert.ok(roles.ambiguous.includes('leftUpperArm'));
+});
 
 test('02D recognizes existing Mixamo bones and captures safe rest before animation',()=>{
   const {model,l,r}=buildFixture();
@@ -133,6 +169,26 @@ test('02D resolves namespaced Mixamo tracks through UUID on the edited copy',()=
     'UUID-backed animation should differ from original and reach the bone');
   mixer.stopAllAction();mixer.uncacheRoot(model);
 });
+test('02F matches Mixamo colon bone names with prefix-only FBX tracks and exports by UUID',()=>{
+  const {model,clip,l,r}=buildFixture();
+  l.name='mixamorig:LeftArm';r.name='mixamorig:RightArm';
+  // Keep source tracks as mixamorigLeftArm without colon.
+  const rest=captureExistingRigRest(model);
+  const result=editExistingRigClip(clip,model,{rest,settings:{armSpace:75}});
+  assert.deepEqual(result.targets.sort(),['leftUpperArm','rightUpperArm']);
+  assert.ok(result.clip.tracks.some(t=>t.name===l.uuid+'.quaternion'));
+  assert.ok(result.clip.tracks.some(t=>t.name===r.uuid+'.quaternion'));
+  const mixer=new THREE.AnimationMixer(model);
+  mixer.clipAction(result.clip).play();mixer.update(.5);
+  assert.ok(l.quaternion.angleTo(new THREE.Quaternion())>.1);
+  assert.ok(r.quaternion.angleTo(new THREE.Quaternion())>.1);
+  mixer.stopAllAction();mixer.uncacheRoot(model);
+  const portable=prepareExistingRigClipForExport(clip,model);
+  assert.ok(portable.tracks.some(t=>t.name===l.uuid+'.quaternion'));
+  assert.ok(portable.tracks.some(t=>t.name===r.uuid+'.quaternion'));
+  assert.ok(clip.tracks.some(t=>t.name==='mixamorigLeftArm.quaternion'));
+});
+
 test('02D restores exactly original source clip when neutral settings',()=>{
   const {model,clip}=buildFixture();
   const rest=captureExistingRigRest(model);
@@ -141,6 +197,40 @@ test('02D restores exactly original source clip when neutral settings',()=>{
   assert.equal(restored.clip,clip);
   assert.equal(restored.changed,false);
   assert.notEqual(a.clip,clip);
+});
+
+test('02F Look uses a new bind-safe head quaternion track when the source omits head motion',()=>{
+  const {model,clip,head}=buildFixture();
+  clip.tracks=clip.tracks.filter(t=>t.name!=='mixamorigHead.quaternion');
+  const originalTracks=clip.tracks.map(t=>Array.from(t.values));
+  const result=editExistingRigClip(clip,model,{
+    rest:captureExistingRigRest(model),settings:{look:75},
+  });
+  const added=result.clip.tracks.find(t=>t.name===head.uuid+'.quaternion');
+  assert.ok(added,'Must synthesize the missing head quaternion track');
+  assert.ok(result.targets.includes('head'));
+  assert.ok(new THREE.Quaternion().fromArray(added.values)
+    .angleTo(new THREE.Quaternion())>.05);
+  assert.deepEqual(clip.tracks.map(t=>Array.from(t.values)),originalTracks);
+});
+
+test('02F arm clearance creates a proper copy track when FBX omits upper arm keys',()=>{
+  const {model,clip,l,r}=buildFixture();
+  clip.tracks=clip.tracks.filter(t=>!/(LeftArm|RightArm)\.quaternion/.test(t.name));
+  const out=editExistingRigClip(clip,model,{
+    rest:captureExistingRigRest(model),settings:{armSpace:70},
+  });
+  assert.ok(out.clip.tracks.find(t=>t.name===l.uuid+'.quaternion'));
+  assert.ok(out.clip.tracks.find(t=>t.name===r.uuid+'.quaternion'));
+  assert.deepEqual(out.targets.sort(),['leftUpperArm','rightUpperArm']);
+  const mixer=new THREE.AnimationMixer(model);mixer.clipAction(out.clip).play();
+  mixer.update(.4);
+  assert.ok(l.quaternion.angleTo(new THREE.Quaternion())>.05);
+  assert.ok(r.quaternion.angleTo(new THREE.Quaternion())>.05);
+  mixer.stopAllAction();mixer.uncacheRoot(model);
+  assert.throws(()=>editExistingRigClip(clip,model,{
+    rest:captureExistingRigRest(model),settings:{armSwing:80},
+  }),/no contiene rotaciones/);
 });
 
 test('02D Trim resamples all tracked channels and mirror swaps named arm roles',()=>{
@@ -319,6 +409,23 @@ test('02D preserves ALL Mixamo namespaced clips in two-clip binary GLB',async()=
     let skinned=0;loaded.scene.traverse(n=>{if(n.isSkinnedMesh)skinned++;});
     assert.equal(skinned,1);
   }finally{if(!oldReader)delete globalThis.FileReader;}
+});
+
+test('02F mapping errors appear next to visible sliders, not below export',()=>{
+  const ui=readFileSync(new URL('../src/ExistingRigMotionLab.jsx',
+    import.meta.url),'utf8');
+  const mapping=ui.indexOf('Asignación de huesos (avanzado)');
+  const alerts=ui.indexOf('<strong>No se pudo aplicar el ajuste:</strong>');
+  const sliders=ui.indexOf('Character Arm-Space · separación de brazos');
+  const exportButton=ui.indexOf('Exportar personaje con animación corregida');
+  assert.ok(mapping>=0&&alerts>mapping&&sliders>alerts&&exportButton>sliders,
+    'The error must appear BEFORE primary sliders and export');
+  assert.match(ui,/onClick=\{\(\)=>setMappingOpen\(true\)\}/);
+  assert.match(ui,/Identificar brazos/);
+  assert.match(ui,/Identificar cabeza/);
+  assert.match(ui,/value=\{status\.bones\.find\(b=>b\.uuid===names\[role\]/);
+  assert.match(ui,/value=\{b\.uuid\}/);
+  assert.match(ui,/settings\.overdrive!==1/);
 });
 
 test('02D visible editor and export use current viewer clips, not AUTORIG-01',()=>{
