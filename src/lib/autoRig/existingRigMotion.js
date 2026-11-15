@@ -88,8 +88,9 @@ export function captureExistingRigRest(model){
   }
   return rest;
 }
+const trackCanonical=name=>key(name).replace(/^mixamorig[0-9]*/,'');
 function indexBones(model){
-  const exact=new Map(),uuids=new Map(),canon=new Map();
+  const exact=new Map(),uuids=new Map(),canon=new Map(),aliases=new Map();
   for(const bone of existingRigBones(model)){
     if(!exact.has(bone.name))exact.set(bone.name,[]);
     exact.get(bone.name).push(bone);
@@ -97,8 +98,11 @@ function indexBones(model){
     const k=key(bone.name);
     if(!canon.has(k))canon.set(k,[]);
     canon.get(k).push(bone);
+    const alias=trackCanonical(bone.name);
+    if(!aliases.has(alias))aliases.set(alias,[]);
+    aliases.get(alias).push(bone);
   }
-  return {exact,uuids,canon};
+  return {exact,uuids,canon,aliases};
 }
 function lookupBone(index,trackNode){
   if(index.uuids.has(trackNode))return index.uuids.get(trackNode);
@@ -111,6 +115,10 @@ function lookupBone(index,trackNode){
   const all=String(trackNode||'').replace(/[^a-z0-9]/gi,'').toLowerCase();
   const second=index.canon.get(all);
   if(second?.length===1)return second[0];
+  // Same rig may be imported as "mixamorig:LeftArm" while a clip names
+  // "mixamorigLeftArm" (or vice versa). Match only unique normalized bones.
+  const alternate=index.aliases.get(trackCanonical(trackNode));
+  if(alternate?.length===1)return alternate[0];
   return null;
 }
 function selectRoleBones(index,roleNames){
