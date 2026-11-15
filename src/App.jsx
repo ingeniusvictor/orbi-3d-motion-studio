@@ -7,6 +7,7 @@ import LivingPresenceLab from './LivingPresenceLab.jsx';
 import FaceQuickDock from './FaceQuickDock.jsx';
 import MotionExtractor from './MotionExtractor.jsx';
 import AutoRigLab from './AutoRigLab.jsx';
+import ViewportMotionDock from './ViewportMotionDock.jsx';
 import {accessoryModeLabel,strictSplitRigHint} from './lib/motionExportModes.js';
 import { blenderConvertScript } from './lib/mixamoKit.js';
 import { formatBytes } from './lib/modelInfo.js';
@@ -68,6 +69,7 @@ export default function App() {
   const [dragging,setDragging] = useState(false);
   const [mobilePanel,setMobilePanel] = useState(false);
   const [faceDockOpen,setFaceDockOpen]=useState(false);
+  const [motionDockOpen,setMotionDockOpen]=useState(false);
   const voiceQARef=useRef(null);
   const [voiceQAState,setVoiceQAState]=useState({ready:false,authorized:false,status:'idle'});
   const getViewer = useCallback(() => viewer.current, []);
@@ -85,7 +87,7 @@ export default function App() {
   },[syncPlayer]);
   const openFiles = useCallback(async files => {
     if (!files?.length || !viewer.current) return;
-    setBusy('Abriendo modelo…');setNotice(null);setImportResults([]);setAllowVrmExport(false);setFinalFormat('glb');setLightMeshes([]);setLightBoneCount(0);setTextureMaterials([]);setCanUndoTextures(false);
+    setBusy('Abriendo modelo…');setNotice(null);setImportResults([]);setAllowVrmExport(false);setFinalFormat('glb');setLightMeshes([]);setLightBoneCount(0);setTextureMaterials([]);setCanUndoTextures(false);setMotionDockOpen(false);
     try {
       const info = await viewer.current.open(files);
       if (info) { setFaceDockOpen(['VRM','FBX','GLB','GLTF'].includes(info.format));setModel(info);setLightMeshes(viewer.current.getLightMeshes());setLightBoneCount(viewer.current.getLightBoneCount());setTextureMaterials(viewer.current.getTextureMaterials());setModelGeneration(n=>n+1);syncPlayer();const axis=viewer.current.getCharacterOrientationInfo();
@@ -311,13 +313,28 @@ export default function App() {
         <div className={`studio-layout ${mobilePanel?'mobile-panel-open':''}`}>
           <section className="viewer-column">
             <div className={`viewport-card ${dragging?'dragging':''}`} onDragOver={event=>{event.preventDefault();setDragging(true);}} onDragLeave={event=>{if(!event.currentTarget.contains(event.relatedTarget))setDragging(false);}} onDrop={drop}>
-              <div className="viewer-toolbar"><div className="viewport-title"><span className="viewport-led"/> VISOR 3D <span className="viewer-divider">/</span> <span>{model?'MODELO CARGADO':'ESCENA VACÍA'}</span></div><div className="viewer-actions"><button className={grid?'toolbar-btn on':'toolbar-btn'} onClick={toggleGrid} title="Mostrar cuadrícula" aria-label="Cuadrícula"><Grid2X2 size={17}/></button><button className={wireframe?'toolbar-btn on':'toolbar-btn'} onClick={toggleWireframe} title="Vista de malla" aria-label="Vista de malla"><Layers3 size={17}/></button><button className={showBones?'toolbar-btn on':'toolbar-btn'} onClick={toggleBones} title="Visualizar esqueleto" aria-label="Visualizar esqueleto"><Activity size={17}/></button><button className="toolbar-btn toolbar-btn-label" onClick={focusVisibleCharacter} title="Centrar la cámara usando la geometría visible, no el esqueleto" aria-label="Centrar personaje"><Focus size={17}/><span>Centrar</span></button>{model?.format==='FBX'&&<button className="toolbar-btn" onClick={alignUprightCamera} title="Enderezar SOLO la vista según cabeza y pelvis (no modifica FBX)" aria-label="Enderezar vista del personaje"><MoveUp size={17}/></button>}{model&&<button className="toolbar-btn toolbar-btn-label" onClick={focusFaceCamera} title="Primer plano de la cara; sigue la cabeza sin mover el rig" aria-label="Acercar cámara al rostro"><ScanEye size={17}/><span>Rostro</span></button>}{model&&<button className={faceDockOpen?'toolbar-btn on':'toolbar-btn'} onClick={()=>setFaceDockOpen(v=>!v)} title="Mostrar controles faciales compatibles" aria-label="Controles rápidos de rostro" aria-pressed={faceDockOpen}><SlidersHorizontal size={17}/></button>}</div></div>
+              <div className="viewer-toolbar"><div className="viewport-title"><span className="viewport-led"/> VISOR 3D <span className="viewer-divider">/</span> <span>{model?'MODELO CARGADO':'ESCENA VACÍA'}</span></div><div className="viewer-actions"><button className={grid?'toolbar-btn on':'toolbar-btn'} onClick={toggleGrid} title="Mostrar cuadrícula" aria-label="Cuadrícula"><Grid2X2 size={17}/></button><button className={wireframe?'toolbar-btn on':'toolbar-btn'} onClick={toggleWireframe} title="Vista de malla" aria-label="Vista de malla"><Layers3 size={17}/></button><button className={showBones?'toolbar-btn on':'toolbar-btn'} onClick={toggleBones} title="Visualizar esqueleto" aria-label="Visualizar esqueleto"><Activity size={17}/></button><button className="toolbar-btn toolbar-btn-label" onClick={focusVisibleCharacter} title="Centrar la cámara usando la geometría visible, no el esqueleto" aria-label="Centrar personaje"><Focus size={17}/><span>Centrar</span></button>{model?.format==='FBX'&&<button className="toolbar-btn" onClick={alignUprightCamera} title="Enderezar SOLO la vista según cabeza y pelvis (no modifica FBX)" aria-label="Enderezar vista del personaje"><MoveUp size={17}/></button>}{model&&<button className="toolbar-btn toolbar-btn-label" onClick={focusFaceCamera} title="Primer plano de la cara; sigue la cabeza sin mover el rig" aria-label="Acercar cámara al rostro"><ScanEye size={17}/><span>Rostro</span></button>}{model?.bones>0&&<button
+                type="button"
+                className={motionDockOpen?'toolbar-btn toolbar-btn-label on':'toolbar-btn toolbar-btn-label'}
+                onClick={()=>{setMotionDockOpen(v=>!v);setFaceDockOpen(false);}}
+                title="Abrir ajustes de animación sobre el personaje"
+                aria-label="Ajustes de animación en el visor"
+                aria-controls="orbi-motion-dock"
+                aria-expanded={motionDockOpen}
+                aria-pressed={motionDockOpen}>
+                <Film size={17}/><span>Animación</span>
+                <ChevronDown size={13} className={motionDockOpen?'motion-toggle-open':''}/>
+              </button>}{model&&<button className={faceDockOpen?'toolbar-btn on':'toolbar-btn'} onClick={()=>{setFaceDockOpen(v=>!v);setMotionDockOpen(false);}} title="Mostrar controles faciales compatibles" aria-label="Controles rápidos de rostro" aria-pressed={faceDockOpen}><SlidersHorizontal size={17}/></button>}</div></div>
               <div className="renderer-mount" ref={mountRef}/>
               <FaceQuickDock key={'face-dock-'+modelGeneration} getViewer={getViewer} model={model}
                 open={faceDockOpen} onClose={()=>setFaceDockOpen(false)}
                 voiceState={voiceQAState}
                 onSpeak={()=>voiceQARef.current?.play?.()}
                 onStopVoice={()=>voiceQARef.current?.stop?.()}/>
+              <ViewportMotionDock key={'viewport-motion-'+modelGeneration}
+                model={model} getViewer={getViewer}
+                generation={modelGeneration}
+                open={motionDockOpen} onClose={()=>setMotionDockOpen(false)}/>
               {!model && <Intro onOpen={()=>fileInput.current?.click()}/>}
               {dragging&&<div className="drag-mask"><UploadCloud size={42}/><strong>Suelta tu archivo 3D</strong><span>Tu archivo se procesa localmente</span></div>}
               {busy&&<div className="busy-mask"><div className="loading-ring"/><strong>{busy}</strong></div>}
