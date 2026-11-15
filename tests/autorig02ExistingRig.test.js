@@ -179,6 +179,40 @@ test('02D restores exactly original source clip when neutral settings',()=>{
   assert.notEqual(a.clip,clip);
 });
 
+test('02F Look uses a new bind-safe head quaternion track when the source omits head motion',()=>{
+  const {model,clip,head}=buildFixture();
+  clip.tracks=clip.tracks.filter(t=>t.name!=='mixamorigHead.quaternion');
+  const originalTracks=clip.tracks.map(t=>Array.from(t.values));
+  const result=editExistingRigClip(clip,model,{
+    rest:captureExistingRigRest(model),settings:{look:75},
+  });
+  const added=result.clip.tracks.find(t=>t.name===head.uuid+'.quaternion');
+  assert.ok(added,'Must synthesize the missing head quaternion track');
+  assert.ok(result.targets.includes('head'));
+  assert.ok(new THREE.Quaternion().fromArray(added.values)
+    .angleTo(new THREE.Quaternion())>.05);
+  assert.deepEqual(clip.tracks.map(t=>Array.from(t.values)),originalTracks);
+});
+
+test('02F arm clearance creates a proper copy track when FBX omits upper arm keys',()=>{
+  const {model,clip,l,r}=buildFixture();
+  clip.tracks=clip.tracks.filter(t=>!/(LeftArm|RightArm)\.quaternion/.test(t.name));
+  const out=editExistingRigClip(clip,model,{
+    rest:captureExistingRigRest(model),settings:{armSpace:70},
+  });
+  assert.ok(out.clip.tracks.find(t=>t.name===l.uuid+'.quaternion'));
+  assert.ok(out.clip.tracks.find(t=>t.name===r.uuid+'.quaternion'));
+  assert.deepEqual(out.targets.sort(),['leftUpperArm','rightUpperArm']);
+  const mixer=new THREE.AnimationMixer(model);mixer.clipAction(out.clip).play();
+  mixer.update(.4);
+  assert.ok(l.quaternion.angleTo(new THREE.Quaternion())>.05);
+  assert.ok(r.quaternion.angleTo(new THREE.Quaternion())>.05);
+  mixer.stopAllAction();mixer.uncacheRoot(model);
+  assert.throws(()=>editExistingRigClip(clip,model,{
+    rest:captureExistingRigRest(model),settings:{armSwing:80},
+  }),/no contiene rotaciones/);
+});
+
 test('02D Trim resamples all tracked channels and mirror swaps named arm roles',()=>{
   const {model,clip}=buildFixture(),rest=captureExistingRigRest(model);
   const result=editExistingRigClip(clip,model,{
