@@ -391,6 +391,23 @@ test('02D preserves ALL Mixamo namespaced clips in two-clip binary GLB',async()=
   }finally{if(!oldReader)delete globalThis.FileReader;}
 });
 
+test('02F mapping errors appear next to visible sliders, not below export',()=>{
+  const ui=readFileSync(new URL('../src/ExistingRigMotionLab.jsx',
+    import.meta.url),'utf8');
+  const mapping=ui.indexOf('Asignación de huesos (avanzado)');
+  const alerts=ui.indexOf('<strong>No se pudo aplicar el ajuste:</strong>');
+  const sliders=ui.indexOf('Character Arm-Space · separación de brazos');
+  const exportButton=ui.indexOf('Exportar personaje con animación corregida');
+  assert.ok(mapping>=0&&alerts>mapping&&sliders>alerts&&exportButton>sliders,
+    'The error must appear BEFORE primary sliders and export');
+  assert.match(ui,/onClick=\{\(\)=>setMappingOpen\(true\)\}/);
+  assert.match(ui,/Identificar brazos/);
+  assert.match(ui,/Identificar cabeza/);
+  assert.match(ui,/value=\{status\.bones\.find\(b=>b\.uuid===names\[role\]/);
+  assert.match(ui,/value=\{b\.uuid\}/);
+  assert.match(ui,/settings\.overdrive!==1/);
+});
+
 test('02D visible editor and export use current viewer clips, not AUTORIG-01',()=>{
   const app=readFileSync(new URL('../src/App.jsx',import.meta.url),'utf8');
   const dock=readFileSync(new URL('../src/ViewportMotionDock.jsx',
