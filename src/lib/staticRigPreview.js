@@ -27,17 +27,20 @@ export function prepareStaticRigPreview(root,{
     try{
       node.updateWorldMatrix(true,false);
       node.skeleton.update();
-      if(typeof node.computeBoundingSphere==='function'){
-        node.computeBoundingSphere();
-        const b=node.boundingSphere;
-        if(b&&Number.isFinite(b.radius)&&b.radius>0)
-          stats.spheresUpdated++;
-      }
-      // Avoid false culling when static GLB creators use bind matrices that
-      // diverge from the editor's rest camera coordinates. Limit to modest
-      // assets to avoid degrading performance on multi-million vertex files.
+      // Avoid expensive CPU bounding-sphere rebuilds on huge characters.
+      // The optimization applies only to moderate meshes, such as V09.
       if(count>0&&count<=maxBypassVertices){
-        node.frustumCulled=false;stats.cullingBypassed++;
+        if(typeof node.computeBoundingSphere==='function'){
+          node.computeBoundingSphere();
+          const b=node.boundingSphere;
+          if(b&&Number.isFinite(b.radius)&&b.radius>0)
+            stats.spheresUpdated++;
+        }
+        node.frustumCulled=false;
+        stats.cullingBypassed++;
+      }else if(count>maxBypassVertices){
+        stats.warnings.push('La malla '+(node.name||'skin')+
+          ' supera el límite seguro para desactivar descarte por cámara.');
       }
     }catch(error){
       stats.warnings.push('No se pudo estabilizar '+(node.name||'skin')+
