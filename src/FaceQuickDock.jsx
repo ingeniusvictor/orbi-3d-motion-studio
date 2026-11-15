@@ -12,7 +12,12 @@ const ROWS=Object.freeze([
   {key:'smile',label:'Sonrisa',group:'face',feature:'smile'},
   {key:'cheeks',label:'Mejillas',group:'face',feature:'cheeks'},
   {key:'eyelids',label:'Entrecerrar',group:'face',feature:'squint'},
-  {key:'jaw',label:'Mandíbula',group:'face',feature:'jaw'},
+  {key:'jaw',label:'Abrir boca / mandíbula',group:'face',feature:'jaw'},
+  {key:'angry',label:'Enfado',group:'face',feature:'angry'},
+  {key:'joy',label:'Alegría',group:'face',feature:'joy'},
+  {key:'fun',label:'Diversión',group:'face',feature:'fun'},
+  {key:'sorrow',label:'Tristeza',group:'face',feature:'sorrow'},
+  {key:'surprised',label:'Sorpresa',group:'face',feature:'surprised'},
 ]);
 const VOWELS=Object.freeze(['a','e','i','o','u']);
 function snapshot(viewer){
@@ -75,7 +80,7 @@ export default function FaceQuickDock({getViewer,model,open,onClose,voiceState,o
   };
   const status=speaking?
     'Voz activa: observa labios, ojos, cejas y recuperación al finalizar.':
-    (presenceEnabled?'Control facial de prueba activado':'Activa los controles faciales en LP-03D para realizar pruebas.');
+    (presenceEnabled?'Control facial de prueba activado':'Activa «Pruebas faciales reversibles» para usar los controles detectados.');
   return <div className="face-quick-dock" role="region" aria-label="Controles rápidos de rostro junto al modelo">
     <div className="face-quick-head">
       <div><strong><ScanFace size={15}/> Rostro · QA rápido</strong>
@@ -84,9 +89,17 @@ export default function FaceQuickDock({getViewer,model,open,onClose,voiceState,o
     </div>
     {model?.format!=='VRM'&&<>
       <small className="face-quick-voice-hint">
-        FBX · conectores óseos de prueba. La detección por nombres es
-        orientativa; no equivale a un rig VRM. La animación V8 permanece intacta.
+        GLB/FBX: se usan morph targets reales si existen (por ejemplo,
+        Blink y A/I/U/E/O); para mover ojos se necesitan huesos oculares
+        identificados y sus ejes verificados. El VRM mantiene sus controles originales.
       </small>
+      {face?.morphCount>0&&<small className="face-quick-voice-hint" role="status">
+        Detectados {face.morphCount} morph targets faciales en
+        {face.morphMeshes} malla(s).{' '}
+        {face.morphTargets?.join(', ')}.
+        {' '}Los controles emocionales como Sorpresa o Alegría son expresiones
+        completas, no músculos independientes.
+      </small>}
       <label style={{display:'flex',alignItems:'center',gap:6,fontSize:11,
         color:'#d9f4ff',margin:'6px 0'}}>
         <input type="checkbox" checked={Boolean(face?.enabled)}
@@ -98,7 +111,7 @@ export default function FaceQuickDock({getViewer,model,open,onClose,voiceState,o
         Activar pruebas faciales reversibles
       </label>
       <details className="lp-accordion">
-        <summary>Mapear huesos faciales · {mapping?.totalBones||0} disponibles</summary>
+        <summary>Mapear huesos de ojos y rostro · {mapping?.totalBones||0} disponibles</summary>
         <div style={{display:'grid',gap:7,padding:'10px 4px',fontSize:11}}>
           <small>Selecciona el rol, busca el hueso por su nombre y asígnalo.
             Para ojos, párpados, cejas, sonrisa y mejillas se necesitan parejas.
