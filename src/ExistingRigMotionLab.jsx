@@ -13,7 +13,7 @@ const roles=[
   ['rightUpperArm','Brazo superior derecho'],
   ['head','Cabeza'],
 ];
-export default function ExistingRigMotionLab({model,getViewer,compact=false,active=true}){
+export default function ExistingRigMotionLab({model,getViewer,compact=false,visible=true}){
   const status=getViewer?.()?.getExistingRigMotionStatus?.()||{ok:false,bones:[],detected:{}};
   const [clipIndex,setClipIndex]=useState(()=>Math.max(0,getViewer?.()?.current??0));
   const [settings,setSettings]=useState(defaults);
@@ -26,7 +26,7 @@ export default function ExistingRigMotionLab({model,getViewer,compact=false,acti
   const [time,setTime]=useState(0);
   const [playing,setPlaying]=useState(Boolean(getViewer?.()?.playing));
   useEffect(()=>{
-    if(!active)return undefined;
+    if(!visible)return undefined;
     let frame=0,last=0,running=true;
     const refresh=now=>{
       if(!running)return;
@@ -54,7 +54,7 @@ export default function ExistingRigMotionLab({model,getViewer,compact=false,acti
     };
     frame=requestAnimationFrame(refresh);
     return ()=>{running=false;cancelAnimationFrame(frame);};
-  },[clipIndex,getViewer,active]);
+  },[clipIndex,getViewer,visible]);
   if(!model||model.bones<1)return null;
   const active=status.clips?.[clipIndex];
   const names=overrides||status.detected||{};
