@@ -315,7 +315,7 @@ export default function App() {
             <div className={`viewport-card ${dragging?'dragging':''}`} onDragOver={event=>{event.preventDefault();setDragging(true);}} onDragLeave={event=>{if(!event.currentTarget.contains(event.relatedTarget))setDragging(false);}} onDrop={drop}>
               <div className="viewer-toolbar"><div className="viewport-title"><span className="viewport-led"/> VISOR 3D <span className="viewer-divider">/</span> <span>{model?'MODELO CARGADO':'ESCENA VACÍA'}</span></div><div className="viewer-actions"><button className={grid?'toolbar-btn on':'toolbar-btn'} onClick={toggleGrid} title="Mostrar cuadrícula" aria-label="Cuadrícula"><Grid2X2 size={17}/></button><button className={wireframe?'toolbar-btn on':'toolbar-btn'} onClick={toggleWireframe} title="Vista de malla" aria-label="Vista de malla"><Layers3 size={17}/></button><button className={showBones?'toolbar-btn on':'toolbar-btn'} onClick={toggleBones} title="Visualizar esqueleto" aria-label="Visualizar esqueleto"><Activity size={17}/></button><button className="toolbar-btn toolbar-btn-label" onClick={focusVisibleCharacter} title="Centrar la cámara usando la geometría visible, no el esqueleto" aria-label="Centrar personaje"><Focus size={17}/><span>Centrar</span></button>{model?.format==='FBX'&&<button className="toolbar-btn" onClick={alignUprightCamera} title="Enderezar SOLO la vista según cabeza y pelvis (no modifica FBX)" aria-label="Enderezar vista del personaje"><MoveUp size={17}/></button>}{model&&<button className="toolbar-btn toolbar-btn-label" onClick={focusFaceCamera} title="Primer plano de la cara; sigue la cabeza sin mover el rig" aria-label="Acercar cámara al rostro"><ScanEye size={17}/><span>Rostro</span></button>}{model?.bones>0&&<button
                 type="button"
-                className={motionDockOpen?'toolbar-btn toolbar-btn-label on':'toolbar-btn toolbar-btn-label'}
+                className={motionDockOpen?'toolbar-btn toolbar-btn-label viewport-motion-trigger on':'toolbar-btn toolbar-btn-label viewport-motion-trigger'}
                 onClick={()=>{setMotionDockOpen(v=>!v);setFaceDockOpen(false);}}
                 title="Abrir ajustes de animación sobre el personaje"
                 aria-label="Ajustes de animación en el visor"
@@ -323,7 +323,7 @@ export default function App() {
                 aria-expanded={motionDockOpen}
                 aria-pressed={motionDockOpen}>
                 <Film size={17}/><span>Animación</span>
-                <ChevronDown size={13} className={motionDockOpen?'motion-toggle-open':''}/>
+                <ChevronDown size={13} className={motionDockOpen?'motion-toggle-chevron motion-toggle-open':'motion-toggle-chevron'}/>
               </button>}{model&&<button className={faceDockOpen?'toolbar-btn on':'toolbar-btn'} onClick={()=>{setFaceDockOpen(v=>!v);setMotionDockOpen(false);}} title="Mostrar controles faciales compatibles" aria-label="Controles rápidos de rostro" aria-pressed={faceDockOpen}><SlidersHorizontal size={17}/></button>}</div></div>
               <div className="renderer-mount" ref={mountRef}/>
               <FaceQuickDock key={'face-dock-'+modelGeneration} getViewer={getViewer} model={model}
