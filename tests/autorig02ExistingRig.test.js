@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {
-  existingRigBones,detectExistingRigRoles,captureExistingRigRest,
+  existingRigBones,detectExistingRigRoles,scoreExistingRigRole,captureExistingRigRest,
   editExistingRigClip,prepareExistingRigClipForExport,
 } from '../src/lib/autoRig/existingRigMotion.js';
 import {MotionViewer} from '../src/lib/viewer.js';
@@ -55,6 +55,42 @@ function buildFixture(){
 const map=clip=>new Map(clip.tracks.map(t=>[t.name,t]));
 const quaternionAt=(clip,name,time)=>new THREE.Quaternion().fromArray(
   map(clip).get(name).createInterpolant().evaluate(time));
+
+test('02F detects bone names across Mixamo, FBX, VRM and Blender without picking forearms',()=>{
+  const variants=[
+    ['mixamorig1LeftArm','mixamorig1RightArm','mixamorig:Head'],
+    ['CC_Base_L_Upperarm','CC_Base_R_Upperarm','Head'],
+    ['DEF-upper_arm.L','DEF-upper_arm.R','DEF-head'],
+    ['Bip01 L UpperArm','Bip01 R UpperArm','Head_JNT'],
+    ['LeftUpperArm_Jnt','RightUpperArm_Jnt','head01'],
+    ['UpperArm_Left','UpperArm_Right','Head'],
+  ];
+  for(const [left,right,head] of variants){
+    const root=new THREE.Group();
+    for(const name of [left,right,head,'LeftForeArm','RightHand','HairHead']){
+      const bone=new THREE.Bone();bone.name=name;root.add(bone);
+    }
+    const {detected}=detectExistingRigRoles(root);
+    assert.equal(detected.leftUpperArm,left,'left arm variant '+left);
+    assert.equal(detected.rightUpperArm,right,'right arm variant '+right);
+    assert.equal(detected.head,head,'head variant '+head);
+  }
+  assert.equal(scoreExistingRigRole('LeftForeArm','leftUpperArm'),0);
+  assert.equal(scoreExistingRigRole('LeftShoulder','leftUpperArm'),0);
+  assert.equal(scoreExistingRigRole('EyeHead','head'),0);
+  assert.equal(scoreExistingRigRole('UpperArmRight','leftUpperArm'),0);
+});
+
+test('02F ambiguous duplicate arm candidates require manual mapping rather than guessing',()=>{
+  const root=new THREE.Group();
+  for(const name of ['DEF-upper_arm.L','DEF-upper_arm.L',
+    'DEF-upper_arm.R','Head']){
+    const bone=new THREE.Bone();bone.name=name;root.add(bone);
+  }
+  const roles=detectExistingRigRoles(root);
+  assert.equal(roles.detected.leftUpperArm,'');
+  assert.ok(roles.ambiguous.includes('leftUpperArm'));
+});
 
 test('02D recognizes existing Mixamo bones and captures safe rest before animation',()=>{
   const {model,l,r}=buildFixture();
