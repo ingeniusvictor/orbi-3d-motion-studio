@@ -307,6 +307,28 @@ export class MotionViewer {
   }
   getCameraFitInfo(){return this.lastCameraFit||null;}
   getImportDiagnostics(){return this.lastImportDiagnostics||null;}
+  diagnoseModelVisibility(){
+    if(!this.model)return {ok:false,reason:'No hay modelo cargado.'};
+    const clips=this.clips.map(item=>item.clip);
+    const staticPreview=prepareStaticRigPreview(this.model,{
+      animations:clips.length,
+    });
+    const rendered=describeViewerRenderableState(this.model,clips);
+    const camera=this.resetCamera();
+    if(this.lastImportDiagnostics){
+      this.lastImportDiagnostics.staticPreview=staticPreview;
+      this.lastImportDiagnostics.renderable=rendered;
+    }
+    return {
+      ok:Boolean(camera.ok&&rendered.hasRenderable),
+      filename:this.lastFilename,format:this.lastFormat,
+      animations:clips.length,renderable:rendered,
+      staticPreview,camera,
+      reason:!rendered.hasRenderable?
+        'El modelo no contiene geometría visible, o está oculta en su jerarquía.':
+        !camera.ok?(camera.reason||'No se pudo ajustar la cámara.'):null,
+    };
+  }
   getCharacterOrientationInfo(){
     const orientation=detectBodyUpDirection(this.model);
     return orientation?{
