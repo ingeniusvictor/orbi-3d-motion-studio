@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import {VRMUtils} from '@pixiv/three-vrm';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import {computeVisibleCharacterBounds,cameraFitParameters,detectBodyUpDirection} from './visibleBounds.js';
+import {computeVisibleCharacterBounds,fastStaticGeometryBounds,
+  cameraFitParameters,detectBodyUpDirection} from './visibleBounds.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { adaptFbxToVrm } from './vrmMotion.js';
 import { auditVrmRig } from './livingPresence/rigAudit.js';
@@ -279,8 +280,14 @@ export class MotionViewer {
     let box=visible?.box;
     let method=visible?.method||'fallback';
     if(!box){
-      this.model.updateWorldMatrix(true,true);
-      box=new THREE.Box3().setFromObject(this.model,true);
+      if(staticModel){
+        const fallback=fastStaticGeometryBounds(this.model);
+        box=fallback?.box;
+        if(fallback)method=fallback.method;
+      }else{
+        this.model.updateWorldMatrix(true,true);
+        box=new THREE.Box3().setFromObject(this.model,true);
+      }
     }
     const fit=cameraFitParameters(box,{
       fovDegrees:this.camera.fov,aspect:this.camera.aspect,
