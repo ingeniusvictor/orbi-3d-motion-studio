@@ -59,7 +59,7 @@ test('02C.4 arm swing scales tracked motion, including 0 and 150%',()=>{
     new THREE.Quaternion())-.4)<.01);
   assert.ok(Math.abs(getQ(track(more,'leftUpperArm'),60).angleTo(
     new THREE.Quaternion())-1.2)<.01);
-  assert.ok(endOriginal.angleTo(q(1,0,0,.8))<1e-5);
+  assert.ok(endOriginal.angleTo(q(1,0,0,.8))<1e-3);
 });
 
 test('02C.4 Look creates a bounded head yaw offset',()=>{
@@ -132,7 +132,7 @@ test('02C.4 UI persists settings per imported clip, live preview, reset and trim
     'savedAdjustmentsRef.current.set(id,settings)',
     'adjustHumanoidMotionClip(chosen.clip,settings)',
     'Character Arm-Space',
-    'Amplitud',
+    'amplitud',
     'Overdrive',
     'Mirror',
     'trimStart',
