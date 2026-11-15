@@ -101,6 +101,7 @@ test('02A/B integration uses a separate overlay, never writes into source rig',(
   assert.match(src,/TransformControls/);
   assert.match(src,/raycaster\.intersectObjects/);
   assert.match(src,/this\.root\.parent\?\.remove\(this\.root\)/);
-  assert.match(app,/AutoRigLab key=/);
+  assert.match(app,/AutoRigLab model=/);
+  assert.match(app,/key=\{'autorig-boundary-'\+modelGeneration\}/);
   assert.match(app,/getViewer=\{getViewer\}/);
 });
