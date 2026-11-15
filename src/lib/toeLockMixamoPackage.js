@@ -19,6 +19,12 @@ export async function inspectToeLockKit(input){
   const bytes=toBytes(input);
   if(bytes.byteLength>20*1024*1024)
     throw new Error('El ZIP del kit ToeLock V4 supera 20 MB. No se abrirá.');
+  // Check the complete certified ZIP before decompression to avoid
+  // zip bombs, tampered scripts or arbitrary Blender payloads.
+  const hash=await sha256Hex(bytes.buffer.slice(
+    bytes.byteOffset,bytes.byteOffset+bytes.byteLength));
+  if(hash!=='c316cc4820091af201d560005e3b1a1fdda5193814d57d9b0bb01ad60b0fff7e')
+    throw new Error('El ZIP no coincide con el kit V4 íntegro aprobado.');
   let files;
   try{files=unzipSync(bytes);}
   catch{throw new Error('No se pudo abrir el ZIP ToeLock V4.');}
