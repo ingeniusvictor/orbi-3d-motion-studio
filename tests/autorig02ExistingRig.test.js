@@ -103,8 +103,10 @@ test('02D arm clearance changes simultaneously moving skinned mesh without rewei
   const mixer=new THREE.AnimationMixer(model);
   mixer.clipAction(edited).play();
   mixer.update(.7);
-  assert.ok(l.quaternion.angleTo(new THREE.Quaternion())>.2);
-  assert.ok(r.quaternion.angleTo(new THREE.Quaternion())>.2);
+  assert.ok(l.quaternion.angleTo(quaternionAt(clip,'mixamorigLeftArm.quaternion',.7))>.2,
+    'left arm should differ from the original source animation');
+  assert.ok(r.quaternion.angleTo(quaternionAt(clip,'mixamorigRightArm.quaternion',.7))>.2,
+    'right arm should differ from the original source animation');
   assert.deepEqual(mesh.geometry.attributes.skinWeight.array,beforeWeights);
   assert.deepEqual(mesh.geometry.attributes.skinIndex.array,beforeIndexes);
   mixer.stopAllAction();mixer.uncacheRoot(model);
@@ -126,7 +128,9 @@ test('02D resolves namespaced Mixamo tracks through UUID on the edited copy',()=
   const mixer=new THREE.AnimationMixer(model);
   mixer.clipAction(changed).play();
   mixer.update(.5);
-  assert.ok(l.quaternion.angleTo(new THREE.Quaternion())>.1);
+  assert.ok(l.quaternion.angleTo(
+    quaternionAt(clip,'mixamorig:LeftArm.quaternion',.5))>.1,
+    'UUID-backed animation should differ from original and reach the bone');
   mixer.stopAllAction();mixer.uncacheRoot(model);
 });
 test('02D restores exactly original source clip when neutral settings',()=>{
