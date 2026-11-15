@@ -20,7 +20,7 @@ export default function ExistingRigMotionLab({model,getViewer,compact=false,visi
   const [overrides,setOverrides]=useState(null);
   const [mappingOpen,setMappingOpen]=useState(()=>{
     const mapped=status.detected||{};
-    return !mapped.leftUpperArm||!mapped.rightUpperArm||!mapped.head;
+    return !mapped.leftUpperArm||!mapped.rightUpperArm;
   });
   const [note,setNote]=useState('');
   const [error,setError]=useState('');
