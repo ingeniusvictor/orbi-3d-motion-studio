@@ -90,12 +90,17 @@ test('STATIC-FREEZE-02 still reports static geometry without synthetic clips',()
 test('STATIC-FREEZE-02 shows load phase and yields before heavy initialization',()=>{
   const app=readFileSync(new URL('../src/App.jsx',import.meta.url),'utf8');
   const viewer=readFileSync(new URL('../src/lib/viewer.js',import.meta.url),'utf8');
-  assert.match(app,/onProgress:message=>setBusy\\(message\\)/);
-  assert.match(viewer,/stage\\('Leyendo y decodificando modelo 3D/);
-  assert.match(viewer,/stage\\('Preparando huesos, materiales y expresiones/);
-  assert.match(viewer,/stage\\('Ajustando cámara al personaje/);
-  assert.match(viewer,/await new Promise\\(resolve=>setTimeout\\(resolve,0\\)\\)/);
+  for(const snippet of [
+    "onProgress:message=>setBusy(message)",
+  ]) assert.ok(app.includes(snippet),snippet);
+  for(const snippet of [
+    "stage('Leyendo y decodificando modelo 3D",
+    "stage('Preparando huesos, materiales y expresiones",
+    "stage('Ajustando cámara al personaje",
+    "await new Promise(resolve=>setTimeout(resolve,0))",
+  ]) assert.ok(viewer.includes(snippet),snippet);
 });
+
 test('STATIC-FREEZE-02 camera fit defaults to fast path only for zero clips',()=>{
   const code=readFileSync(new URL('../src/lib/viewer.js',import.meta.url),'utf8');
   assert.match(code,/const staticModel=!this\.clips\?\.length/);
