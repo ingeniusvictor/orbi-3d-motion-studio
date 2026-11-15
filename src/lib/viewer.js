@@ -963,6 +963,26 @@ export class MotionViewer {
       parsed.animations.some((clip,i)=>!clip.tracks.length || !Number.isFinite(clip.duration))) {
       throw new Error('El GLB exportado no conserva todas las animaciones; no se descargará un archivo incompleto.');
     }
+    // A corrected animation is only downloadable when ALL channels survive
+    // the export/import boundary. Silent loss of secondary bones, root motion
+    // or expression tracks would undo the user's review.
+    if(this.clips.some(item=>item.modified)){
+      for(let i=0;i<exportClips.length;i++){
+        const actual=parsed.animations[i],expected=exportClips[i];
+        if(!actual||actual.tracks.length!==expected.tracks.length||
+          Math.abs(actual.duration-expected.duration)>.035)
+          throw new Error('El GLB omitió pistas o modificó la duración de «'+
+            this.clips[i]?.name+'». Se canceló la descarga para proteger la animación.');
+      }
+      const originalSkins=this.model?
+        skinnedMeshes(this.model).length:0;
+      if(originalSkins){
+        let exportedSkinCount=0;
+        parsed.scene.traverse(node=>{if(node.isSkinnedMesh)exportedSkinCount++;});
+        if(!exportedSkinCount)
+          throw new Error('El GLB corregido perdió las mallas vinculadas al esqueleto.');
+      }
+    }
     if(this.textureAssetUrls.size && !this.vrm && inspect(parsed.scene,parsed.animations).textures===0)
       throw new Error('Las texturas externas no quedaron incorporadas en el GLB. No se descargará un archivo incompleto.');
     if(this.vrm){
