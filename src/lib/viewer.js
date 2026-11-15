@@ -26,6 +26,7 @@ import { extensionOf, formatBytes, inspectRigCompatibility, uniqueClipName, summ
 import {loadCompatibleModel} from './loadCompatibleModel.js';
 import {choosePrimaryModel,VIEWABLE_EXTENSIONS,explainImportError} from './viewerCompatibility.js';
 import {prepareStaticRigPreview,describeViewerRenderableState} from './staticRigPreview.js';
+import {rendererPreset} from './viewerGraphicSafety.js';
 
 const EMPTY_INFO = { meshes: 0, vertices: 0, triangles: 0, materials: 0, bones: 0, animations: 0, nodes: 0, textures: 0, hierarchy: [] };
 
@@ -134,12 +135,12 @@ export class MotionViewer {
     this.camera.position.set(3,2.5,5);
     // Recovery mode changes only renderer settings. Do not simplify, rebake
     // or overwrite the artistic GLB/FBX: original materials and morphs remain.
-    this.renderer = new THREE.WebGLRenderer({
-      antialias:!this.safeMode,alpha:false,
-      powerPreference:this.safeMode?'default':'high-performance',
+    const preset=rendererPreset({
+      safeMode:this.safeMode,
+      devicePixelRatio:typeof devicePixelRatio==='number'?devicePixelRatio:1,
     });
-    this.renderer.setPixelRatio(this.safeMode?1:
-      Math.min(devicePixelRatio || 1, 2));
+    this.renderer = new THREE.WebGLRenderer(preset.options);
+    this.renderer.setPixelRatio(preset.pixelRatio);
     this.canvas=this.renderer.domElement;
     this.handleContextLost=event=>{
       event.preventDefault(); // Browser may restore this context.
@@ -456,6 +457,8 @@ export class MotionViewer {
     stage('Leyendo y decodificando modelo 3D…');
     const loaded = await loadObject(files,{renderer:this.renderer});
     if (this.disposed || request !== this.loadSequence) return null;
+    if(this.graphicsState!=='ready')
+      throw new Error('WebGL dejó de funcionar durante la carga. Utiliza «Recuperar visor» en modo seguro.');
     stage('Preparando huesos, materiales y expresiones…');
     // Allow React/Chrome to paint the new loading stage before any expensive
     // synchronous initialization. A synchronous stall remains diagnosable.
@@ -505,6 +508,8 @@ export class MotionViewer {
     this.setWireframe(this.wireframe);
     stage('Verificando geometría y esqueleto…');
     const info = inspect(this.model,this.clips);
+    if(this.graphicsState!=='ready')
+      throw new Error('WebGL perdió el contexto al visualizar el modelo. Reinicia el visor en modo seguro.');
     this.notify();
     return {...info,filename:loaded.name,bytes:loaded.bytes,format:loaded.format,
       staticModel:loaded.staticModel,diagnostics:this.lastImportDiagnostics};
