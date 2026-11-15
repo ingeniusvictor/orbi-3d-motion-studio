@@ -20,6 +20,8 @@ import { captureMaterialState,restoreMaterialState } from './textureBatch.js';
 import { skinnedMeshes, skinBoneCount, exportLightweightGLB } from './lightweight.js';
 import { lightweightBinaryFBX, animatedBinaryFBX, cleanRiggedMixamoFBX } from './fbxExport.js';
 import { captureReferencePose, cloneAtReferencePose, exportableClipJSON } from './motionExtraction.js';
+import {captureExistingRigRest,editExistingRigClip,detectExistingRigRoles,
+  existingRigBones,prepareExistingRigClipForExport} from './autoRig/existingRigMotion.js';
 import { buildRigDiagnostic } from './rigDiagnostics.js';
 import { extensionOf, formatBytes, inspectRigCompatibility, uniqueClipName, summarizeRenderableGeometry, validateLoadedContent } from './modelInfo.js';
 
@@ -155,6 +157,8 @@ export class MotionViewer {
     this.wireframe = false;
     this.lastFilename = null;
     this.referencePose = null;
+    this.existingRigRest = null;
+    this.existingRigOriginals = new Map();
     this.lastFormat = null;
     this.textureAssetUrls = new Set();
     this.lastTextureBatch = null;
@@ -357,6 +361,8 @@ export class MotionViewer {
     this.lastFilename = loaded.name;
     this.lastFormat = loaded.format;
     this.scene.add(this.model);
+    this.existingRigRest = captureExistingRigRest(this.model);
+    this.existingRigOriginals.clear();
     this.clips = loaded.clips.map((clip,index)=>({name:uniqueClipName(loaded.clips.slice(0,index).map(c=>c.name),clip.name || `Animación ${index+1}`),clip,source:'Original'}));
     this.mixer = new THREE.AnimationMixer(this.model);
     if (this.clips.length) { this.play(0); this.mixer.update(0); }
@@ -392,6 +398,8 @@ export class MotionViewer {
     this.model = null;
     this.vrm = null;
     this.referencePose = null;
+    this.existingRigRest = null;
+    this.existingRigOriginals.clear();
     this.mixer = null;
     this.clips = [];
     this.current = null;
@@ -809,7 +817,67 @@ export class MotionViewer {
       throw new Error('Se deshicieron los cambios del lote porque falló una textura: '+(error.message||error));
     }
   }
-  getClips() { return this.clips.map(({name,clip,source},index)=>({name,source,index,duration:Number(clip.duration.toFixed(2)),tracks:clip.tracks.length})); }
+  // 02D: existing-rig motion editing is a separate workflow from bone creation.
+  getExistingRigMotionStatus(){
+    if(!this.model)return {ok:false,reason:'Carga un personaje.'};
+    if(!existingRigBones(this.model).length)
+      return {ok:false,reason:'Este personaje todavía no tiene huesos.'};
+    if(!this.clips.length)
+      return {ok:false,reason:'Este rig no incluye animaciones. Importa un clip compatible.'};
+    const roles=detectExistingRigRoles(this.model);
+    return {ok:true,bones:roles.bones,detected:roles.detected,
+      clips:this.getClips()};
+  }
+  editExistingRigAnimation(index,settings,roleNames){
+    if(!Number.isInteger(index)||index<0||!this.clips[index])
+      throw new Error('Selecciona una animación existente.');
+    if(!this.existingRigRest)
+      throw new Error('No se conservó la pose de reposo del rig.');
+    const current=this.clips[index];
+    const original=this.existingRigOriginals.get(index)||current.clip;
+    const output=editExistingRigClip(original,this.model,{
+      settings,boneNames:roleNames,rest:this.existingRigRest,
+    });
+    // No source-file or skeleton mutation. Only the selected library clip
+    // changes, and it is the SAME clip array consumed by GLB/FBX exporters.
+    if(!this.existingRigOriginals.has(index))
+      this.existingRigOriginals.set(index,original);
+    const previousTime=(this.current===index&&this.mixer)?
+      this.mixer.time:0;
+    const previousDuration=current.clip.duration;
+    const wasPlaying=this.playing;
+    if(this.mixer){
+      this.mixer.stopAllAction();
+      if(current.clip!==original)this.mixer.uncacheClip(current.clip);
+    }
+    current.clip=output.clip;
+    current.modified=output.changed;
+    current.adjustments=output.changed?output.settings:null;
+    this.play(index);
+    if(this.mixer&&previousDuration>0){
+      // Preserve the inspected relative phase while adjusting controls.
+      const t=Math.min(output.clip.duration-0.0001,
+        Math.max(0,previousTime/previousDuration*output.clip.duration));
+      this.mixer.setTime(t);
+    }
+    this.playing=wasPlaying;
+    this.notify();
+    return {name:current.name,duration:output.clip.duration,
+      targets:output.targets,changed:output.changed};
+  }
+  seekExistingRigAnimation(index,seconds){
+    const clip=this.clips[index]?.clip;
+    if(!clip||!this.mixer||!Number.isFinite(seconds))
+      throw new Error('No se puede recorrer una animación inexistente.');
+    if(this.current!==index)this.play(index);
+    const bounded=Math.max(0,Math.min(seconds,
+      Math.max(0,clip.duration-0.0001)));
+    this.mixer.setTime(bounded);
+    this.playing=false;
+    this.notify();
+    return bounded;
+  }
+  getClips() { return this.clips.map(({name,clip,source,modified},index)=>({name,source,index,modified:Boolean(modified),duration:Number(clip.duration.toFixed(2)),tracks:clip.tracks.length})); }
   getInfo() { return this.model ? inspect(this.model,this.clips) : EMPTY_INFO; }
   async addAnimations(files) {
     if (!this.model) throw new Error('Primero carga el personaje base.');
@@ -882,7 +950,10 @@ export class MotionViewer {
         })())
       : null;
     const exportModel=converted?.model||this.model;
-    const exportClips=converted?.clips||this.clips.map(item=>item.clip);
+    const edited=this.clips.some(item=>item.modified);
+    const exportClips=converted?.clips||
+      (edited?this.clips.map(item=>prepareExistingRigClipForExport(item.clip,this.model)):
+        this.clips.map(item=>item.clip));
     const exporter=new GLTFExporter();
     const buffer=await exporter.parseAsync(exportModel,{
       binary:true, animations:exportClips, onlyVisible:false,
@@ -895,6 +966,26 @@ export class MotionViewer {
       parsed.animations.some((clip,i)=>!clip.tracks.length || !Number.isFinite(clip.duration))) {
       throw new Error('El GLB exportado no conserva todas las animaciones; no se descargará un archivo incompleto.');
     }
+    // A corrected animation is only downloadable when ALL channels survive
+    // the export/import boundary. Silent loss of secondary bones, root motion
+    // or expression tracks would undo the user's review.
+    if(this.clips.some(item=>item.modified)){
+      for(let i=0;i<exportClips.length;i++){
+        const actual=parsed.animations[i],expected=exportClips[i];
+        if(!actual||actual.tracks.length!==expected.tracks.length||
+          Math.abs(actual.duration-expected.duration)>.035)
+          throw new Error('El GLB omitió pistas o modificó la duración de «'+
+            this.clips[i]?.name+'». Se canceló la descarga para proteger la animación.');
+      }
+      const originalSkins=this.model?
+        skinnedMeshes(this.model).length:0;
+      if(originalSkins){
+        let exportedSkinCount=0;
+        parsed.scene.traverse(node=>{if(node.isSkinnedMesh)exportedSkinCount++;});
+        if(!exportedSkinCount)
+          throw new Error('El GLB corregido perdió las mallas vinculadas al esqueleto.');
+      }
+    }
     if(this.textureAssetUrls.size && !this.vrm && inspect(parsed.scene,parsed.animations).textures===0)
       throw new Error('Las texturas externas no quedaron incorporadas en el GLB. No se descargará un archivo incompleto.');
     if(this.vrm){
@@ -903,7 +994,8 @@ export class MotionViewer {
       if(!skin)throw new Error('No se pudo conservar el esqueleto con su malla en el GLB.');
     }
     const filename=(this.lastFilename||'modelo').replace(/\.[^.]+$/,'')+
-      (this.vrm?'-orbi-animated-standard':'-orbi-motion')+'.glb';
+      (this.clips.some(clip=>clip.modified)?'-orbi-motion-edited':
+        this.vrm?'-orbi-animated-standard':'-orbi-motion')+'.glb';
     const blob=new Blob([buffer],{type:'model/gltf-binary'});
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
