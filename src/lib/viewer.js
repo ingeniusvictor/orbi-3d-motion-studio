@@ -891,9 +891,24 @@ export class MotionViewer {
       if(source.clips.length!==1)
         throw new Error('Selecciona un FBX que contenga exactamente una animación.');
       const {retargetMixamoToV06B}=await import('./autoRig/mixamoRetargetV06.js');
+      // Compute from the same untouched reference pose captured at load time,
+      // not from whichever animation frame the viewer is currently displaying.
+      const targetAtRest=cloneAtReferencePose(this.model,this.referencePose);
+      const sourceNodes=[],copyNodes=[];
+      this.model.traverse(node=>sourceNodes.push(node));
+      targetAtRest.traverse(node=>copyNodes.push(node));
+      if(sourceNodes.length!==copyNodes.length)
+        throw new Error('La copia del personaje cambió su jerarquía; transferencia bloqueada.');
+      const uuidMap=new Map(copyNodes.map((n,i)=>[n.uuid,sourceNodes[i].uuid]));
       const {clip,report}=retargetMixamoToV06B({
-        sourceRoot:source.model,sourceClip:source.clips[0],targetRoot:this.model,pivot,toes,
+        sourceRoot:source.model,sourceClip:source.clips[0],targetRoot:targetAtRest,pivot,toes,
       });
+      for(const track of clip.tracks){
+        const dot=track.name.lastIndexOf('.');
+        if(dot<0 || !uuidMap.has(track.name.slice(0,dot)))
+          throw new Error('Pista no asociada al esqueleto maestro: '+track.name);
+        track.name=uuidMap.get(track.name.slice(0,dot))+track.name.slice(dot);
+      }
       if(!clip.tracks.length||!Number.isFinite(clip.duration))
         throw new Error('La conversión no generó una animación válida.');
       const name=uniqueClipName(this.clips.map(c=>c.name),
