@@ -25,7 +25,7 @@ Perfil B, adulta D162 → V06B 346 (reparación de puntas opcional):
 python tools/mixamo-retarget/run_certified_kits.py --profile adult-d-162 --kit "C:\LUMIA\LUMIA_V06B_WAVE_HIPHOP_D_PRUEBA.zip" --toe-kit "C:\LUMIA\LUMIA_WAVE_HIPHOP_PIES_V2_KIT.zip" --toes lock --source "C:\LUMIA\Wave Hip Hop Dance.fbx" --target "C:\LUMIA\LUMIA_V06_RECOMENDADA.glb" --output "C:\LUMIA\wave_corregida.glb"
 ```
 
-El perfil A exige SHA-256 certificado del modelo V06B, 155 huesos y el controlador de orientación original. No es un convertidor Mixamo genérico. El perfil D usa orientación diferente. Si se encuentran rigs desconocidos, el proceso falla, no improvisa mapeos.
+Para el perfil D también puede pasarse `--golden C:\\LUMIA\\LUMIA_V06B_WAVE_HIPHOP_D_V2_PIES_CORREGIDOS.glb` a la orden anterior para verificar todas sus pistas contra el archivo aprobado. Solo usar ese Golden con el FBX Wave correspondiente y con `--toes lock` o `--toes auto`.\n\nEl perfil A exige SHA-256 certificado del modelo V06B, 155 huesos y el controlador de orientación original. No es un convertidor Mixamo genérico. El perfil D usa orientación diferente. Si se encuentran rigs desconocidos, el proceso falla, no improvisa mapeos.
 
 La opción `--toes lock` elimina específicamente las pistas de rotación errática de las dos puntas. Esto también suprime flexión válida de dedos; usarla solo tras ver el defecto o consultar el diagnóstico. `--toes auto` exige anomalías en ambas puntas.
 
@@ -41,7 +41,7 @@ La opción `--toes lock` elimina específicamente las pistas de rotación errát
 
 - Hip Hop V4: 47 pistas, 0° de diferencia angular y tolerancia de traslación 1e-5 m.
 - Samba Dancing V1: perfil 155 aprobado visualmente en ORBI (29,8 s).
-- Wave Hip Hop D V2: perfil 162 aprobado visualmente, corrección localizada de ambas puntas, 346 huesos, 41 morphs.
+- Wave Hip Hop D V2: perfil 162 aprobado visualmente, corrección localizada de ambas puntas, 346 huesos, 41 morphs. Re-ejecución independiente sobre el FBX original: **52/52 pistas idénticas al Golden, diferencia angular 0° y traslación 0 m**.
 - No reintroducir órbita de pelvis, giros duplicados ±90°, yaw incorrecto, ni confundir T-pose con A-pose.
 - La rama no debe modificar las pruebas AUTORIG-02F ni otras funciones existentes.
 
