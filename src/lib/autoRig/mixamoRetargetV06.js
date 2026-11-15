@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {requireLumiaTargetRest} from './lumiaMasterProfile.js';
 
 // MOTION-06: isolated, non-destructive browser adapter for the TWO known LUMIA
 // Mixamo sources. The certified Python V3/V4 is kept as the golden reference.
@@ -41,11 +42,19 @@ export function skinBoneIndex(root){
   return new Map(best.filter(b=>b?.isBone&&b.name).map(b=>[b.name,b]));
 }
 
-export function identifyMixamoProfile(sourceRoot,targetRoot){
+export function identifyMixamoProfile(sourceRoot,targetRoot,{
+  targetVersion='v06b',
+}={}){
   const src=skinBoneIndex(sourceRoot),tgt=skinBoneIndex(targetRoot);
   if(tgt.size!==346 || !tgt.has('V8_root') || !tgt.has('V8_Bip001-Pelvis')
     || !tgt.has('J_Bip_C_Head'))
-    throw new Error('Este perfil necesita la LUMIA V06B maestra con 346 huesos.');
+    throw new Error('Este perfil requiere LUMIA maestra 346 con huesos reconocidos.');
+  if(!['v06b','claude-v09'].includes(targetVersion))
+    throw new Error('Perfil de destino MOTION-07 desconocido.');
+  // Preserve MOTION-06 V06B legacy behavior. The new V09 path fails closed
+  // if it receives V06B (same 346 names but DIFFERENT bind pose matrices).
+  if(targetVersion==='claude-v09')
+    requireLumiaTargetRest(targetRoot,'claude-v09');
   const missing=req.filter(n=>!src.has(n));
   if(missing.length)throw new Error('El FBX no corresponde al rig LUMIA compatible: '+missing.join(', '));
   if(src.size!==155 && src.size!==162)
@@ -55,7 +64,8 @@ export function identifyMixamoProfile(sourceRoot,targetRoot){
   if(src.size===162 && ![...src.keys()].some(n=>n.startsWith('V8_Bone-')))
     throw new Error('El rig D de 162 huesos no contiene los correctores V8 esperados.');
   return {id:src.size===155?LUMIA_MIXAMO_PROFILES.ORIGINAL_155:
-    LUMIA_MIXAMO_PROFILES.ADULT_D_162,sourceBones:src.size,targetBones:tgt.size};
+    LUMIA_MIXAMO_PROFILES.ADULT_D_162,sourceBones:src.size,
+    targetBones:tgt.size,targetVersion};
 }
 
 function restIndex(root){
@@ -120,13 +130,13 @@ export function diagnoseToeTracks(clip){
 // actual animated hierarchy, then transfer global rest-relative rotations.
 // Target skin, inverse binds, node hierarchy and source tracks stay untouched.
 export function retargetMixamoToV06B({sourceRoot,sourceClip,targetRoot,
-  pivot='anchored',toes='auto'}={}){
+  pivot='anchored',toes='auto',targetVersion='v06b'}={}){
   if(!(sourceClip instanceof THREE.AnimationClip)||!sourceClip.tracks.length)
     throw new Error('El FBX no incluye una animación válida.');
   if(!['anchored','preserve-stage'].includes(pivot) ||
       !['auto','keep','lock'].includes(toes))
     throw new Error('Opciones de transferencia no reconocidas.');
-  const profile=identifyMixamoProfile(sourceRoot,targetRoot);
+  const profile=identifyMixamoProfile(sourceRoot,targetRoot,{targetVersion});
   const si=restIndex(sourceRoot),ti=restIndex(targetRoot),srcBones=skinBoneIndex(sourceRoot);
   const sourceLookup=new Map(srcBones),targetLookup=skinBoneIndex(targetRoot);
   const mapping=new Map();
@@ -254,12 +264,15 @@ export function retargetMixamoToV06B({sourceRoot,sourceClip,targetRoot,
       times,quaternions));
   }
   tracks.push(new THREE.VectorKeyframeTrack(root.uuid+'.position',times,rootTr));
-  const clip=new THREE.AnimationClip(sourceClip.name+' · LUMIA V06B',-1,tracks);
+  const clip=new THREE.AnimationClip(sourceClip.name+
+    (targetVersion==='claude-v09'?' · LUMIA Claude V09':' · LUMIA V06B'),-1,tracks);
   const report={sourceProfile:profile.id,sourceBones:profile.sourceBones,
-    targetBones:346,samples:times.length,duration:clip.duration,
+    targetBones:346,targetVersion,samples:times.length,duration:clip.duration,
     tracks:tracks.length,toeReport,lockedToes:lockToes,
     pivot,preservesOriginalModel:true,warning:
       'Conversión web experimental: revisar movimiento, pies y cuello en ORBI. '+
-      'No equivale a la certificación Golden del motor Python.'};
+      'No equivale a la certificación Golden del motor Python.'+
+      (targetVersion==='claude-v09'?
+        ' Destino V09 con reposo distinto al de V06B; QA visual obligatoria.':'')};
   return {clip,report};
 }
