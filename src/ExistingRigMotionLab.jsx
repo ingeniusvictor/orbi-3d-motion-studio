@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useEffect,useState} from 'react';
 import {Download,RotateCcw,Film,ShieldCheck} from 'lucide-react';
 import {DEFAULT_MOTION_ADJUSTMENTS,normalizeMotionAdjustments}
   from './lib/autoRig/motionAdjustments.js';
@@ -23,6 +23,27 @@ export default function ExistingRigMotionLab({model,getViewer}){
   const [busy,setBusy]=useState(false);
   const [isEdited,setIsEdited]=useState(false);
   const [vrmConsent,setVrmConsent]=useState(false);
+  const [time,setTime]=useState(0);
+  const [playing,setPlaying]=useState(Boolean(getViewer?.()?.playing));
+  useEffect(()=>{
+    let frame=0,last=0,active=true;
+    const refresh=now=>{
+      if(!active)return;
+      if(now-last>=150){
+        last=now;
+        const viewer=getViewer?.();
+        const clip=viewer?.clips?.[clipIndex]?.clip;
+        if(viewer?.current===clipIndex&&clip?.duration>0){
+          const seconds=((viewer.mixer?.time||0)%clip.duration+clip.duration)%clip.duration;
+          setTime(t=>Math.abs(t-seconds)>.045?seconds:t);
+          setPlaying(Boolean(viewer.playing));
+        }
+      }
+      frame=requestAnimationFrame(refresh);
+    };
+    frame=requestAnimationFrame(refresh);
+    return ()=>{active=false;cancelAnimationFrame(frame);};
+  },[clipIndex,getViewer]);
   if(!model||model.bones<1)return null;
   const active=status.clips?.[clipIndex];
   const names=overrides||status.detected||{};
@@ -32,6 +53,7 @@ export default function ExistingRigMotionLab({model,getViewer}){
     const v=normalizeMotionAdjustments(newSettings);
     const result=viewer.editExistingRigAnimation(clipIndex,v,targets);
     setSettings(v);setOverrides({...targets});setIsEdited(result.changed);
+    setPlaying(Boolean(viewer.playing));
     setError('');
     setNote(result.changed
       ?'Vista actualizada en el personaje: '+(result.targets.join(', ')||
@@ -51,6 +73,7 @@ export default function ExistingRigMotionLab({model,getViewer}){
     if(!viewer?.clips[i])return;
     viewer.play(i);
     setClipIndex(i);
+    setTime(0);setPlaying(true);
     setSettings(viewer.clips[i].adjustments||defaults());
     setOverrides({...status.detected});
     setIsEdited(Boolean(viewer.clips[i].modified));
@@ -59,7 +82,9 @@ export default function ExistingRigMotionLab({model,getViewer}){
   const changeBone=(role,boneName)=>{
     const next={...names,[role]:boneName};
     const pending=Object.keys(settings).some(
-      k=>settings[k]!==DEFAULT_MOTION_ADJUSTMENTS[k]);
+      k=>settings[k]!==DEFAULT_MOTION_ADJUSTMENTS[k])&&
+      !Object.keys(settings).every(k=>
+        settings[k] === (k==='overdrive'?1:DEFAULT_MOTION_ADJUSTMENTS[k]));
     try{
       if(pending)apply(settings,next);
       else {setOverrides(next);setError('');}
@@ -106,6 +131,39 @@ export default function ExistingRigMotionLab({model,getViewer}){
               {clip.modified?' (modificada)':''}</option>)}
         </select>
       </label>
+      <div style={{display:'grid',gap:6,border:'1px solid #385267',
+        padding:9,borderRadius:8}}>
+        <div style={{display:'flex',gap:7}}>
+          <button type="button" className="outline-btn" style={{...button,flex:1}}
+            onClick={()=>{
+              const viewer=getViewer?.();
+              if(!viewer)return;
+              if(viewer.current!==clipIndex)viewer.play(clipIndex);
+              else viewer.setPlaying(!viewer.playing);
+              setPlaying(Boolean(viewer.playing));
+            }}>{playing?'⏸ Pausar movimiento':'▶ Reproducir movimiento'}</button>
+          <button type="button" className="outline-btn" style={button}
+            onClick={()=>{
+              try{setTime(getViewer().seekExistingRigAnimation(clipIndex,0));
+                setPlaying(false);}
+              catch(e){setError(e.message||String(e));}
+            }}>↶ Inicio</button>
+        </div>
+        <label style={{fontSize:11,color:'#c6e0e4'}}>
+          Inspección fotograma a fotograma · {time.toFixed(2)} /
+          {' '}{(active?.duration||0).toFixed(2)} s
+          <input type="range" min="0" max={active?.duration||1}
+            step=".02" value={Math.min(time,active?.duration||1)}
+            style={{width:'100%',marginTop:6}}
+            onChange={e=>{
+              try{
+                setTime(getViewer().seekExistingRigAnimation(
+                  clipIndex,Number(e.target.value)));
+                setPlaying(false);
+              }catch(err){setError(err.message||String(err));}
+            }}/>
+        </label>
+      </div>
       <small style={{fontSize:10,color:'#a8bdca',lineHeight:1.55}}>
         Las articulaciones se detectan por nombre. Si alguna no coincide,
         asígnala manualmente al hueso correspondiente antes de modificar el
