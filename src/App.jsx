@@ -8,6 +8,7 @@ import FaceQuickDock from './FaceQuickDock.jsx';
 import MotionExtractor from './MotionExtractor.jsx';
 import MixamoRetargetLab from './MixamoRetargetLab.jsx';
 import AutoRigLab from './AutoRigLab.jsx';
+import PanelErrorBoundary from './PanelErrorBoundary.jsx';
 import ViewportMotionDock from './ViewportMotionDock.jsx';
 import {accessoryModeLabel,strictSplitRigHint} from './lib/motionExportModes.js';
 import { blenderConvertScript } from './lib/mixamoKit.js';
@@ -433,15 +434,20 @@ export default function App() {
                 <ChevronDown size={13} className={motionDockOpen?'motion-toggle-chevron motion-toggle-open':'motion-toggle-chevron'}/>
               </button>}{model&&<button className={faceDockOpen?'toolbar-btn on':'toolbar-btn'} onClick={()=>{setFaceDockOpen(v=>!v);setMotionDockOpen(false);}} title="Mostrar controles faciales compatibles" aria-label="Controles rápidos de rostro" aria-pressed={faceDockOpen}><SlidersHorizontal size={17}/></button>}</div></div>
               <div className="renderer-mount" ref={mountRef}/>
-              <FaceQuickDock key={'face-dock-'+modelGeneration} getViewer={getViewer} model={model}
-                open={faceDockOpen} onClose={()=>setFaceDockOpen(false)}
-                voiceState={voiceQAState}
-                onSpeak={()=>voiceQARef.current?.play?.()}
-                onStopVoice={()=>voiceQARef.current?.stop?.()}/>
-              <ViewportMotionDock key={'viewport-motion-'+modelGeneration}
-                model={model} getViewer={getViewer}
-                generation={modelGeneration}
-                open={motionDockOpen} onClose={()=>setMotionDockOpen(false)}/>
+              <PanelErrorBoundary key={'face-boundary-'+modelGeneration}
+                label="los controles del rostro">
+                <FaceQuickDock getViewer={getViewer} model={model}
+                  open={faceDockOpen} onClose={()=>setFaceDockOpen(false)}
+                  voiceState={voiceQAState}
+                  onSpeak={()=>voiceQARef.current?.play?.()}
+                  onStopVoice={()=>voiceQARef.current?.stop?.()}/>
+              </PanelErrorBoundary>
+              <PanelErrorBoundary key={'motion-boundary-'+modelGeneration}
+                label="los controles de animación">
+                <ViewportMotionDock model={model} getViewer={getViewer}
+                  generation={modelGeneration}
+                  open={motionDockOpen} onClose={()=>setMotionDockOpen(false)}/>
+              </PanelErrorBoundary>
               {!model && <Intro onOpen={()=>fileInput.current?.click()}/>}
               {dragging&&<div className="drag-mask"><UploadCloud size={42}/><strong>Suelta tu archivo 3D</strong><span>Tu archivo se procesa localmente</span></div>}
               {busy&&<div className="busy-mask"><div className="loading-ring"/><strong>{busy}</strong></div>}
@@ -497,8 +503,12 @@ export default function App() {
           </section>
           <aside className="sidebar-panels"><section className="panel inspector-panel"><div className="panel-header"><div><div className="section-icon"><SlidersHorizontal size={19}/></div><div><h3>Inspector 3D</h3><p>Detalles de tu modelo</p></div></div></div>
             {model?<><div className="model-chip"><div className="model-symbol"><Box size={23}/></div><div><strong title={model.filename}>{model.filename}</strong><span>{model.format} · {formatBytes(model.bytes)}</span></div><CheckCircle2 size={17} className="success-ic"/></div><div className="tab-bar"><button className={inspectorTab==='stats'?'active':''} onClick={()=>setInspectorTab('stats')}>Composición</button><button className={inspectorTab==='tree'?'active':''} onClick={()=>setInspectorTab('tree')}>Estructura</button></div>{inspectorTab==='stats'?<div className="stats-grid"><Stat icon={Box} label="Mallas" value={number(model.meshes)}/><Stat icon={Grid2X2} label="Triángulos" value={number(model.triangles)}/><Stat icon={Layers3} label="Materiales" value={number(model.materials)}/><Stat icon={Boxes} label="Texturas" value={number(model.textures)}/><Stat icon={Activity} label="Huesos" value={number(model.bones)}/><Stat icon={Film} label="Animaciones" value={number(clips.length)}/><Stat icon={Eye} label="Nodos" value={number(model.nodes)}/><Stat icon={ScanEye} label="Vértices" value={number(model.vertices)}/></div>:<div className="tree-list">{model.hierarchy.map((node,index)=><div key={index} className="tree-node" style={{paddingLeft:`${Math.min(node.depth,7)*12+8}px`}}><span className="tree-mark">{node.type==='Bone'?'◇':'▸'}</span><span title={node.name}>{node.name}</span><small>{node.type}</small></div>)}{model.nodes>180&&<div className="tree-more">Mostrando los primeros 180 nodos de {model.nodes}.</div>}</div>}</>:<div className="inspector-empty"><Boxes size={32}/><strong>Aún no hay modelo</strong><p>La composición y estructura aparecerán al cargar un archivo.</p></div>}</section>
-          <AutoRigLab key={'autorig-'+modelGeneration} model={model} getViewer={getViewer}/>
-          <LivingPresenceLab key={'lp-'+modelGeneration} model={model} generation={modelGeneration} getViewer={getViewer} activeClip={activeClip} voiceQARef={voiceQARef} onVoiceQAState={setVoiceQAState}/>
+          <PanelErrorBoundary key={'autorig-boundary-'+modelGeneration} label="AutoRig Studio">
+            <AutoRigLab model={model} getViewer={getViewer}/>
+          </PanelErrorBoundary>
+          <PanelErrorBoundary key={'presence-boundary-'+modelGeneration} label="Living Presence">
+            <LivingPresenceLab model={model} generation={modelGeneration} getViewer={getViewer} activeClip={activeClip} voiceQARef={voiceQARef} onVoiceQAState={setVoiceQAState}/>
+          </PanelErrorBoundary>
           <TextureStudio key={modelGeneration} model={model} materials={textureMaterials} busy={busy} onApply={applyTexture} onBatch={batchTexture} onUndo={undoTexture} canUndo={canUndoTextures} onCapture={id=>viewer.current.captureMaterialViews(id)}/>
           <section className="panel integrate-panel"><div className="panel-header"><div><div className="section-icon mint"><FilePlus2 size={19}/></div><div><h3>Integrar movimientos</h3><p>Animaciones externas del mismo rig</p></div></div></div><div className="compat-note"><ShieldCheck size={17}/><span>{model?.format==='VRM'?'VRM: los movimientos se pueden guardar como GLB estándar aproximado (no como VRM).':'Solo FBX del mismo esqueleto y jerarquía del personaje. No realiza rigging ni retargeting.'}</span></div><button className="outline-btn" onClick={()=>animationInput.current?.click()} disabled={!model||!!busy}><FilePlus2 size={16}/> Añadir animaciones FBX</button>{importResults.length>0&&<div className="results-list">{importResults.map((item,index)=><div key={`${item.name}-${index}`} className={item.ok?'ok':'fail'}>{item.ok?<CheckCircle2 size={15}/>:<XCircle size={15}/>}<span><strong>{item.name}</strong><small>{item.ok?`${item.count} animación(es) añadida(s)`:item.reason}</small>{item.ok&&item.warning&&<small>{item.warning}</small>}</span></div>)}</div>}
             {model?.format==='VRM'&&<label className="vrm-export-warning" style={{display:'flex',alignItems:'flex-start',gap:9,margin:'10px 0',fontSize:12,lineHeight:1.6,color:'#c6d3e4',cursor:'pointer'}}><input type="checkbox" checked={allowVrmExport} onChange={event=>setAllowVrmExport(event.target.checked)} style={{accentColor:'#48d9cb',marginTop:3,flexShrink:0}}/><span>Entiendo que descargaré un <strong>GLB estándar aproximado</strong>, no un VRM. Materiales MToon, expresiones, física y desplazamientos omitidos pueden perderse.</span></label>}
