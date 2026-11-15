@@ -269,7 +269,13 @@ export class MotionViewer {
     // The imported character is *never* moved, resized or rotated here.
     // Fit a camera around actual world-space skinned vertex positions,
     // not Bone helpers / bind ghost offsets in an imported FBX hierarchy.
-    const visible=computeVisibleCharacterBounds(this.model);
+    const staticModel=!this.clips?.length;
+    const visible=computeVisibleCharacterBounds(this.model,{
+      // Unanimated skinned characters should not evaluate CPU skinning on
+      // thousands of sampled vertices only to position the camera.
+      deformed:!staticModel,
+      maxSamplesPerMesh:staticModel?1600:4800,
+    });
     let box=visible?.box;
     let method=visible?.method||'fallback';
     if(!box){
