@@ -1,10 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import {computeVisibleCharacterBounds,cameraFitParameters,detectBodyUpDirection} from './visibleBounds.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
-import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { adaptFbxToVrm } from './vrmMotion.js';
 import { auditVrmRig } from './livingPresence/rigAudit.js';
 import { LivingPresence } from './livingPresence/LivingPresence.js';
@@ -24,6 +21,8 @@ import {captureExistingRigRest,editExistingRigClip,detectExistingRigRoles,
   existingRigBones,prepareExistingRigClipForExport} from './autoRig/existingRigMotion.js';
 import { buildRigDiagnostic } from './rigDiagnostics.js';
 import { extensionOf, formatBytes, inspectRigCompatibility, uniqueClipName, summarizeRenderableGeometry, validateLoadedContent } from './modelInfo.js';
+import {loadCompatibleModel} from './loadCompatibleModel.js';
+import {choosePrimaryModel,VIEWABLE_EXTENSIONS,explainImportError} from './viewerCompatibility.js';
 
 const EMPTY_INFO = { meshes: 0, vertices: 0, triangles: 0, materials: 0, bones: 0, animations: 0, nodes: 0, textures: 0, hierarchy: [] };
 
@@ -79,36 +78,35 @@ function makeManager(files) {
   return { manager, urls, resources };
 }
 
-async function loadObject(files, { animationSource = false } = {}) {
-  const list = Array.from(files);
-  const primary = list.find(file => ['glb','gltf','fbx','vrm'].includes(extensionOf(file.name)));
-  if (!primary) throw new Error('Selecciona un modelo .glb, .gltf, .fbx o .vrm.');
-  const {manager, urls, resources} = makeManager(list);
-  try {
-    const extension = extensionOf(primary.name);
-    const loader = extension === 'fbx' ? new FBXLoader(manager) : new GLTFLoader(manager);
-    if (extension !== 'fbx') loader.register(parser => new VRMLoaderPlugin(parser));
-    const source = resources.get(primary.name.toLowerCase());
-    const loaded = await loader.loadAsync(source);
-    const vrm = extension === 'fbx' ? null : loaded.userData?.vrm || null;
-    if (extension === 'vrm' && !vrm) {
-      throw new Error('El archivo usa la extensión .vrm, pero no contiene metadatos VRM compatibles.');
-    }
-    if (vrm) VRMUtils.rotateVRM0(vrm);
-    const model = vrm?.scene || (extension === 'fbx' ? loaded : loaded.scene);
-    const clips = (loaded.animations || []).map(clip => clip.clone());
-    const geometry = summarizeRenderableGeometry(model);
-    // Animation-only Mixamo files intentionally have bones and clips, but no mesh.
-    // Permit them ONLY in the import-animations workflow, not as visible models.
-    const reason = validateLoadedContent(geometry, clips.length, animationSource && extension === 'fbx');
-    if (reason) throw new Error(reason);
-    model.updateWorldMatrix(true, true);
-    return {model, clips, vrm, name:primary.name, bytes: list.reduce((n,file) => n+file.size,0), format:vrm ? 'VRM' : extension.toUpperCase()};
-  } catch(error) {
-    throw new Error(`No se pudo abrir ${primary.name}. Si utilizas .gltf, selecciona también sus .bin y texturas. Detalle: ${error?.message || error}`);
-  } finally {
-    // Defer revocation until all loader-created image/texture tasks have resolved.
-    setTimeout(() => urls.forEach(url => URL.revokeObjectURL(url)), 3000);
+async function loadObject(files, { animationSource = false, renderer = null } = {}) {
+  const list=Array.from(files||[]);
+  const primary=choosePrimaryModel(list);
+  if(!primary)
+    throw new Error('Selecciona un modelo compatible: '+
+      VIEWABLE_EXTENSIONS.map(ext=>'.'+ext).join(', ')+'.');
+  const {manager,urls,resources}=makeManager(list);
+  const extension=extensionOf(primary.name);
+  try{
+    const {model,clips,vrm,preflight}=await loadCompatibleModel({
+      primary,manager,resources,files:list,renderer,animationSource,
+    });
+    const geometry=summarizeRenderableGeometry(model);
+    // Static GLB/FBX files are valid characters: animations are OPTIONAL.
+    const reason=validateLoadedContent(geometry,clips.length,
+      animationSource&&extension==='fbx');
+    if(reason)throw new Error(reason);
+    model.updateWorldMatrix(true,true);
+    return {
+      model,clips,vrm,preflight,name:primary.name,
+      bytes:list.reduce((n,file)=>n+(file.size||0),0),
+      format:vrm?'VRM':extension.toUpperCase(),
+      staticModel:clips.length===0,
+    };
+  }catch(error){
+    throw new Error('No se pudo visualizar '+primary.name+'. '+
+      explainImportError(extension,error));
+  }finally{
+    setTimeout(()=>urls.forEach(url=>URL.revokeObjectURL(url)),3000);
   }
 }
 
@@ -160,6 +158,7 @@ export class MotionViewer {
     this.existingRigRest = null;
     this.existingRigOriginals = new Map();
     this.lastFormat = null;
+    this.lastImportDiagnostics = null;
     this.textureAssetUrls = new Set();
     this.lastTextureBatch = null;
     this.loadSequence = 0;
@@ -340,7 +339,7 @@ export class MotionViewer {
   }
   async open(files) {
     const request = ++this.loadSequence;
-    const loaded = await loadObject(files);
+    const loaded = await loadObject(files,{renderer:this.renderer});
     if (this.disposed || request !== this.loadSequence) return null;
     this.clearModel();
     this.model = loaded.model;
@@ -360,6 +359,13 @@ export class MotionViewer {
     this.fbxFace = !this.vrm ? new FbxFaceQA(this.model) : null;
     this.lastFilename = loaded.name;
     this.lastFormat = loaded.format;
+    this.lastImportDiagnostics={
+      filename:loaded.name,format:loaded.format,staticModel:loaded.staticModel,
+      preflight:loaded.preflight,
+      message:loaded.staticModel
+        ?'El personaje es visible aunque no tenga animaciones. Para moverlo, importa un clip compatible.'
+        :'Modelo y animaciones cargados.',
+    };
     this.scene.add(this.model);
     this.existingRigRest = captureExistingRigRest(this.model);
     this.existingRigOriginals.clear();
@@ -371,7 +377,8 @@ export class MotionViewer {
     this.setWireframe(this.wireframe);
     const info = inspect(this.model,this.clips);
     this.notify();
-    return {...info, filename:loaded.name, bytes:loaded.bytes, format:loaded.format};
+    return {...info,filename:loaded.name,bytes:loaded.bytes,format:loaded.format,
+      staticModel:loaded.staticModel,diagnostics:this.lastImportDiagnostics};
   }
   clearModel() {
     this.faceTracking=null;
