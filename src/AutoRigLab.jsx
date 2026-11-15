@@ -3,6 +3,7 @@ import {Bone,CheckCircle2,Download,ShieldAlert,ShieldCheck,MousePointer2} from '
 import {autoRigEligibility} from './lib/autoRig/eligibility.js';
 import {NativeRigEditor} from './lib/autoRig/NativeRigEditor.js';
 import {createNativeSkinPreview} from './lib/autoRig/nativeSkinPreview.js';
+import ExistingRigMotionLab from './ExistingRigMotionLab.jsx';
 import {createOrbiMotionSamples} from './lib/autoRig/fullBodyMotion.js';
 import {loadAndRetargetMixamo} from './lib/autoRig/loadMixamoMotion.js';
 import {DEFAULT_MOTION_ADJUSTMENTS,adjustHumanoidMotionClip,
@@ -392,12 +393,14 @@ export default function AutoRigLab({model,getViewer}){
   return <section className="panel inspector-panel" aria-label="ORBI AutoRig Studio">
     <div className="panel-header"><div>
       <div className="section-icon mint"><Bone size={19}/></div>
-      <div><h3>AutoRig Studio</h3><p>AUTORIG-02C.4 · Rigging y ajustes de animación sin Blender</p></div>
+      <div><h3>AutoRig Studio</h3><p>AUTORIG-02D · Crear rig o editar animaciones existentes</p></div>
     </div></div>
     <div style={{padding:'14px 15px',display:'grid',gap:12}}>
       <div className="compat-note" style={{margin:0,alignItems:'flex-start'}}>
         {eligible.ok?<ShieldCheck size={17}/>:<ShieldAlert size={17}/>}
-        <span>{eligible.reason}</span>
+        <span>{model?.bones>0
+          ?'Modelo con huesos detectado: edición del rig bloqueada para protegerlo; usa AUTORIG-02D (Animaciones existentes) debajo.'
+          :eligible.reason}</span>
       </div>
       <small style={{fontSize:11,lineHeight:1.65,color:'#a8bdc9'}}>
         Sin Blender: 22 puntos, 19 huesos, skinning experimental, animación corporal
@@ -405,11 +408,11 @@ export default function AutoRigLab({model,getViewer}){
         necesita QA visual y no hay exportación de GLB riggeado en este piloto.
         Los rigs existentes de Vita y Mint quedan fuera del alcance.
       </small>
-      <button className="outline-btn" style={btn}
-        onClick={()=>{setEditing(v=>!v);setError('');setNotice('');}}
-        disabled={!eligible.ok}>
+      {eligible.ok&&<button className="outline-btn" style={btn}
+        onClick={()=>{setEditing(v=>!v);setError('');setNotice('');}}>
         <MousePointer2 size={16}/>{editing?'Cerrar editor de marcadores':'Iniciar editor 3D sin Blender'}
-      </button>
+      </button>}
+      {model?.bones>0&&<ExistingRigMotionLab model={model} getViewer={getViewer}/>}
       {editing&&<div style={{display:'grid',gap:10}}>
         <div style={{fontSize:11,color:'#b6cbd6',lineHeight:1.6}}>
           <strong>Modo seguro:</strong> cámara fija y movimiento limitado por ejes.
