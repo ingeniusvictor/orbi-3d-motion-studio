@@ -1,4 +1,5 @@
-import {useState} from 'react';
+import {useMemo,useState} from 'react';
+import {inspectLumiaMasterRest} from './lib/autoRig/lumiaMasterProfile.js';
 import {Film,ShieldCheck,UploadCloud} from 'lucide-react';
 
 // Separate from existing AUTORIG-02F controls. Uses the already loaded GLB
@@ -12,6 +13,9 @@ export default function MixamoRetargetLab({model,getViewer,onComplete}){
   const [busy,setBusy]=useState(false);
   const [result,setResult]=useState(null);
   const [error,setError]=useState('');
+  const detected=useMemo(()=>inspectLumiaMasterRest(getViewer?.()?.model),
+    [model?.filename,getViewer]);
+  const targetVersion=detected.ok?detected.version:'v06b';
   if(!model)return null;
   const allowed=model.bones===346 && model.format==='GLB';
   const run=async()=>{
@@ -21,21 +25,31 @@ export default function MixamoRetargetLab({model,getViewer,onComplete}){
       const viewer=getViewer?.();
       if(!viewer?.addLumiaMixamoRetarget)
         throw new Error('El visor no dispone del motor MOTION-06.');
-      const report=await viewer.addLumiaMixamoRetarget(file,{pivot,toes});
+      const report=await viewer.addLumiaMixamoRetarget(file,{
+        pivot,toes,targetVersion,
+      });
       setResult(report);
       onComplete?.(report);
     }catch(e){setError(e.message||String(e));}
     finally{setBusy(false);}
   };
   return <details className="motion-extractor">
-    <summary><Film size={15}/> MOTION-06 · Mixamo 155/D162 → LUMIA V06B</summary>
+    <summary><Film size={15}/> MOTION-06/07 · Mixamo 155/D162 → LUMIA 346</summary>
     <div className="motion-extractor-content">
       <p><ShieldCheck size={14} style={{verticalAlign:'middle'}}/>
         {' '}Conversión opcional. No sustituye el rig, las 41 expresiones,
         la geometría ni las animaciones existentes.</p>
+      {allowed&&<p role="status" style={{color:'#b7eee3'}}>
+        Destino: {detected.ok
+          ?(detected.version==='claude-v09'?
+             'Claude V09 · reposo identificado':'V06B · reposo identificado')
+          :'perfil V06B heredado (sin identificación de reposo; revisar rigurosamente)'}.
+        {detected.version==='claude-v09'
+          ?' Se usarán las matrices de reposo V09, distintas de V06B.':''}
+      </p>}
       {!allowed&&<p role="note" style={{color:'#ffcc88'}}>
-        Necesitas cargar el GLB maestro de LUMIA V06B con 346 huesos.
-        Este perfil no admite modelos arbitrarios.</p>}
+        Necesitas cargar un GLB maestro LUMIA reconocido de 346 huesos.
+        No se admite un rig genérico.</p>}
       <label style={{display:'grid',gap:5,fontSize:12}}>Archivo Mixamo FBX del rig LUMIA 155 o D162
         <input type="file" accept=".fbx" disabled={!allowed||busy}
           onChange={e=>{setFile(e.target.files?.[0]||null);setResult(null);}}/>
