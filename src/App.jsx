@@ -7,6 +7,7 @@ import LivingPresenceLab from './LivingPresenceLab.jsx';
 import FaceQuickDock from './FaceQuickDock.jsx';
 import MotionExtractor from './MotionExtractor.jsx';
 import MixamoRetargetLab from './MixamoRetargetLab.jsx';
+import MixamoToeLockLab from './MixamoToeLockLab.jsx';
 import AutoRigLab from './AutoRigLab.jsx';
 import PanelErrorBoundary from './PanelErrorBoundary.jsx';
 import ViewportMotionDock from './ViewportMotionDock.jsx';
@@ -499,6 +500,8 @@ export default function App() {
               <MixamoRetargetLab key={'mixamo-retarget-'+modelGeneration}
                 model={model} getViewer={getViewer}
                 onComplete={()=>{syncPlayer();setModel(current=>current?{...current,...viewer.current.getInfo()}:current);}}/>
+              <MixamoToeLockLab key={'toe-lock-'+modelGeneration}
+                model={model} getViewer={getViewer}/>
             </section>
           </section>
           <aside className="sidebar-panels"><section className="panel inspector-panel"><div className="panel-header"><div><div className="section-icon"><SlidersHorizontal size={19}/></div><div><h3>Inspector 3D</h3><p>Detalles de tu modelo</p></div></div></div>
