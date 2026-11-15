@@ -406,7 +406,7 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
       <strong style={{fontSize:12}}>LP-03C.2 · Boca y labios (visemas)</strong>
       <small style={{lineHeight:1.5,opacity:0.86}}>
         {lipInfo?.supported
-          ?'Control de boca detectado: '+lipInfo.names.join(', ')+'. '+lipInfo.reason
+          ?'Control de boca detectado: '+(lipInfo.names||[]).join(', ')+'. '+(lipInfo.reason||'')
           :(lipInfo?.reason||'No hay controles labiales compatibles detectados.')}
       </small>
       {lipInfo?.supported&&<>
