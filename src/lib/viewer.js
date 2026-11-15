@@ -10,7 +10,7 @@ import { LivingPresence } from './livingPresence/LivingPresence.js';
 import { MotionComposer } from './livingPresence/motionComposer.js';
 import { LipSyncController } from './livingPresence/lipSync.js';
 import { FacialPresence } from './livingPresence/facialPresence.js';
-import { FbxFaceQA } from './livingPresence/fbxFaceQA.js';
+import { GlbMorphFaceQA } from './livingPresence/glbMorphFaceQA.js';
 import { getFaceFraming } from './faceFraming.js';
 import { bakeVrmForGlb, convertVrmMaterials } from './vrmExport.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
@@ -479,7 +479,10 @@ export class MotionViewer {
     this.facial = this.vrm ? new FacialPresence(this.vrm,{
       seed:this.presence?.randomSeed||367,
     }) : null;
-    this.fbxFace = !this.vrm ? new FbxFaceQA(this.model) : null;
+    // Non-VRM GLB/FBX may contain real face morphs (A/I/U/E/O, Blink,
+    // Joy...). Inspect the actual imported mesh dictionaries and fall back
+    // to the existing conservative, manually-calibrated bone QA when absent.
+    this.fbxFace = !this.vrm ? new GlbMorphFaceQA(this.model) : null;
     this.lastFilename = loaded.name;
     this.lastFormat = loaded.format;
     this.lastImportDiagnostics={
