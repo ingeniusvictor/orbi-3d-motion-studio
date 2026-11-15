@@ -170,11 +170,17 @@ export function editExistingRigClip(original,model,{
       ((adjustArm&&needsArm)||(role==='head'&&v.look!==50));
     const resized=reSampleTrack(track,begin,duration,
       timesampled||Boolean(adaptRotation));
+    // Three.js PropertyBinding uses ':' and '|' as reserved path separators.
+    // Resolve such names through a stable bone UUID on the edited COPY only,
+    // otherwise browser playback and GLTFExporter can silently skip the track.
+    if(sourceBone&&/[:|]/.test(node))
+      resized.name=sourceBone.uuid+'.'+property;
     if(sourceBone && v.mirror){
       const opposite=mirrorBoneName(sourceBone.name,index);
       if(!opposite)throw new Error(
         'Mirror no puede identificar el hueso opuesto: '+sourceBone.name);
-      resized.name=opposite.name+'.'+property;
+      resized.name=/[:|]/.test(opposite.name)?
+        opposite.uuid+'.'+property:opposite.name+'.'+property;
       if(property==='quaternion'){
         for(let i=0;i<resized.values.length;i+=4){
           resized.values[i+1]*=-1;
