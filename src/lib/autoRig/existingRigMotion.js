@@ -115,7 +115,7 @@ function mirrorBoneName(name,index){
   }
   return opposite||original;
 }
-function reSampleTrack(track,begin,duration,needsResampling){
+function reSampleTrack(track,begin,duration,needsResampling,rate=1){
   if(!needsResampling)return track.clone();
   const frames=Math.max(2,Math.ceil(duration*30));
   if(frames>18000)throw new Error('La animación supera 18.000 muestras.');
@@ -127,7 +127,7 @@ function reSampleTrack(track,begin,duration,needsResampling){
   for(let i=0;i<=frames;i++){
     const t=duration*(i/frames);
     times[i]=t;
-    const sample=interpolant.evaluate(begin+t);
+    const sample=interpolant.evaluate(begin+t*rate);
     for(let j=0;j<stride;j++)values[i*stride+j]=sample[j];
   }
   return new track.constructor(track.name,times,values,track.getInterpolation());
@@ -141,8 +141,12 @@ export function editExistingRigClip(original,model,{
      !Number.isFinite(original.duration)||original.duration<=0||original.duration>600)
     throw new Error('La animación existente está vacía o tiene duración inválida.');
   const v=normalizeMotionAdjustments(settings);
+  const overdrive=v.overdrive===undefined?1:v.overdrive;
+  if(typeof overdrive!=='number'||!Number.isFinite(overdrive)||
+    overdrive<.25||overdrive>2)
+    throw new Error('Overdrive debe estar entre 0,25 y 2.');
   const unchanged=Object.keys(DEFAULT_MOTION_ADJUSTMENTS)
-    .every(k=>v[k]===DEFAULT_MOTION_ADJUSTMENTS[k]);
+    .every(k=>v[k]===DEFAULT_MOTION_ADJUSTMENTS[k])&&overdrive===1;
   if(unchanged)return {clip:original,changed:false,targets:[]};
   const index=indexBones(model);
   if(!index.uuids.size)throw new Error('El personaje no tiene un esqueleto existente.');
@@ -153,11 +157,11 @@ export function editExistingRigClip(original,model,{
     throw new Error('Asigna ambos huesos de brazo superior antes de modificar brazos.');
   if(v.look!==50&&!resolved.head)
     throw new Error('Asigna un hueso de cabeza antes de modificar Look.');
-  const duration=original.duration*(v.trimEnd-v.trimStart)/100;
+  const duration=original.duration*(v.trimEnd-v.trimStart)/100/overdrive;
   const begin=original.duration*v.trimStart/100;
   if(duration<.05)throw new Error('El recorte es demasiado corto.');
   const trim=v.trimStart!==0||v.trimEnd!==100;
-  const timesampled=trim||v.mirror;
+  const timesampled=trim||v.mirror||overdrive!==1;
   const out=[],targets=new Set(),used=new Set(),q=new THREE.Quaternion(),
     worldCorrection=new THREE.Quaternion(),qRest=new THREE.Quaternion(),
     qParent=new THREE.Quaternion(),tmp=new THREE.Quaternion();
@@ -169,7 +173,7 @@ export function editExistingRigClip(original,model,{
     const adaptRotation=property==='quaternion'&&sourceBone&&
       ((adjustArm&&needsArm)||(role==='head'&&v.look!==50));
     const resized=reSampleTrack(track,begin,duration,
-      timesampled||Boolean(adaptRotation));
+      timesampled||Boolean(adaptRotation),overdrive);
     // Three.js PropertyBinding uses ':' and '|' as reserved path separators.
     // Resolve such names through a stable bone UUID on the edited COPY only,
     // otherwise browser playback and GLTFExporter can silently skip the track.
@@ -222,5 +226,5 @@ export function editExistingRigClip(original,model,{
     out.push(resized);
   }
   const clip=new THREE.AnimationClip(original.name,duration,out);
-  return {clip,changed:true,targets:[...targets],settings:v};
+  return {clip,changed:true,targets:[...targets],settings:{...v,overdrive}};
 }
