@@ -14,7 +14,15 @@ const roles=[
   ['head','Cabeza'],
 ];
 export default function ExistingRigMotionLab({model,getViewer,compact=false,visible=true}){
-  const status=getViewer?.()?.getExistingRigMotionStatus?.()||{ok:false,bones:[],detected:{}};
+  // Zero-clip rigged GLBs are valid display models, not editable motions.
+  // The status contract must never assume bones/clips exist when ok=false.
+  const rawStatus=getViewer?.()?.getExistingRigMotionStatus?.()||{};
+  const status={
+    ...rawStatus,
+    bones:Array.isArray(rawStatus.bones)?rawStatus.bones:[],
+    clips:Array.isArray(rawStatus.clips)?rawStatus.clips:[],
+    detected:rawStatus.detected||{},
+  };
   const [clipIndex,setClipIndex]=useState(()=>Math.max(0,getViewer?.()?.current??0));
   const [settings,setSettings]=useState(defaults);
   const [overrides,setOverrides]=useState(null);
@@ -127,7 +135,9 @@ export default function ExistingRigMotionLab({model,getViewer,compact=false,visi
   };
   const currentSettings=Object.keys(DEFAULT_MOTION_ADJUSTMENTS).every(
     k=>settings[k]===DEFAULT_MOTION_ADJUSTMENTS[k])&&settings.overdrive===1;
-  const boneSelectors=roles.map(([role,label])=><label key={role}
+  // This component stays mounted even when its floating dock is closed.
+  // Never construct live editing controls for a GLB/FBX without animation.
+  const boneSelectors=status.ok?roles.map(([role,label])=><label key={role}
         style={{color:'#bfdae3',fontSize:11}}>
         {label}
         <select style={{...field,marginTop:4}}
@@ -138,7 +148,7 @@ export default function ExistingRigMotionLab({model,getViewer,compact=false,visi
             {b.name||'(sin nombre)'} · {b.uuid.slice(0,8)}
           </option>)}
         </select>
-      </label>);
+      </label>):[];
   return <div style={{display:'grid',gap:compact?9:12,
     padding:compact?'9px 10px 12px':'14px 15px',
     borderTop:compact?'none':'1px solid #304455'}}>
