@@ -10,6 +10,9 @@ const quantile=(arr,f)=>{
 };
 function boundsOf(points,{trim=0.002}={}){
   if(!points.length)return null;
+  // Sparse point clouds must retain their extremes. A 0.2% quantile on 3
+  // points removes the highest vertex and can hide an entire point model.
+  if(points.length<500)trim=0;
   const xs=points.map(p=>p.x).sort((a,b)=>a-b);
   const ys=points.map(p=>p.y).sort((a,b)=>a-b);
   const zs=points.map(p=>p.z).sort((a,b)=>a-b);
@@ -30,7 +33,10 @@ function sampleWorldVertices(mesh,maximum){
   mesh.updateWorldMatrix(true,false);
   const push=i=>{
     try{
-      mesh.getVertexPosition(i,local);
+      // Points/point clouds have no Mesh.getVertexPosition().
+      if(typeof mesh.getVertexPosition==='function')
+        mesh.getVertexPosition(i,local);
+      else local.fromBufferAttribute(attr,i);
       local.applyMatrix4(mesh.matrixWorld);
       if(finite3(local))samples.push(local.clone());
     }catch{ /* Never let a malformed vertex prevent the fallback camera. */ }
@@ -57,7 +63,7 @@ export function computeVisibleCharacterBounds(root,{maxSamplesPerMesh=4800}={}){
   root.updateWorldMatrix(true,true);
   const candidates=[];
   root.traverse(node=>{
-    if(node.isMesh&&node.geometry?.getAttribute('position')?.count&&
+    if((node.isMesh||node.isPoints)&&node.geometry?.getAttribute('position')?.count&&
       visibleMesh(node,root))candidates.push(node);
   });
   if(!candidates.length)return null;

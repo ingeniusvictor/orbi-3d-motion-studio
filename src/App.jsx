@@ -6,6 +6,7 @@ import TextureStudio from './TextureStudio.jsx';
 import LivingPresenceLab from './LivingPresenceLab.jsx';
 import FaceQuickDock from './FaceQuickDock.jsx';
 import MotionExtractor from './MotionExtractor.jsx';
+import MixamoRetargetLab from './MixamoRetargetLab.jsx';
 import AutoRigLab from './AutoRigLab.jsx';
 import ViewportMotionDock from './ViewportMotionDock.jsx';
 import {accessoryModeLabel,strictSplitRigHint} from './lib/motionExportModes.js';
@@ -23,7 +24,8 @@ function Intro({onOpen}) {
     <h2>Tu universo 3D<br/><span>comienza aquí.</span></h2>
     <p>Arrastra un personaje o modelo a este espacio. Explora su geometría, descubre su composición y reproduce sus animaciones.</p>
     <button className="primary-btn primary-large" onClick={onOpen}><FileUp size={17}/> Cargar modelo 3D</button>
-    <div className="file-hint">GLB · GLTF · FBX · VRM <span>—</span> Sin cuentas, sin subir archivos</div>
+    <div className="file-hint">GLB · GLTF · FBX · VRM · OBJ · STL · PLY · DAE · 3DS
+      <span>—</span> Archivos procesados localmente</div>
   </div>;
 }
 function Tutorial({onClose}) {
@@ -32,10 +34,12 @@ function Tutorial({onClose}) {
       <header className="modal-header"><div><div className="eyebrow">GUÍA RÁPIDA</div><h2>Empieza a crear movimiento.</h2></div><button className="icon-btn" onClick={onClose} aria-label="Cerrar"><X size={21}/></button></header>
       <p className="modal-lead">ORBI Motion Studio es un visualizador e integrador básico. No necesitas aprender modelado 3D para explorar tus creaciones.</p>
       <div className="tutorial-list">
-        <div><span className="step-num">01</span><div><strong>Carga tu modelo</strong><p>Selecciona un .glb, .gltf, .fbx o .vrm. Si utilizas .gltf con archivos externos, incluye también los .bin y las texturas en la selección.</p></div></div>
+        <div><span className="step-num">01</span><div><strong>Carga tu modelo</strong><p>Se pueden visualizar GLB, glTF, FBX, VRM, OBJ, STL, PLY, DAE y 3DS.
+      Si el modelo usa archivos externos (BIN, MTL o texturas), selecciónalos juntos.
+      Un modelo sin animaciones también se debe mostrar.</p></div></div>
         <div><span className="step-num">02</span><div><strong>Explora e inspecciona</strong><p>Gira con el ratón, acerca con la rueda y desplázate con el botón derecho. Revisa las mallas, materiales, huesos y la jerarquía.</p></div></div>
         <div><span className="step-num">03</span><div><strong>Reproduce sus animaciones</strong><p>Si el modelo contiene movimientos, elige uno en el panel «Animaciones». Puedes pausarlo y ajustar la velocidad.</p></div></div>
-        <div><span className="step-num">04</span><div><strong>Opcional: nuevos movimientos desde Mixamo</strong><p>Prepara tu personaje en Blender/Mixamo, descarga un personaje base riggeado y nuevas animaciones FBX del mismo esqueleto (preferiblemente «Without Skin»). Carga aquí el mismo personaje base y después los movimientos. No se admite rigging ni retargeting de esqueletos distintos. Un FBX «Without Skin» no incluye modelo visible: cárgalo como animación, no como personaje base.</p></div></div>
+        <div><span className="step-num">04</span><div><strong>Opcional: nuevos movimientos desde Mixamo</strong><p>Prepara tu personaje en Blender/Mixamo, descarga un personaje base riggeado y nuevas animaciones FBX del mismo esqueleto (preferiblemente «Without Skin»). Carga aquí el mismo personaje base y después los movimientos. El flujo normal necesita el mismo rig; MOTION-06 incorpora una transferencia experimental separada para los dos perfiles LUMIA reconocidos, sin sustituir las pruebas Golden. Un FBX «Without Skin» no incluye modelo visible: cárgalo como animación, no como personaje base.</p></div></div>
         <div><span className="step-num">05</span><div><strong>Exporta un GLB integrado</strong><p>Descarga una copia nueva con las animaciones. Tu archivo original permanece intacto. Verificamos que el GLB generado se pueda volver a abrir.</p></div></div>
       </div>
       <div className="tutorial-warning"><ShieldCheck size={18}/><span>Los VRM 0.x y 1.0 permiten previsualizar FBX humanoides de Mixamo. Si el FBX contiene movimiento adicional de la malla, la vista puede omitir esa pista y mostrará una advertencia explícita: la animación visualizada será aproximada y no apta para exportar como definitiva. La exportación desde VRM permite crear un GLB estándar aproximado mediante aceptación explícita, sin conservar las funciones exclusivas de VRM. Para modelos FBX/GLB se exige el mismo esqueleto y jerarquía. Si hay diferencias, la aplicación rechazará la integración. Para editar huesos utiliza Blender.</span></div>
@@ -95,7 +99,10 @@ export default function App() {
           ' El eje cabeza-pelvis está inclinado '+axis.angleToWorldY+
           '° respecto al eje Y. Usa «Enderezar vista» para inspeccionarlo; '+
           'esto no cambia la orientación del archivo FBX.':'';
-        setNotice({type:'success',text:`${info.filename} cargado correctamente.`+note}); }
+        setNotice({type:'success',text:`${info.filename} cargado correctamente.`+
+          (info.staticModel?' Modelo sin animaciones: se puede visualizar en reposo.':'')+
+          (info.diagnostics?.staticPreview?.cullingBypassed?
+            ' Vista segura para mallas skinned activada.':'')+note}); }
     } catch(error) {setNotice({type:'error',text:error.message||String(error)});}
     finally {setBusy('');}
   },[syncPlayer]);
@@ -271,6 +278,24 @@ export default function App() {
   const toggleBones = () => {setShowBones(v=>{viewer.current?.setSkeletonVisible(!v);return !v;});};
   const toggleWireframe = () => {setWireframe(v=>{viewer.current?.setWireframe(!v);return !v;});};
   const toggleGrid = () => {setGrid(v=>{if(viewer.current) viewer.current.grid.visible=!v;return !v;});};
+  const diagnoseVisibility=()=>{
+    const result=viewer.current?.diagnoseModelVisibility();
+    if(!result)return;
+    setNotice(result.ok?{
+      type:'success',text:'Diagnóstico de visualización: '+
+        result.renderable.meshes+' mallas, '+
+        result.renderable.skinnedMeshes+' mallas con skin, '+
+        result.renderable.pointClouds+' nubes de puntos y '+
+        result.animations+' animaciones. Cámara: '+
+        (result.camera?.method||'automática')+'. '+
+        (result.staticPreview.cullingBypassed?
+          'Se activó visualización segura sin descarte por cámara en '+
+          result.staticPreview.cullingBypassed+' mallas skinned.':'')
+    }:{
+      type:'error',text:'Diagnóstico del visor: '+(result.reason||
+        'La escena no pudo enfocarse. Revisa la consola de Chrome.')
+    });
+  };
   const focusVisibleCharacter=()=>{
     const fit=viewer.current?.resetCamera();
     setNotice(fit?.ok?
@@ -313,7 +338,7 @@ export default function App() {
         <div className={`studio-layout ${mobilePanel?'mobile-panel-open':''}`}>
           <section className="viewer-column">
             <div className={`viewport-card ${dragging?'dragging':''}`} onDragOver={event=>{event.preventDefault();setDragging(true);}} onDragLeave={event=>{if(!event.currentTarget.contains(event.relatedTarget))setDragging(false);}} onDrop={drop}>
-              <div className="viewer-toolbar"><div className="viewport-title"><span className="viewport-led"/> VISOR 3D <span className="viewer-divider">/</span> <span>{model?'MODELO CARGADO':'ESCENA VACÍA'}</span></div><div className="viewer-actions"><button className={grid?'toolbar-btn on':'toolbar-btn'} onClick={toggleGrid} title="Mostrar cuadrícula" aria-label="Cuadrícula"><Grid2X2 size={17}/></button><button className={wireframe?'toolbar-btn on':'toolbar-btn'} onClick={toggleWireframe} title="Vista de malla" aria-label="Vista de malla"><Layers3 size={17}/></button><button className={showBones?'toolbar-btn on':'toolbar-btn'} onClick={toggleBones} title="Visualizar esqueleto" aria-label="Visualizar esqueleto"><Activity size={17}/></button><button className="toolbar-btn toolbar-btn-label" onClick={focusVisibleCharacter} title="Centrar la cámara usando la geometría visible, no el esqueleto" aria-label="Centrar personaje"><Focus size={17}/><span>Centrar</span></button>{model?.format==='FBX'&&<button className="toolbar-btn" onClick={alignUprightCamera} title="Enderezar SOLO la vista según cabeza y pelvis (no modifica FBX)" aria-label="Enderezar vista del personaje"><MoveUp size={17}/></button>}{model&&<button className="toolbar-btn toolbar-btn-label" onClick={focusFaceCamera} title="Primer plano de la cara; sigue la cabeza sin mover el rig" aria-label="Acercar cámara al rostro"><ScanEye size={17}/><span>Rostro</span></button>}{model?.bones>0&&<button
+              <div className="viewer-toolbar"><div className="viewport-title"><span className="viewport-led"/> VISOR 3D <span className="viewer-divider">/</span> <span>{model?'MODELO CARGADO':'ESCENA VACÍA'}</span></div><div className="viewer-actions"><button className={grid?'toolbar-btn on':'toolbar-btn'} onClick={toggleGrid} title="Mostrar cuadrícula" aria-label="Cuadrícula"><Grid2X2 size={17}/></button><button className={wireframe?'toolbar-btn on':'toolbar-btn'} onClick={toggleWireframe} title="Vista de malla" aria-label="Vista de malla"><Layers3 size={17}/></button><button className={showBones?'toolbar-btn on':'toolbar-btn'} onClick={toggleBones} title="Visualizar esqueleto" aria-label="Visualizar esqueleto"><Activity size={17}/></button><button className="toolbar-btn toolbar-btn-label" onClick={focusVisibleCharacter} title="Centrar la cámara usando la geometría visible, no el esqueleto" aria-label="Centrar personaje"><Focus size={17}/><span>Centrar</span></button>{model&&<button className="toolbar-btn" onClick={diagnoseVisibility} title="Diagnosticar cámara y mallas sin modificar el modelo" aria-label="Diagnosticar visualización"><Info size={16}/></button>}{model?.format==='FBX'&&<button className="toolbar-btn" onClick={alignUprightCamera} title="Enderezar SOLO la vista según cabeza y pelvis (no modifica FBX)" aria-label="Enderezar vista del personaje"><MoveUp size={17}/></button>}{model&&<button className="toolbar-btn toolbar-btn-label" onClick={focusFaceCamera} title="Primer plano de la cara; sigue la cabeza sin mover el rig" aria-label="Acercar cámara al rostro"><ScanEye size={17}/><span>Rostro</span></button>}{model?.bones>0&&<button
                 type="button"
                 className={motionDockOpen?'toolbar-btn toolbar-btn-label viewport-motion-trigger on':'toolbar-btn toolbar-btn-label viewport-motion-trigger'}
                 onClick={()=>{setMotionDockOpen(v=>!v);setFaceDockOpen(false);}}
@@ -347,6 +372,9 @@ export default function App() {
                 busy={busy} onExportRig={exportCleanFBX}
                 onSaveClip={saveExtractedClip}
                 onDownloadRigDiagnostic={downloadRigDiagnostic}/>
+              <MixamoRetargetLab key={'mixamo-retarget-'+modelGeneration}
+                model={model} getViewer={getViewer}
+                onComplete={()=>{syncPlayer();setModel(current=>current?{...current,...viewer.current.getInfo()}:current);}}/>
             </section>
           </section>
           <aside className="sidebar-panels"><section className="panel inspector-panel"><div className="panel-header"><div><div className="section-icon"><SlidersHorizontal size={19}/></div><div><h3>Inspector 3D</h3><p>Detalles de tu modelo</p></div></div></div>
@@ -372,7 +400,7 @@ export default function App() {
         <footer className="footer"><span>© 2026 ORBI ECOSYSTEM · MOTION STUDIO</span><span><span className="live-dot"/> Hecho para explorar. Diseñado para crear.</span></footer>
       </main>
     </div>
-    <input ref={fileInput} type="file" multiple accept=".glb,.gltf,.fbx,.vrm,.bin,.png,.jpg,.jpeg,.webp,.ktx2" hidden onChange={e=>{openFiles(Array.from(e.target.files));e.target.value='';}}/>
+    <input ref={fileInput} type="file" multiple accept=".glb,.gltf,.fbx,.vrm,.obj,.mtl,.stl,.ply,.dae,.3ds,.bin,.png,.jpg,.jpeg,.webp,.ktx2,.bmp,.tga,.gif" hidden onChange={e=>{openFiles(Array.from(e.target.files));e.target.value='';}}/>
     <input ref={animationInput} type="file" multiple accept=".fbx" hidden onChange={e=>{importAnimations(Array.from(e.target.files));e.target.value='';}}/>
     {showTutorial&&<Tutorial onClose={()=>setShowTutorial(false)}/>}
   </div>;
