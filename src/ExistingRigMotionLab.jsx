@@ -7,7 +7,7 @@ import {DEFAULT_MOTION_ADJUSTMENTS,normalizeMotionAdjustments}
 const field={width:'100%',background:'#15263a',color:'#e6f7fa',
   border:'1px solid #37526a',borderRadius:8,padding:9};
 const button={margin:0,minHeight:35,justifyContent:'center'};
-const defaults=()=>({...DEFAULT_MOTION_ADJUSTMENTS});
+const defaults=()=>({...DEFAULT_MOTION_ADJUSTMENTS,overdrive:1});
 const roles=[
   ['leftUpperArm','Brazo superior izquierdo'],
   ['rightUpperArm','Brazo superior derecho'],
@@ -82,7 +82,7 @@ export default function ExistingRigMotionLab({model,getViewer}){
     finally{setBusy(false);}
   };
   const currentSettings=Object.keys(DEFAULT_MOTION_ADJUSTMENTS).every(
-    k=>settings[k]===DEFAULT_MOTION_ADJUSTMENTS[k]);
+    k=>settings[k]===DEFAULT_MOTION_ADJUSTMENTS[k])&&settings.overdrive===1;
   return <div style={{display:'grid',gap:12,padding:'14px 15px',
     borderTop:'1px solid #304455'}}>
     <div style={{display:'flex',alignItems:'center',gap:8,
@@ -127,6 +127,7 @@ export default function ExistingRigMotionLab({model,getViewer}){
           ['armSpace','Character Arm-Space · separación de brazos',0,100,5],
           ['armSwing','Arms · amplitud del movimiento (%)',0,150,5],
           ['look','Look · giro horizontal de cabeza',0,100,5],
+          ['overdrive','Overdrive · ritmo que se guarda al exportar',.25,2,.05],
         ].map(([name,label,min,max,step])=>
           <label key={name} style={{fontSize:11,color:'#cce5e9'}}>
             <span style={{display:'flex',justifyContent:'space-between',gap:7}}>
@@ -166,9 +167,10 @@ export default function ExistingRigMotionLab({model,getViewer}){
           Mirror (experimental) · reflejar izquierda/derecha
         </label>
         <small style={{color:'#edc991',fontSize:10,lineHeight:1.5}}>
-          Overdrive / velocidad se ajusta en Biblioteca de animaciones,
-          arriba del visor. Mirror y los ajustes angulares son aproximados:
-          revisa el personaje desde el frente y el perfil.
+          Overdrive se guarda dentro de la nueva animación, cambiando
+          su duración. El control global de velocidad en Biblioteca de
+          animaciones solo afecta la reproducción. Mirror y los ajustes
+          angulares son aproximados: revisa frente y perfil.
         </small>
         <button type="button" className="outline-btn" style={button}
           disabled={currentSettings} onClick={()=>{
