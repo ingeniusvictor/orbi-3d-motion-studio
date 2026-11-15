@@ -842,6 +842,10 @@ export class MotionViewer {
     // changes, and it is the SAME clip array consumed by GLB/FBX exporters.
     if(!this.existingRigOriginals.has(index))
       this.existingRigOriginals.set(index,original);
+    const previousTime=(this.current===index&&this.mixer)?
+      this.mixer.time:0;
+    const previousDuration=current.clip.duration;
+    const wasPlaying=this.playing;
     if(this.mixer){
       this.mixer.stopAllAction();
       if(current.clip!==original)this.mixer.uncacheClip(current.clip);
@@ -850,6 +854,14 @@ export class MotionViewer {
     current.modified=output.changed;
     current.adjustments=output.changed?output.settings:null;
     this.play(index);
+    if(this.mixer&&previousDuration>0){
+      // Preserve the inspected relative phase while adjusting controls.
+      const t=Math.min(output.clip.duration-0.0001,
+        Math.max(0,previousTime/previousDuration*output.clip.duration));
+      this.mixer.setTime(t);
+    }
+    this.playing=wasPlaying;
+    this.notify();
     return {name:current.name,duration:output.clip.duration,
       targets:output.targets,changed:output.changed};
   }
