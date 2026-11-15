@@ -1027,7 +1027,7 @@ export class MotionViewer {
   getInfo() { return this.model ? inspect(this.model,this.clips) : EMPTY_INFO; }
   // MOTION-06: opt-in conversion into an isolated AnimationClip.
   // The existing model, bind matrices, weights and earlier clips are never rebound.
-  async addLumiaMixamoRetarget(file,{pivot='anchored',toes='auto'}={}) {
+  async addLumiaMixamoRetarget(file,{pivot='anchored',toes='auto',targetVersion='v06b'}={}) {
     if(!this.model||!file)throw new Error('Carga primero LUMIA V06B y un FBX Mixamo.');
     if(this.vrm)throw new Error('El perfil adulto V06B requiere el GLB maestro, no un VRM.');
     if(extensionOf(file.name)!=='fbx')throw new Error('Se necesita un archivo FBX animado.');
@@ -1047,7 +1047,7 @@ export class MotionViewer {
         throw new Error('La copia del personaje cambió su jerarquía; transferencia bloqueada.');
       const uuidMap=new Map(copyNodes.map((n,i)=>[n.uuid,sourceNodes[i].uuid]));
       const {clip,report}=retargetMixamoToV06B({
-        sourceRoot:source.model,sourceClip:source.clips[0],targetRoot:targetAtRest,pivot,toes,
+        sourceRoot:source.model,sourceClip:source.clips[0],targetRoot:targetAtRest,pivot,toes,targetVersion,
       });
       for(const track of clip.tracks){
         const dot=track.name.lastIndexOf('.');
