@@ -267,6 +267,42 @@ export function editExistingRigClip(original,model,{
     used.add(resized.name);
     out.push(resized);
   }
+  // Some imported animations never key the head or an upper arm.
+  // For static Look / Arm-Space corrections, create a new quaternion channel
+  // from the captured bind pose instead of accepting a slider as a no-op.
+  for(const role of roles){
+    const required=role==='head'?v.look!==50:needsArm;
+    if(!required||targets.has(role))continue;
+    const bone=resolved[role];
+    if(!bone)continue;
+    const hasEuler=original.tracks.some(track=>{
+      const path=nameProperty(track.name);
+      return path.property==='rotation'&&lookupBone(index,path.node)===bone;
+    });
+    if(hasEuler)throw new Error(
+      'La animación utiliza ángulos Euler para '+bone.name+
+      '. No se modificará sin conversión segura a cuaterniones.');
+    if(role!=='head'&&v.armSwing!==100&&v.armSpace===50)
+      throw new Error('La animación no contiene rotaciones para '+bone.name+
+        '; no se puede modificar la amplitud Arms de ese hueso.');
+    const ref=rest?.get(bone.uuid);
+    if(!ref)throw new Error('No se encontró la pose de reposo de '+bone.name);
+    qRest.fromArray(ref.local);
+    qParent.fromArray(ref.parentWorld);
+    const axis=(role==='head'?yAxis:zAxis).clone()
+      .applyQuaternion(qParent.clone().invert()).normalize();
+    const offset=role==='head'?THREE.MathUtils.degToRad((v.look-50)*.5):
+      armSpaceRad(v.armSpace)*(role==='leftUpperArm'?-1:1);
+    if(offset===0)continue;
+    worldCorrection.setFromAxisAngle(axis,offset);
+    q.copy(qRest).premultiply(worldCorrection).normalize();
+    const path=bone.uuid+'.quaternion';
+    if(used.has(path))throw new Error('Canal duplicado para '+bone.name);
+    out.push(new THREE.QuaternionKeyframeTrack(path,[0,duration],
+      [...q.toArray(),...q.toArray()]));
+    used.add(path);
+    targets.add(role);
+  }
   const clip=new THREE.AnimationClip(original.name,duration,out);
   return {clip,changed:true,targets:[...targets],settings:{...v,overdrive}};
 }
