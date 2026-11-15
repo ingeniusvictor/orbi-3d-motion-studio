@@ -13,12 +13,12 @@ import {readFileSync} from 'node:fs';
 function buildFixture(){
   const model=new THREE.Group();
   model.name='LUMIA Rigged';
-  const hips=new THREE.Bone();hips.name='mixamorig:Hips';hips.position.y=.8;
-  const spine=new THREE.Bone();spine.name='mixamorig:Spine';spine.position.y=.35;hips.add(spine);
-  const l=new THREE.Bone();l.name='mixamorig:LeftArm';l.position.set(-.3,.35,0);
-  const r=new THREE.Bone();r.name='mixamorig:RightArm';r.position.set(.3,.35,0);
+  const hips=new THREE.Bone();hips.name='mixamorigHips';hips.position.y=.8;
+  const spine=new THREE.Bone();spine.name='mixamorigSpine';spine.position.y=.35;hips.add(spine);
+  const l=new THREE.Bone();l.name='mixamorigLeftArm';l.position.set(-.3,.35,0);
+  const r=new THREE.Bone();r.name='mixamorigRightArm';r.position.set(.3,.35,0);
   spine.add(l,r);
-  const head=new THREE.Bone();head.name='mixamorig:Head';head.position.y=.4;spine.add(head);
+  const head=new THREE.Bone();head.name='mixamorigHead';head.position.y=.4;spine.add(head);
   model.add(hips);
   const geom=new THREE.BoxGeometry(.9,1.6,.3);
   const vertices=geom.attributes.position.count;
@@ -39,15 +39,15 @@ function buildFixture(){
   const z=new THREE.Vector3(0,0,1),x=new THREE.Vector3(1,0,0);
   const lQ=qAngle(z,.35),rQ=qAngle(z,-.35),headQ=qAngle(x,.08);
   const clip=new THREE.AnimationClip('Hip Hop',2,[
-    new THREE.QuaternionKeyframeTrack('mixamorig:LeftArm.quaternion',[0,1,2],
+    new THREE.QuaternionKeyframeTrack('mixamorigLeftArm.quaternion',[0,1,2],
       [0,0,0,1,...lQ.toArray(),0,0,0,1]),
-    new THREE.QuaternionKeyframeTrack('mixamorig:RightArm.quaternion',[0,1,2],
+    new THREE.QuaternionKeyframeTrack('mixamorigRightArm.quaternion',[0,1,2],
       [0,0,0,1,...rQ.toArray(),0,0,0,1]),
-    new THREE.QuaternionKeyframeTrack('mixamorig:Head.quaternion',[0,1,2],
+    new THREE.QuaternionKeyframeTrack('mixamorigHead.quaternion',[0,1,2],
       [0,0,0,1,...headQ.toArray(),0,0,0,1]),
-    new THREE.QuaternionKeyframeTrack('mixamorig:Spine.quaternion',[0,1,2],
+    new THREE.QuaternionKeyframeTrack('mixamorigSpine.quaternion',[0,1,2],
       [0,0,0,1,...qAngle(x,.08).toArray(),0,0,0,1]),
-    new THREE.VectorKeyframeTrack('mixamorig:Hips.position',[0,1,2],
+    new THREE.VectorKeyframeTrack('mixamorigHips.position',[0,1,2],
       [0,.8,0, .1,.8,0, 0,.8,0]),
   ]);
   return {model,l,r,head,mesh,clip};
@@ -61,7 +61,7 @@ test('02D recognizes existing Mixamo bones and captures safe rest before animati
   const detected=detectExistingRigRoles(model);
   assert.equal(detected.detected.leftUpperArm,l.name);
   assert.equal(detected.detected.rightUpperArm,r.name);
-  assert.equal(detected.detected.head,'mixamorig:Head');
+  assert.equal(detected.detected.head,'mixamorigHead');
   assert.equal(detected.bones.length,5);
   const rest=captureExistingRigRest(model);
   assert.ok(rest.has(l.uuid));
@@ -81,15 +81,15 @@ test('02D adjusts both arms but retains hips translation, spine and head channel
   assert.equal(edited.clip.duration,2);
   assert.deepEqual(clip.tracks.map(t=>Array.from(t.values)),original);
   const a=map(edited.clip),b=map(clip);
-  for(const name of ['mixamorig:Hips.position','mixamorig:Spine.quaternion',
-    'mixamorig:Head.quaternion']){
+  for(const name of ['mixamorigHips.position','mixamorigSpine.quaternion',
+    'mixamorigHead.quaternion']){
     assert.deepEqual(Array.from(a.get(name).values),Array.from(b.get(name).values),
       'Untargeted animation must be bitwise preserved: '+name);
   }
-  assert.ok(quaternionAt(edited.clip,'mixamorig:LeftArm.quaternion',1)
-    .angleTo(quaternionAt(clip,'mixamorig:LeftArm.quaternion',1))>.1);
-  assert.ok(quaternionAt(edited.clip,'mixamorig:RightArm.quaternion',1)
-    .angleTo(quaternionAt(clip,'mixamorig:RightArm.quaternion',1))>.1);
+  assert.ok(quaternionAt(edited.clip,'mixamorigLeftArm.quaternion',1)
+    .angleTo(quaternionAt(clip,'mixamorigLeftArm.quaternion',1))>.1);
+  assert.ok(quaternionAt(edited.clip,'mixamorigRightArm.quaternion',1)
+    .angleTo(quaternionAt(clip,'mixamorigRightArm.quaternion',1))>.1);
 });
 
 test('02D arm clearance changes simultaneously moving skinned mesh without reweighting',()=>{
@@ -110,6 +110,25 @@ test('02D arm clearance changes simultaneously moving skinned mesh without rewei
   mixer.stopAllAction();mixer.uncacheRoot(model);
 });
 
+
+test('02D resolves namespaced Mixamo tracks through UUID on the edited copy',()=>{
+  const {model,clip,l,r}=buildFixture();
+  l.name='mixamorig:LeftArm';r.name='mixamorig:RightArm';
+  clip.tracks.find(t=>t.name==='mixamorigLeftArm.quaternion')
+    .name='mixamorig:LeftArm.quaternion';
+  clip.tracks.find(t=>t.name==='mixamorigRightArm.quaternion')
+    .name='mixamorig:RightArm.quaternion';
+  const rest=captureExistingRigRest(model);
+  const changed=editExistingRigClip(clip,model,{rest,settings:{armSpace:70}}).clip;
+  assert.ok(changed.tracks.some(t=>t.name===l.uuid+'.quaternion'));
+  assert.ok(changed.tracks.some(t=>t.name===r.uuid+'.quaternion'));
+  assert.ok(clip.tracks.some(t=>t.name==='mixamorig:LeftArm.quaternion'));
+  const mixer=new THREE.AnimationMixer(model);
+  mixer.clipAction(changed).play();
+  mixer.update(.5);
+  assert.ok(l.quaternion.angleTo(new THREE.Quaternion())>.1);
+  mixer.stopAllAction();mixer.uncacheRoot(model);
+});
 test('02D restores exactly original source clip when neutral settings',()=>{
   const {model,clip}=buildFixture();
   const rest=captureExistingRigRest(model);
@@ -128,10 +147,10 @@ test('02D Trim resamples all tracked channels and mirror swaps named arm roles',
   assert.ok(Math.abs(result.clip.duration-1)<1e-5);
   assert.equal(result.clip.tracks.length,5);
   const changed=map(result.clip);
-  assert.ok(changed.has('mixamorig:LeftArm.quaternion'));
-  assert.ok(changed.has('mixamorig:RightArm.quaternion'));
-  assert.equal(changed.get('mixamorig:Hips.position').values.length,31*3);
-  assert.ok(changed.get('mixamorig:Hips.position').values[0]<0,
+  assert.ok(changed.has('mixamorigLeftArm.quaternion'));
+  assert.ok(changed.has('mixamorigRightArm.quaternion'));
+  assert.equal(changed.get('mixamorigHips.position').values.length,31*3);
+  assert.ok(changed.get('mixamorigHips.position').values[0]<0,
     'Mirrored hip motion should invert world X');
   for(const t of result.clip.tracks){
     assert.equal(t.times[0],0);
@@ -143,13 +162,13 @@ test('02D rejects incompatible or unsafe mapping rather than editing random bone
   const {model,clip}=buildFixture(),rest=captureExistingRigRest(model);
   assert.throws(()=>editExistingRigClip(clip,model,{
     rest,settings:{armSpace:70},boneNames:{
-      leftUpperArm:'invalid',rightUpperArm:'mixamorig:RightArm',
+      leftUpperArm:'invalid',rightUpperArm:'mixamorigRightArm',
     },
   }),/no encontrada/);
   assert.throws(()=>editExistingRigClip(clip,model,{
     rest,settings:{armSpace:70},boneNames:{
-      leftUpperArm:'mixamorig:RightArm',
-      rightUpperArm:'mixamorig:RightArm',
+      leftUpperArm:'mixamorigRightArm',
+      rightUpperArm:'mixamorigRightArm',
     },
   }),/mismo hueso/);
   assert.throws(()=>editExistingRigClip(clip,model,{
