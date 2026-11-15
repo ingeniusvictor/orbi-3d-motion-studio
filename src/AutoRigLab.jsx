@@ -5,6 +5,8 @@ import {NativeRigEditor} from './lib/autoRig/NativeRigEditor.js';
 import {createNativeSkinPreview} from './lib/autoRig/nativeSkinPreview.js';
 import {createOrbiMotionSamples} from './lib/autoRig/fullBodyMotion.js';
 import {loadAndRetargetMixamo} from './lib/autoRig/loadMixamoMotion.js';
+import {DEFAULT_MOTION_ADJUSTMENTS,adjustHumanoidMotionClip,
+  normalizeMotionAdjustments} from './lib/autoRig/motionAdjustments.js';
 import {LANDMARK_NAMES,validateMarkers,exportRigDraft,importRigDraft} from './lib/autoRig/nativeRig.js';
 
 const PREPARE='.\\tools\\autorig01_windows.ps1 -Step prepare';
@@ -28,7 +30,10 @@ export default function AutoRigLab({model,getViewer}){
   const skinRef=useRef(null);
   const skinAbortRef=useRef(null);
   const motionFileRef=useRef(null);
+  const motionPanelRef=useRef(null);
+  const motionPresetInputRef=useRef(null);
   const motionClipsRef=useRef([]);
+  const savedAdjustmentsRef=useRef(new Map());
   const [editing,setEditing]=useState(false);
   const [selected,setSelected]=useState('pelvis');
   const [markers,setMarkers]=useState(null);
@@ -39,6 +44,8 @@ export default function AutoRigLab({model,getViewer}){
   const [heatmapBone,setHeatmapBone]=useState('');
   const [heatmapStats,setHeatmapStats]=useState(null);
   const [motionOptions,setMotionOptions]=useState([]);
+  const [motionAdjustments,setMotionAdjustments]=useState(
+    {...DEFAULT_MOTION_ADJUSTMENTS});
   const [motion,setMotion]=useState({
     selected:'',playing:false,speed:1,time:0,duration:0,importing:false,warning:'',
   });
@@ -63,6 +70,8 @@ export default function AutoRigLab({model,getViewer}){
             setSkin({status:'idle',progress:null,audits:null,vertices:0});
             setHeatmapBone('');setHeatmapStats(null);
             motionClipsRef.current=[];setMotionOptions([]);
+            savedAdjustmentsRef.current.clear();
+            setMotionAdjustments({...DEFAULT_MOTION_ADJUSTMENTS});
             setMotion({selected:'',playing:false,speed:1,time:0,duration:0,
               importing:false,warning:''});
           }
@@ -129,6 +138,8 @@ export default function AutoRigLab({model,getViewer}){
     setSkin({status:'idle',progress:null,audits:null,vertices:0});
     setHeatmapBone('');setHeatmapStats(null);
     motionClipsRef.current=[];setMotionOptions([]);
+    savedAdjustmentsRef.current.clear();
+    setMotionAdjustments({...DEFAULT_MOTION_ADJUSTMENTS});
     setMotion({selected:'',playing:false,speed:1,time:0,duration:0,
       importing:false,warning:''});
     setPose({joint:'leftLowerArm',axis:'Z',angle:0});
@@ -144,6 +155,8 @@ export default function AutoRigLab({model,getViewer}){
     setSkin({status:'working',progress:null,audits:null,vertices:0});
     setHeatmapBone('');setHeatmapStats(null);
     motionClipsRef.current=[];setMotionOptions([]);
+    savedAdjustmentsRef.current.clear();
+    setMotionAdjustments({...DEFAULT_MOTION_ADJUSTMENTS});
     setNotice('Calculando influencias por vértice en CPU local, sin Blender.');
     try{
       const pilot=await createNativeSkinPreview(viewer,editor.getMarkers(),{
@@ -167,6 +180,7 @@ export default function AutoRigLab({model,getViewer}){
       setMotionOptions(demos.map(({id,label})=>({id,label})));
       const first=pilot.loadMotion(demos[0].clip);
       pilot.setMotionPlaying(true);
+      savedAdjustmentsRef.current.set(demos[0].id,{...DEFAULT_MOTION_ADJUSTMENTS});
       setMotion({selected:demos[0].id,playing:true,speed:1,time:0,
         duration:first.duration,importing:false,warning:demos[0].warning});
       setSkin({status:'ready',progress:null,audits:pilot.audits,
@@ -194,17 +208,89 @@ export default function AutoRigLab({model,getViewer}){
       setMotion(m=>({...m,playing:false}));
     }catch(e){setError(e.message||String(e));}
   };
-  const selectFullBodyMotion=id=>{
+  const activateMotion=(id,options,{
+    playing=true,progress=0,
+  }={})=>{
     const pilot=skinRef.current,chosen=motionClipsRef.current.find(x=>x.id===id);
     if(!pilot||!chosen)return;
+    const settings=normalizeMotionAdjustments(options);
+    const result=adjustHumanoidMotionClip(chosen.clip,settings);
+    const info=pilot.loadMotion(result.clip);
+    pilot.setMotionSpeed(motion.speed);
+    const t=Math.min(Math.max(progress,0),.999)*info.duration;
+    if(t>0)pilot.seekMotion(t);
+    pilot.setMotionPlaying(playing);
+    savedAdjustmentsRef.current.set(id,settings);
+    setMotionAdjustments(settings);
+    setMotion(m=>({...m,selected:id,playing,time:t,
+      duration:info.duration,warning:chosen.warning}));
+    setError('');
+  };
+  const selectFullBodyMotion=id=>{
     try{
-      const info=pilot.loadMotion(chosen.clip);
-      pilot.setMotionSpeed(motion.speed);
-      pilot.setMotionPlaying(true);
-      setMotion(m=>({...m,selected:id,playing:true,time:0,
-        duration:info.duration,warning:chosen.warning}));
-      setError('');
+      activateMotion(id,savedAdjustmentsRef.current.get(id)||
+        DEFAULT_MOTION_ADJUSTMENTS);
     }catch(e){setError('Animación no compatible: '+(e.message||String(e)));}
+  };
+  const changeMotionAdjustment=(field,value)=>{
+    if(!skinRef.current||!motion.selected)return;
+    const next={...motionAdjustments,[field]:value};
+    if(field==='trimStart')next.trimEnd=Math.max(next.trimEnd,value+5);
+    if(field==='trimEnd')next.trimStart=Math.min(next.trimStart,value-5);
+    try{
+      activateMotion(motion.selected,next,{
+        playing:motion.playing,
+        progress:motion.duration>0?motion.time/motion.duration:0,
+      });
+    }catch(e){setError('Ajuste rechazado: '+(e.message||String(e)));}
+  };
+  const resetMotionAdjustments=()=>{
+    if(!skinRef.current||!motion.selected)return;
+    try{activateMotion(motion.selected,{...DEFAULT_MOTION_ADJUSTMENTS},{
+      playing:motion.playing,
+      progress:motion.duration>0?motion.time/motion.duration:0,
+    });}
+    catch(e){setError(e.message||String(e));}
+  };
+  const saveMotionPreset=()=>{
+    const chosen=motionClipsRef.current.find(item=>item.id===motion.selected);
+    if(!chosen)return;
+    downloadJson({
+      schemaVersion:1,
+      kind:'ORBI_AUTORIG_MOTION_PRESET',
+      modelFilename:model.filename,
+      clipName:chosen.clip.name,
+      settings:normalizeMotionAdjustments(motionAdjustments),
+      speed:motion.speed,
+      note:'Solo parámetros de vista previa. No incluye malla, pesos, rig ni animación.',
+    },(model.filename||'lumia').replace(/\\.[^.]+$/,'')+
+      '-orbi-motion-settings.json');
+    setNotice('Ajustes guardados en JSON. No se descargó un clip animado.');
+  };
+  const loadMotionPreset=async file=>{
+    if(!file||!motion.selected)return;
+    try{
+      if(file.size>32000)throw new Error('Archivo de ajustes demasiado grande.');
+      const data=JSON.parse(await file.text());
+      if(data?.schemaVersion!==1||data.kind!=='ORBI_AUTORIG_MOTION_PRESET')
+        throw new Error('El archivo no es un preset de animación ORBI compatible.');
+      const chosen=motionClipsRef.current.find(item=>item.id===motion.selected);
+      if(!chosen||data.clipName!==chosen.clip.name)
+        throw new Error('El preset corresponde a otro movimiento. Selecciona el mismo clip.');
+      if(data.modelFilename&&data.modelFilename!==model.filename)
+        throw new Error('El preset corresponde a otro modelo.');
+      const settings=normalizeMotionAdjustments(data.settings);
+      const speed=Number(data.speed);
+      if(!Number.isFinite(speed)||speed<.25||speed>2)
+        throw new Error('Velocidad guardada no válida.');
+      activateMotion(motion.selected,settings,{
+        playing:motion.playing,
+        progress:motion.duration>0?motion.time/motion.duration:0,
+      });
+      skinRef.current.setMotionSpeed(speed);
+      setMotion(m=>({...m,speed}));
+      setNotice('Ajustes de animación restaurados desde JSON.');
+    }catch(e){setError('No se pudieron abrir los ajustes: '+(e.message||String(e)));}
   };
   const toggleMotion=()=>{
     try{
@@ -243,11 +329,8 @@ export default function AutoRigLab({model,getViewer}){
       ];
       setMotionOptions(motionClipsRef.current.map(({id,label})=>({id,label})));
       const first=imported[0];
-      const info=pilot.loadMotion(first.clip);
-      pilot.setMotionSpeed(motion.speed);
-      pilot.setMotionPlaying(true);
-      setMotion(m=>({...m,selected:first.id,playing:true,time:0,
-        duration:info.duration,warning:first.warning,importing:false}));
+      activateMotion(first.id,{...DEFAULT_MOTION_ADJUSTMENTS});
+      setMotion(m=>({...m,importing:false}));
       setNotice(result.compatible.length+' animación(es) Mixamo adaptada(s). '+
         (result.skipped.length?result.skipped.length+' descartada(s). ':'')+
         'Verifica cuerpo completo, ropa, articulaciones y perfil.');
@@ -309,7 +392,7 @@ export default function AutoRigLab({model,getViewer}){
   return <section className="panel inspector-panel" aria-label="ORBI AutoRig Studio">
     <div className="panel-header"><div>
       <div className="section-icon mint"><Bone size={19}/></div>
-      <div><h3>AutoRig Studio</h3><p>AUTORIG-02C.3 · Rigging y animación corporal sin Blender</p></div>
+      <div><h3>AutoRig Studio</h3><p>AUTORIG-02C.4 · Rigging y ajustes de animación sin Blender</p></div>
     </div></div>
     <div style={{padding:'14px 15px',display:'grid',gap:12}}>
       <div className="compat-note" style={{margin:0,alignItems:'flex-start'}}>
@@ -418,9 +501,18 @@ export default function AutoRigLab({model,getViewer}){
           disabled={!audit?.ok} onClick={createSkeleton}>
           <Bone size={16}/> {preview?'Actualizar':'Generar'} esqueleto de 19 huesos
         </button>
-        {preview&&<div style={{fontSize:11,color:'#a6d2cc'}}>
+        {preview&&<div style={{fontSize:11,color:'#a6d2cc',lineHeight:1.5}}>
           Esqueleto anatómico preliminar preparado: 19 huesos.
+          Al activar el cálculo de pesos aparecerán los controles
+          <strong> AUTORIG-02C.4 · Ajustes de animación estilo Mixamo</strong>.
         </div>}
+        {skin.status==='ready'&&<button type="button" className="outline-btn"
+          style={{...btn,background:'#214c46',color:'#d3fbf1'}}
+          onClick={()=>motionPanelRef.current?.scrollIntoView({
+            behavior:'smooth',block:'center',
+          })}>
+          🎬 Ir a animación y ajustes Mixamo (AUTORIG-02C.4)
+        </button>}
         {preview&&<div style={{border:'1px solid #315064',borderRadius:10,
           padding:10,display:'grid',gap:9}}>
           <strong style={{fontSize:12,color:'#a8e9df'}}>
@@ -449,7 +541,7 @@ export default function AutoRigLab({model,getViewer}){
               {skin.vertices.toLocaleString('es-CL')} vértices · {skin.audits.length} mallas
               · pesos normalizados (máximo 4 influencias).
             </div>
-            <div style={{display:'grid',gap:8,padding:10,
+            <div ref={motionPanelRef} style={{display:'grid',gap:8,padding:10,
               border:'1px solid #466763',borderRadius:9}}>
               <strong style={{color:'#c7eee8',fontSize:12}}>
                 AUTORIG-02C.3 · Animación corporal completa (Mixamo / ORBI)
@@ -490,13 +582,95 @@ export default function AutoRigLab({model,getViewer}){
                   onChange={e=>seekMotion(e.target.value)}
                   style={{width:'100%',marginTop:7}}/>
               </label>
-              <label style={{fontSize:11,color:'#d7eced'}}>Velocidad
+              <label style={{fontSize:11,color:'#d7eced'}}>Overdrive / velocidad de reproducción
                 <select style={{...field,marginTop:4}} value={motion.speed}
                   onChange={e=>changeMotionSpeed(e.target.value)}>
                   {[.25,.5,.75,1,1.25,1.5,2].map(speed=>
                     <option key={speed} value={speed}>{speed}×</option>)}
                 </select>
               </label>
+              <div style={{border:'1px solid #3a5b6c',borderRadius:8,
+                padding:10,display:'grid',gap:10}}>
+                <strong style={{fontSize:12,color:'#c7eee8'}}>
+                  AUTORIG-02C.4 · Ajustes de animación estilo Mixamo
+                </strong>
+                <small style={{fontSize:10,color:'#b5cbd5',lineHeight:1.55}}>
+                  Correcciones reversibles sobre una COPIA del clip. Los controles
+                  se adaptan al esqueleto ORBI de 19 huesos: no reproducen
+                  exactamente el algoritmo de Mixamo.
+                </small>
+                <label style={{fontSize:11,color:'#d7eced'}}>
+                  Character Arm-Space · separación de brazos: {motionAdjustments.armSpace}
+                  <input type="range" min="0" max="100" step="5"
+                    value={motionAdjustments.armSpace}
+                    onChange={e=>changeMotionAdjustment('armSpace',Number(e.target.value))}
+                    style={{width:'100%',marginTop:6}}/>
+                  <small style={{color:'#98b9c5',fontSize:10}}>
+                    50 = movimiento original; 60–85 = brazos más alejados de
+                    piernas y torso; prueba primero 70.
+                  </small>
+                </label>
+                <label style={{fontSize:11,color:'#d7eced'}}>
+                  Arms · amplitud del movimiento: {motionAdjustments.armSwing} %
+                  <input type="range" min="0" max="150" step="5"
+                    value={motionAdjustments.armSwing}
+                    onChange={e=>changeMotionAdjustment('armSwing',Number(e.target.value))}
+                    style={{width:'100%',marginTop:6}}/>
+                </label>
+                <label style={{fontSize:11,color:'#d7eced'}}>
+                  Look · giro horizontal de cabeza: {motionAdjustments.look}
+                  <input type="range" min="0" max="100" step="5"
+                    value={motionAdjustments.look}
+                    onChange={e=>changeMotionAdjustment('look',Number(e.target.value))}
+                    style={{width:'100%',marginTop:6}}/>
+                </label>
+                <div style={{display:'grid',gap:5}}>
+                  <strong style={{fontSize:11,color:'#d7eced'}}>
+                    Trim · recorte del ciclo ({motionAdjustments.trimStart}%–{motionAdjustments.trimEnd}%)
+                  </strong>
+                  <label style={{fontSize:10,color:'#c0d6df'}}>
+                    Inicio: {motionAdjustments.trimStart}%
+                    <input type="range" min="0" max="95" step="5"
+                      value={motionAdjustments.trimStart}
+                      onChange={e=>changeMotionAdjustment('trimStart',Number(e.target.value))}
+                      style={{width:'100%',marginTop:5}}/>
+                  </label>
+                  <label style={{fontSize:10,color:'#c0d6df'}}>
+                    Fin: {motionAdjustments.trimEnd}%
+                    <input type="range" min="5" max="100" step="5"
+                      value={motionAdjustments.trimEnd}
+                      onChange={e=>changeMotionAdjustment('trimEnd',Number(e.target.value))}
+                      style={{width:'100%',marginTop:5}}/>
+                  </label>
+                </div>
+                <label style={{fontSize:11,color:'#d7eced',
+                  display:'flex',alignItems:'center',gap:8}}>
+                  <input type="checkbox" checked={motionAdjustments.mirror}
+                    onChange={e=>changeMotionAdjustment('mirror',e.target.checked)}/>
+                  Mirror · intercambiar derecha e izquierda
+                </label>
+                <button type="button" className="outline-btn" style={btn}
+                  onClick={resetMotionAdjustments}>↶ Restaurar ajustes del clip original</button>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+                  <button type="button" className="outline-btn" style={btn}
+                    onClick={saveMotionPreset}>
+                    <Download size={14}/> Guardar ajustes JSON
+                  </button>
+                  <button type="button" className="outline-btn" style={btn}
+                    onClick={()=>motionPresetInputRef.current?.click()}>
+                    Abrir ajustes JSON
+                  </button>
+                  <input type="file" ref={motionPresetInputRef} hidden
+                    accept=".json,application/json"
+                    onChange={e=>{loadMotionPreset(e.target.files?.[0]);e.target.value='';}}/>
+                </div>
+                <small style={{color:'#edca91',fontSize:10,lineHeight:1.5}}>
+                  Importante: separar brazos es una corrección de movimiento,
+                  no repara automáticamente los pesos de skinning. Si la mano
+                  atraviesa una pierna, revisa también los marcadores y
+                  la influencia de los huesos.
+                </small>
+              </div>
               {!!motion.warning&&<small style={{color:'#f1c98c',lineHeight:1.5}}>
                 {motion.warning}
               </small>}
