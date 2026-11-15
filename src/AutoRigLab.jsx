@@ -30,6 +30,7 @@ export default function AutoRigLab({model,getViewer}){
   const skinRef=useRef(null);
   const skinAbortRef=useRef(null);
   const motionFileRef=useRef(null);
+  const motionPanelRef=useRef(null);
   const motionClipsRef=useRef([]);
   const savedAdjustmentsRef=useRef(new Map());
   const [editing,setEditing]=useState(false);
@@ -464,6 +465,13 @@ export default function AutoRigLab({model,getViewer}){
           Al activar el cálculo de pesos aparecerán los controles
           <strong> AUTORIG-02C.4 · Ajustes de animación estilo Mixamo</strong>.
         </div>}
+        {skin.status==='ready'&&<button type="button" className="outline-btn"
+          style={{...btn,background:'#214c46',color:'#d3fbf1'}}
+          onClick={()=>motionPanelRef.current?.scrollIntoView({
+            behavior:'smooth',block:'center',
+          })}>
+          🎬 Ir a animación y ajustes Mixamo (AUTORIG-02C.4)
+        </button>}
         {preview&&<div style={{border:'1px solid #315064',borderRadius:10,
           padding:10,display:'grid',gap:9}}>
           <strong style={{fontSize:12,color:'#a8e9df'}}>
@@ -492,7 +500,7 @@ export default function AutoRigLab({model,getViewer}){
               {skin.vertices.toLocaleString('es-CL')} vértices · {skin.audits.length} mallas
               · pesos normalizados (máximo 4 influencias).
             </div>
-            <div style={{display:'grid',gap:8,padding:10,
+            <div ref={motionPanelRef} style={{display:'grid',gap:8,padding:10,
               border:'1px solid #466763',borderRadius:9}}>
               <strong style={{color:'#c7eee8',fontSize:12}}>
                 AUTORIG-02C.3 · Animación corporal completa (Mixamo / ORBI)
