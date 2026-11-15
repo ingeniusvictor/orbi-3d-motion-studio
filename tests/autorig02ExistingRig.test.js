@@ -162,6 +162,27 @@ test('02D Trim resamples all tracked channels and mirror swaps named arm roles',
   }
 });
 
+
+test('02D Overdrive is baked into exported clip duration, preserving source frames',()=>{
+  const {model,clip}=buildFixture();
+  const original=clip.tracks.map(t=>Array.from(t.values));
+  const fast=editExistingRigClip(clip,model,{
+    rest:captureExistingRigRest(model),settings:{overdrive:1.5},
+  }).clip;
+  assert.ok(Math.abs(fast.duration-2/1.5)<1e-5);
+  assert.equal(fast.tracks.length,clip.tracks.length);
+  assert.deepEqual(clip.tracks.map(t=>Array.from(t.values)),original);
+  assert.ok(Math.abs(map(fast).get('mixamorigHips.position').times.at(-1)-
+    fast.duration)<1e-5);
+  const slow=editExistingRigClip(clip,model,{
+    rest:captureExistingRigRest(model),settings:{overdrive:.5},
+  }).clip;
+  assert.ok(Math.abs(slow.duration-4)<1e-4);
+  assert.throws(()=>editExistingRigClip(clip,model,{
+    settings:{overdrive:5},
+  }),/Overdrive/);
+});
+
 test('02D rejects incompatible or unsafe mapping rather than editing random bones',()=>{
   const {model,clip}=buildFixture(),rest=captureExistingRigRest(model);
   assert.throws(()=>editExistingRigClip(clip,model,{
@@ -259,6 +280,8 @@ test('02D visible editor and export use current viewer clips, not AUTORIG-01',()
   assert.match(ui,/AUTORIG-02D · Editor de animaciones existentes/);
   assert.match(ui,/editExistingRigAnimation\(clipIndex,v,targets\)/);
   assert.match(ui,/exportGLB\(/);
+  assert.match(ui,/seekExistingRigAnimation/);
+  assert.match(ui,/Overdrive · ritmo que se guarda al exportar/);
   assert.match(viewer,/this\.clips\.map\(item=>item\.clip\)/);
   assert.match(viewer,/getExistingRigMotionStatus/);
 });
