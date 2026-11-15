@@ -23,6 +23,7 @@ import { buildRigDiagnostic } from './rigDiagnostics.js';
 import { extensionOf, formatBytes, inspectRigCompatibility, uniqueClipName, summarizeRenderableGeometry, validateLoadedContent } from './modelInfo.js';
 import {loadCompatibleModel} from './loadCompatibleModel.js';
 import {choosePrimaryModel,VIEWABLE_EXTENSIONS,explainImportError} from './viewerCompatibility.js';
+import {prepareStaticRigPreview,describeViewerRenderableState} from './staticRigPreview.js';
 
 const EMPTY_INFO = { meshes: 0, vertices: 0, triangles: 0, materials: 0, bones: 0, animations: 0, nodes: 0, textures: 0, hierarchy: [] };
 
@@ -305,6 +306,7 @@ export class MotionViewer {
     return {ok:true,...this.lastCameraFit};
   }
   getCameraFitInfo(){return this.lastCameraFit||null;}
+  getImportDiagnostics(){return this.lastImportDiagnostics||null;}
   getCharacterOrientationInfo(){
     const orientation=detectBodyUpDirection(this.model);
     return orientation?{
@@ -368,6 +370,12 @@ export class MotionViewer {
         :'Modelo y animaciones cargados.',
     };
     this.scene.add(this.model);
+    const staticPreview=prepareStaticRigPreview(this.model,{
+      animations:loaded.clips.length,
+    });
+    this.lastImportDiagnostics.staticPreview=staticPreview;
+    this.lastImportDiagnostics.renderable=
+      describeViewerRenderableState(this.model,loaded.clips);
     this.existingRigRest = captureExistingRigRest(this.model);
     this.existingRigOriginals.clear();
     this.clips = loaded.clips.map((clip,index)=>({name:uniqueClipName(loaded.clips.slice(0,index).map(c=>c.name),clip.name || `Animación ${index+1}`),clip,source:'Original'}));
