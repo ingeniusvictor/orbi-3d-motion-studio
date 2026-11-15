@@ -3,7 +3,6 @@ import {Bone,CheckCircle2,Download,ShieldAlert,ShieldCheck,MousePointer2} from '
 import {autoRigEligibility} from './lib/autoRig/eligibility.js';
 import {NativeRigEditor} from './lib/autoRig/NativeRigEditor.js';
 import {createNativeSkinPreview} from './lib/autoRig/nativeSkinPreview.js';
-import ExistingRigMotionLab from './ExistingRigMotionLab.jsx';
 import {createOrbiMotionSamples} from './lib/autoRig/fullBodyMotion.js';
 import {loadAndRetargetMixamo} from './lib/autoRig/loadMixamoMotion.js';
 import {DEFAULT_MOTION_ADJUSTMENTS,adjustHumanoidMotionClip,
@@ -412,7 +411,11 @@ export default function AutoRigLab({model,getViewer}){
         onClick={()=>{setEditing(v=>!v);setError('');setNotice('');}}>
         <MousePointer2 size={16}/>{editing?'Cerrar editor de marcadores':'Iniciar editor 3D sin Blender'}
       </button>}
-      {model?.bones>0&&<ExistingRigMotionLab model={model} getViewer={getViewer}/>}
+      {model?.bones>0&&<div style={{fontSize:11,lineHeight:1.55,padding:'9px 11px',color:'#b9d5dd',background:'#132e39',borderRadius:8}}>
+        Para modificar animaciones de este personaje, utiliza el botón
+        <strong> Animación ▾</strong> en la barra superior del visor 3D.
+        Los controles se abren junto al personaje, sin recalcular su rig.
+      </div>}
       {editing&&<div style={{display:'grid',gap:10}}>
         <div style={{fontSize:11,color:'#b6cbd6',lineHeight:1.6}}>
           <strong>Modo seguro:</strong> cámara fija y movimiento limitado por ejes.
@@ -763,6 +766,7 @@ export default function AutoRigLab({model,getViewer}){
       </div>}
       {!!error&&<div role="alert" style={{fontSize:11,color:'#ff9e96'}}>{error}</div>}
       {!!notice&&<div role="status" style={{fontSize:11,color:'#9adccc'}}>{notice}</div>}
+      {!model?.bones&&<>
       <details className="lp-accordion">
         <summary>Ruta anterior AUTORIG-01 (Blender opcional)</summary>
         <div style={{padding:10,display:'grid',gap:8,fontSize:11,lineHeight:1.6}}>
@@ -784,6 +788,7 @@ export default function AutoRigLab({model,getViewer}){
           un punto usa Deshacer o Restaurar punto. Guarda JSON antes de cerrar.
           No modifica archivos de origen.</span>
       </div>
+      </>}
     </div>
   </section>;
 }

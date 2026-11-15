@@ -93,3 +93,48 @@
   .toolbar-btn-label{min-width:28px;width:28px;padding:0}
   .toolbar-btn-label span{display:none}
 }
+
+
+/* AUTORIG-02E — floating animation inspector: controls remain beside the
+   character and scroll independently from the actual Three.js canvas. */
+.viewport-motion-dock{
+  position:absolute;top:60px;z-index:5;
+  width:min(350px,calc(100% - 24px));
+  max-height:calc(100% - 112px);
+  flex-direction:column;min-height:0;
+  color:#e0edf3;background:rgba(9,20,33,.97);
+  border:1px solid #417f82;border-radius:11px;
+  box-shadow:0 18px 40px #000a;
+  backdrop-filter:blur(12px);
+}
+.viewport-motion-dock.dock-right{right:12px}
+.viewport-motion-dock.dock-left{left:12px}
+.viewport-motion-dock-head{
+  display:flex;justify-content:space-between;gap:9px;
+  align-items:center;padding:10px 11px;flex-shrink:0;
+  background:#15313d;border-bottom:1px solid #335967;
+}
+.viewport-motion-dock-title{display:flex;gap:8px;align-items:center;min-width:0}
+.viewport-motion-dock-title>svg{color:#65e1d2;flex-shrink:0}
+.viewport-motion-dock-title strong{font-size:12px;color:#d6fff6;display:block}
+.viewport-motion-dock-title small{font-size:9px;color:#91b2c0;display:block;margin-top:3px}
+.viewport-motion-dock-actions{display:flex;gap:5px;flex-shrink:0}
+.viewport-motion-dock-scroll{
+  overflow-y:auto;overscroll-behavior:contain;min-height:0;
+  scrollbar-width:thin;scrollbar-color:#3b6e74 #112435;
+}
+.viewport-motion-dock .outline-btn{width:100%;margin:0;min-width:0}
+.viewport-motion-dock select{max-width:100%}
+.viewport-motion-dock input[type=range]{accent-color:#5ee2d0;cursor:pointer}
+.viewport-motion-trigger{color:#9de5df}
+.viewport-motion-trigger .motion-toggle-open{transform:rotate(180deg)}
+.viewport-motion-dock .lp-accordion{background:#102737}
+.viewport-motion-dock .lp-accordion>summary{padding:8px 10px}
+@media(max-width:580px){
+  .viewport-motion-trigger{min-width:29px}
+  .viewport-motion-trigger .motion-toggle-chevron{display:none}
+  .viewport-motion-dock{width:calc(100% - 18px);top:auto;bottom:36px;
+    right:9px;left:auto;max-height:min(66%,285px);}
+  .viewport-motion-dock.dock-left{left:9px}
+  .viewport-motion-dock.dock-right{right:9px}
+}

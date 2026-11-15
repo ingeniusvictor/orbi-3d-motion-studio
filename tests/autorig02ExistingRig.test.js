@@ -322,11 +322,14 @@ test('02D preserves ALL Mixamo namespaced clips in two-clip binary GLB',async()=
 });
 
 test('02D visible editor and export use current viewer clips, not AUTORIG-01',()=>{
-  const app=readFileSync(new URL('../src/AutoRigLab.jsx',import.meta.url),'utf8');
+  const app=readFileSync(new URL('../src/App.jsx',import.meta.url),'utf8');
+  const dock=readFileSync(new URL('../src/ViewportMotionDock.jsx',
+    import.meta.url),'utf8');
   const ui=readFileSync(new URL('../src/ExistingRigMotionLab.jsx',
     import.meta.url),'utf8');
   const viewer=readFileSync(new URL('../src/lib/viewer.js',import.meta.url),'utf8');
-  assert.match(app,/ExistingRigMotionLab/);
+  assert.match(app,/ViewportMotionDock/);
+  assert.match(dock,/ExistingRigMotionLab/);
   assert.match(ui,/AUTORIG-02D · Editor de animaciones existentes/);
   assert.match(ui,/editExistingRigAnimation\(clipIndex,v,targets\)/);
   assert.match(ui,/exportGLB\(/);
