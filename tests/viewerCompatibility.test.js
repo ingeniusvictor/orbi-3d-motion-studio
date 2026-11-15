@@ -160,22 +160,41 @@ test('VIEWER-COMPAT-01 static skinned geometry never needs synthetic animation',
 });
 
 test('VIEWER-COMPAT-01 real static GLB roundtrip keeps skin and zero animation clips',async()=>{
-  const {root}=makeStaticSkinnedModel();
-  const data=await new GLTFExporter().parseAsync(root,{binary:true,animations:[]});
-  assert.ok(data instanceof ArrayBuffer);
-  const loaded=await new GLTFLoader().parseAsync(data,'');
-  assert.equal(loaded.animations.length,0);
-  let meshes=0,skins=0;
-  loaded.scene.traverse(n=>{
-    if(n.isSkinnedMesh){meshes++;skins+=n.skeleton.bones.length;}
-  });
-  assert.equal(meshes,1);
-  assert.equal(skins,1);
-  const visibility=prepareStaticRigPreview(loaded.scene,{
-    animations:loaded.animations.length,
-  });
-  assert.equal(visibility.cullingBypassed,1);
-  assert.ok(computeVisibleCharacterBounds(loaded.scene)?.box);
+  const prior=globalThis.FileReader;
+  if(!prior)globalThis.FileReader=class {
+    result=null;
+    async readAsArrayBuffer(blob){
+      try{this.result=await blob.arrayBuffer();this.onloadend?.({target:this});}
+      catch(error){this.onerror?.(error);}
+    }
+    async readAsDataURL(blob){
+      try{
+        this.result='data:'+(blob.type||'application/octet-stream')+';base64,'+
+          Buffer.from(await blob.arrayBuffer()).toString('base64');
+        this.onloadend?.({target:this});
+      }catch(error){this.onerror?.(error);}
+    }
+  };
+  try{
+    const {root}=makeStaticSkinnedModel();
+    const data=await new GLTFExporter().parseAsync(root,{binary:true,animations:[]});
+    assert.ok(data instanceof ArrayBuffer);
+    const loaded=await new GLTFLoader().parseAsync(data,'');
+    assert.equal(loaded.animations.length,0);
+    let meshes=0,skins=0;
+    loaded.scene.traverse(n=>{
+      if(n.isSkinnedMesh){meshes++;skins+=n.skeleton.bones.length;}
+    });
+    assert.equal(meshes,1);
+    assert.equal(skins,1);
+    const visibility=prepareStaticRigPreview(loaded.scene,{
+      animations:loaded.animations.length,
+    });
+    assert.equal(visibility.cullingBypassed,1);
+    assert.ok(computeVisibleCharacterBounds(loaded.scene)?.box);
+  }finally{
+    if(!prior)delete globalThis.FileReader;
+  }
 });
 
 test('VIEWER-COMPAT-01 existing workflow remains separate from preview-only formats',()=>{
