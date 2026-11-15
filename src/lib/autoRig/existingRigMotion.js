@@ -69,6 +69,11 @@ function lookupBone(index,trackNode){
   if(named?.length===1)return named[0];
   const canonical=index.canon.get(key(trackNode));
   if(canonical?.length===1)return canonical[0];
+  // FBXLoader may strip Mixamo namespaces from node names while keeping
+  // them in clip tracks, or vice versa. Match both complete canonical forms.
+  const all=String(trackNode||'').replace(/[^a-z0-9]/gi,'').toLowerCase();
+  const second=index.canon.get(all);
+  if(second?.length===1)return second[0];
   return null;
 }
 function selectRoleBones(index,roleNames){
