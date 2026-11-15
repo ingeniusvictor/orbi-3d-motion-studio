@@ -220,7 +220,7 @@ export function retargetMixamoToV06B({sourceRoot,sourceClip,targetRoot,
         worldOut.set(bone,parentWorld.clone().multiply(local));
         if(values.has(bone.name)){
           const previous=quatHistory.get(bone.name).at(-1);
-          if(previous && previous.dot(local)<0)local.multiplyScalar(-1);
+          if(previous && previous.dot(local)<0)local.set(-local.x,-local.y,-local.z,-local.w);
           values.get(bone.name).push(...local.toArray());
           quatHistory.get(bone.name).push(local.clone());
         }
