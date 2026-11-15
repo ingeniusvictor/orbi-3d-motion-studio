@@ -247,7 +247,28 @@ export class GlbMorphFaceQA{
       return;
     }
     const s=this.session;
-    if(!s||s.paused){this.opening=0;return;}
+    if(!s||s.paused){
+      this.opening=0;
+      if(!s&&this.audit.supported){
+        // The user explicitly enabled facial QA; keep subtle, reversible
+        // expression activity without pretending the GLB has VRM metadata.
+        const blinkPhase=(this.clock+1.2)%4.7;
+        if(blinkPhase<.18&&this.audit.blink){
+          const amount=.7*Math.sin(Math.PI*blinkPhase/.18)**2;
+          if(this.audit.references.blink)this.apply('blink',amount);
+          else{
+            this.apply('blinkLeft',amount);
+            this.apply('blinkRight',amount);
+          }
+        }
+        const expression=this.mode==='attentive'?'surprised':
+          this.mode==='thinking'?'fun':'joy';
+        const strength=this.mode==='resting'?.018:.034;
+        if(this.audit.references[expression])
+          this.apply(expression,strength*this.intensity/.46);
+      }
+      return;
+    }
     s.elapsed+=seconds;
     const progress=s.source==='file'
       ?(this.audioProgress??clamp(s.elapsed/Math.max(2,s.text.length/14)))
