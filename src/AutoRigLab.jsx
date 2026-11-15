@@ -31,6 +31,7 @@ export default function AutoRigLab({model,getViewer}){
   const skinAbortRef=useRef(null);
   const motionFileRef=useRef(null);
   const motionPanelRef=useRef(null);
+  const motionPresetInputRef=useRef(null);
   const motionClipsRef=useRef([]);
   const savedAdjustmentsRef=useRef(new Map());
   const [editing,setEditing]=useState(false);
@@ -250,6 +251,46 @@ export default function AutoRigLab({model,getViewer}){
       progress:motion.duration>0?motion.time/motion.duration:0,
     });}
     catch(e){setError(e.message||String(e));}
+  };
+  const saveMotionPreset=()=>{
+    const chosen=motionClipsRef.current.find(item=>item.id===motion.selected);
+    if(!chosen)return;
+    downloadJson({
+      schemaVersion:1,
+      kind:'ORBI_AUTORIG_MOTION_PRESET',
+      modelFilename:model.filename,
+      clipName:chosen.clip.name,
+      settings:normalizeMotionAdjustments(motionAdjustments),
+      speed:motion.speed,
+      note:'Solo parámetros de vista previa. No incluye malla, pesos, rig ni animación.',
+    },(model.filename||'lumia').replace(/\\.[^.]+$/,'')+
+      '-orbi-motion-settings.json');
+    setNotice('Ajustes guardados en JSON. No se descargó un clip animado.');
+  };
+  const loadMotionPreset=async file=>{
+    if(!file||!motion.selected)return;
+    try{
+      if(file.size>32000)throw new Error('Archivo de ajustes demasiado grande.');
+      const data=JSON.parse(await file.text());
+      if(data?.schemaVersion!==1||data.kind!=='ORBI_AUTORIG_MOTION_PRESET')
+        throw new Error('El archivo no es un preset de animación ORBI compatible.');
+      const chosen=motionClipsRef.current.find(item=>item.id===motion.selected);
+      if(!chosen||data.clipName!==chosen.clip.name)
+        throw new Error('El preset corresponde a otro movimiento. Selecciona el mismo clip.');
+      if(data.modelFilename&&data.modelFilename!==model.filename)
+        throw new Error('El preset corresponde a otro modelo.');
+      const settings=normalizeMotionAdjustments(data.settings);
+      const speed=Number(data.speed);
+      if(!Number.isFinite(speed)||speed<.25||speed>2)
+        throw new Error('Velocidad guardada no válida.');
+      activateMotion(motion.selected,settings,{
+        playing:motion.playing,
+        progress:motion.duration>0?motion.time/motion.duration:0,
+      });
+      skinRef.current.setMotionSpeed(speed);
+      setMotion(m=>({...m,speed}));
+      setNotice('Ajustes de animación restaurados desde JSON.');
+    }catch(e){setError('No se pudieron abrir los ajustes: '+(e.message||String(e)));}
   };
   const toggleMotion=()=>{
     try{
@@ -610,6 +651,19 @@ export default function AutoRigLab({model,getViewer}){
                 </label>
                 <button type="button" className="outline-btn" style={btn}
                   onClick={resetMotionAdjustments}>↶ Restaurar ajustes del clip original</button>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+                  <button type="button" className="outline-btn" style={btn}
+                    onClick={saveMotionPreset}>
+                    <Download size={14}/> Guardar ajustes JSON
+                  </button>
+                  <button type="button" className="outline-btn" style={btn}
+                    onClick={()=>motionPresetInputRef.current?.click()}>
+                    Abrir ajustes JSON
+                  </button>
+                  <input type="file" ref={motionPresetInputRef} hidden
+                    accept=".json,application/json"
+                    onChange={e=>{loadMotionPreset(e.target.files?.[0]);e.target.value='';}}/>
+                </div>
                 <small style={{color:'#edca91',fontSize:10,lineHeight:1.5}}>
                   Importante: separar brazos es una corrección de movimiento,
                   no repara automáticamente los pesos de skinning. Si la mano
