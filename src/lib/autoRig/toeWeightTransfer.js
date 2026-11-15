@@ -157,6 +157,32 @@ function rowWeights(entry,row){
 function sumWeights(weights){
   return weights.reduce((s,v)=>Math.fround(s+v),Math.fround(0));
 }
+// Pure row operation shared with the binary adapter; useful for testing rigs
+// with double toe weights and an existing Foot slot. Never mutates inputs.
+export function transferToeWeightSlots(joints,weights,toeIndex,footIndex){
+  if(joints?.length!==4||weights?.length!==4||
+    ![toeIndex,footIndex].every(Number.isInteger)||toeIndex===footIndex)
+    E('La fila skinning debe tener cuatro influencias y huesos distintos.');
+  const j=[...joints],w=[...weights];
+  let moved=0;
+  for(let slot=0;slot<4;slot++){
+    const weight=w[slot];
+    if(j[slot]!==toeIndex||weight<=1e-7)continue;
+    moved++;
+    const matching=[];
+    for(let k=0;k<4;k++)if(j[k]===footIndex&&w[k]>1e-7)matching.push(k);
+    if(matching.length>1)E('La fila contiene varias influencias Foot positivas.');
+    if(matching.length===1){
+      const dest=matching[0];
+      if(dest===slot)E('Skin toe-foot duplicado inesperado.');
+      w[dest]=Math.fround(w[dest]+weight);
+      w[slot]=0;
+      j[slot]=0;
+    }else j[slot]=footIndex;
+  }
+  return {joints:j,weights:w,moved};
+}
+
 function patch(glb,rig){
   const moved=Object.fromEntries(rig.pairs.map(([toe])=>[toe,0]));
   let maxDelta=0;
@@ -166,22 +192,13 @@ function patch(glb,rig){
       const orig=rowWeights(entry,row),oldSum=sumWeights(orig);
       for(const [toe,foot] of rig.pairs){
         const toeIndex=rig.index.get(toe),footIndex=rig.index.get(foot);
+        const joints=[0,1,2,3].map(slot=>j.get(row,slot));
+        const weights=rowWeights(entry,row);
+        const after=transferToeWeightSlots(joints,weights,toeIndex,footIndex);
+        moved[toe]+=after.moved;
         for(let slot=0;slot<4;slot++){
-          const weight=w.get(row,slot);
-          if(j.get(row,slot)!==toeIndex||weight<=1e-7)continue;
-          moved[toe]++;
-          const matching=[];
-          for(let k=0;k<4;k++)if(j.get(row,k)===footIndex&&w.get(row,k)>1e-7)
-            matching.push(k);
-          if(matching.length>1)
-            E('El vértice ya tenía más de una influencia Foot; reparación ambigua.');
-          if(matching.length===1){
-            const dest=matching[0];
-            if(dest===slot)E('Skin toe-foot duplicado inesperado.');
-            w.set(row,dest,Math.fround(w.get(row,dest)+weight));
-            w.set(row,slot,0);
-            j.set(row,slot,0); // exactly the approved V4 policy for empty slot
-          }else j.set(row,slot,footIndex);
+          if(after.joints[slot]!==joints[slot])j.set(row,slot,after.joints[slot]);
+          if(after.weights[slot]!==weights[slot])w.set(row,slot,after.weights[slot]);
         }
       }
       const newSum=sumWeights(rowWeights(entry,row));
