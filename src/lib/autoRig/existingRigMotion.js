@@ -228,3 +228,28 @@ export function editExistingRigClip(original,model,{
   const clip=new THREE.AnimationClip(original.name,duration,out);
   return {clip,changed:true,targets:[...targets],settings:{...v,overdrive}};
 }
+
+// Normalize namespaced animation bindings on a COPY for portable GLB export.
+// Existing Mixamo clips may use 'mixamorig:Bone' names that GLTFExporter
+// cannot reliably bind. This preserves every keyframe and the source library.
+export function prepareExistingRigClipForExport(original,model){
+  if(!(original instanceof THREE.AnimationClip)||!model?.traverse)
+    throw new Error('No se puede preparar el clip para exportación.');
+  const index=indexBones(model);
+  const objects=[];
+  model.traverse(obj=>objects.push(obj));
+  let fixed=0;
+  const tracks=original.tracks.map(track=>{
+    const {node,property}=nameProperty(track.name);
+    if(!/[:|]/.test(node))return track;
+    const bound=lookupBone(index,node)||objects.find(obj=>
+      obj.name===node);
+    if(!bound)return track; // QA roundtrip will reject any lost track.
+    const copy=track.clone();
+    copy.name=bound.uuid+'.'+property;
+    fixed++;
+    return copy;
+  });
+  if(!fixed)return original;
+  return new THREE.AnimationClip(original.name,original.duration,tracks);
+}
