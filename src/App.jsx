@@ -12,6 +12,10 @@ import ViewportMotionDock from './ViewportMotionDock.jsx';
 import {accessoryModeLabel,strictSplitRigHint} from './lib/motionExportModes.js';
 import { blenderConvertScript } from './lib/mixamoKit.js';
 import { formatBytes } from './lib/modelInfo.js';
+import {rememberLoadPhase,readInterruptedLoad,clearInterruptedLoad}
+  from './lib/viewerSessionDiagnostics.js';
+import {isRecoverableGraphicsFailure,shortGraphicsReport}
+  from './lib/viewerGraphicSafety.js';
 
 const number = value => Number(value || 0).toLocaleString('es-CL');
 function OrbLogo({small=false}) {
@@ -69,6 +73,7 @@ export default function App() {
   const [notice, setNotice] = useState(null);
   const [graphicsStatus,setGraphicsStatus]=useState(null);
   const [safeRenderer,setSafeRenderer]=useState(false);
+  const [interruptedLoad,setInterruptedLoad]=useState(readInterruptedLoad);
   const [importResults, setImportResults] = useState([]);
   const [showTutorial, setShowTutorial] = useState(false);
   const [allowVrmExport, setAllowVrmExport] = useState(false);
@@ -90,6 +95,7 @@ export default function App() {
     setGraphicsStatus(status);
     if(status.type==='lost'||status.type==='render-error'){
       setBusy('');
+      rememberLoadPhase(status.message,'webgl');
       setNotice({type:'error',text:status.message+
         ' Utiliza «Recuperar visor» para reconstruir la sesión gráfica en modo seguro.'});
     }
@@ -122,6 +128,7 @@ export default function App() {
     setImportResults([]);setTextureMaterials([]);setLightMeshes([]);
     setLightBoneCount(0);setCanUndoTextures(false);
     setBusy('');setGraphicsStatus(null);
+    clearInterruptedLoad();setInterruptedLoad(null);
     setModelGeneration(n=>n+1);
     try{
       viewer.current=new MotionViewer(mountRef.current,syncPlayer,{
@@ -139,17 +146,26 @@ export default function App() {
   const openFiles = useCallback(async files => {
     const instance=viewer.current;
     if (!files?.length || !instance) return;
+    const filename=files.find(file=>/\\.(?:glb|gltf|vrm|fbx|obj|stl|ply|dae|3ds)$/i.test(file.name))?.name||'';
+    const ext=filename.split('.').pop().toLowerCase();
+    rememberLoadPhase('Abriendo modelo…',ext);
+    setInterruptedLoad(null);
     setBusy('Abriendo modelo…');setNotice(null);setImportResults([]);setAllowVrmExport(false);setFinalFormat('glb');setLightMeshes([]);setLightBoneCount(0);setTextureMaterials([]);setCanUndoTextures(false);setMotionDockOpen(false);
     try {
       const info = await instance.open(files,{
         onProgress:message=>{
-          if(viewer.current===instance)setBusy(message);
+          if(viewer.current===instance){
+            rememberLoadPhase(message,ext);
+            setBusy(message);
+          }
         },
       });
       // A failed WebGL context may be rebuilt while an async loader is
       // still decoding. Never let stale import callbacks corrupt the new UI.
       if(viewer.current!==instance)return;
-      if (info) { setFaceDockOpen(['VRM','FBX','GLB','GLTF'].includes(info.format));setModel(info);setLightMeshes(instance.getLightMeshes());setLightBoneCount(instance.getLightBoneCount());setTextureMaterials(instance.getTextureMaterials());setModelGeneration(n=>n+1);syncPlayer();const axis=instance.getCharacterOrientationInfo();
+      if (info) {
+        clearInterruptedLoad();
+        setFaceDockOpen(['VRM','FBX','GLB','GLTF'].includes(info.format));setModel(info);setLightMeshes(instance.getLightMeshes());setLightBoneCount(instance.getLightBoneCount());setTextureMaterials(instance.getTextureMaterials());setModelGeneration(n=>n+1);syncPlayer();const axis=instance.getCharacterOrientationInfo();
         const note=axis&&axis.angleToWorldY>45?
           ' El eje cabeza-pelvis está inclinado '+axis.angleToWorldY+
           '° respecto al eje Y. Usa «Enderezar vista» para inspeccionarlo; '+
@@ -159,8 +175,10 @@ export default function App() {
           (info.diagnostics?.staticPreview?.cullingBypassed?
             ' Vista segura para mallas skinned activada.':'')+note}); }
     } catch(error) {
-      if(viewer.current===instance)
+      if(viewer.current===instance){
+        clearInterruptedLoad();
         setNotice({type:'error',text:error.message||String(error)});
+      }
     }
     finally {if(viewer.current===instance)setBusy('');}
   },[syncPlayer]);
@@ -427,7 +445,7 @@ export default function App() {
               {!model && <Intro onOpen={()=>fileInput.current?.click()}/>}
               {dragging&&<div className="drag-mask"><UploadCloud size={42}/><strong>Suelta tu archivo 3D</strong><span>Tu archivo se procesa localmente</span></div>}
               {busy&&<div className="busy-mask"><div className="loading-ring"/><strong>{busy}</strong></div>}
-              {graphicsStatus&&['lost','render-error','creation-error'].includes(graphicsStatus.type)&&
+              {isRecoverableGraphicsFailure(graphicsStatus)&&
                 <div className="graphics-recovery-overlay" role="alert">
                   <XCircle size={28}/>
                   <strong>El renderizado 3D se interrumpió</strong>
@@ -440,7 +458,7 @@ export default function App() {
               <div className="viewport-bottom"><span><MousePointer2 size={13}/> Arrastrar para rotar · Rueda para zoom</span>{model&&<span className="format-chip">{model.format} · {formatBytes(model.bytes)}</span>}</div>
             </div>
             {notice&&<div className={`notice ${notice.type}`} role="status">{notice.type==='error'?<XCircle size={18}/>:<CheckCircle2 size={18}/>}<span>{notice.text}</span><button onClick={()=>setNotice(null)} aria-label="Cerrar aviso"><X size={16}/></button></div>}
-            {graphicsStatus&&['lost','render-error','creation-error'].includes(graphicsStatus.type)&&
+            {isRecoverableGraphicsFailure(graphicsStatus)&&
               <div className="graphics-recovery-summary" role="status">
                 <span><strong>Estado gráfico:</strong> {graphicsStatus.type}.
                   {graphicsStatus.diagnostics?.textures!=null?
@@ -450,11 +468,22 @@ export default function App() {
                 </span>
                 <button type="button" className="subtle-btn"
                   onClick={()=>{
-                    const report=JSON.stringify(graphicsStatus,null,2);
+                    const report=JSON.stringify(shortGraphicsReport(graphicsStatus),null,2);
                     navigator.clipboard?.writeText(report).catch(error=>
                       setNotice({type:'error',text:'No se pudo copiar el diagnóstico: '+error.message}));
                   }}>Copiar diagnóstico gráfico</button>
               </div>}
+            {interruptedLoad&&<div className="graphics-recovery-summary" role="status">
+              <span><strong>La carga anterior se interrumpió.</strong>
+                {' Última etapa: '+interruptedLoad.stage+
+                 (interruptedLoad.extension?' · Tipo: '+interruptedLoad.extension:'')+'.'}
+                {' Este dato se guardó solo en tu navegador.'}
+              </span>
+              <button type="button" className="subtle-btn"
+                onClick={()=>{clearInterruptedLoad();setInterruptedLoad(null);}}>
+                Cerrar diagnóstico
+              </button>
+            </div>}
             <section className="panel animation-panel"><div className="panel-header"><div><div className="section-icon"><Film size={19}/></div><div><h3>Biblioteca de animaciones</h3><p>{clips.length?`${clips.length} movimientos encontrados`:'Los movimientos de tu modelo aparecerán aquí'}</p></div></div><span className="counter">{clips.length.toString().padStart(2,'0')}</span></div>
               {clips.length?<><div className="clips-list">{clips.map(clip=><button className={`clip-row ${activeClip===clip.index?'active':''}`} key={`${clip.index}-${clip.name}`} onClick={()=>chooseClip(clip.index)}><div className="clip-play"><Play size={14} fill={activeClip===clip.index?'currentColor':'none'}/></div><span className="clip-name">{clip.name}<small>{clip.source}</small></span><span className="clip-meta">{clip.duration.toFixed(1)} s</span>{activeClip===clip.index&&<span className="playing-pill">ACTIVA</span>}</button>)}</div><div className="player-controls"><button className="play-btn" onClick={togglePlay} aria-label={playing?'Pausar animación':'Reproducir animación'}>{playing?<Pause size={18} fill="currentColor"/>:<Play size={18} fill="currentColor"/>}</button><div className="now-playing"><small>{playing?'REPRODUCIENDO':'EN PAUSA'}</small><strong>{activeClip!==null?clips[activeClip]?.name:'Selecciona un movimiento'}</strong></div><label className="speed-label">Velocidad <select value={speed} onChange={changeSpeed}><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label></div></>:<div className="no-animation"><div className="no-animation-icon"><Film size={22}/></div><div><strong>{model?'Este modelo no incluye animaciones':'Sin animaciones todavía'}</strong><p>{model?.format==='VRM'?'El VRM puede ser estático. Si tiene animaciones integradas, aparecerán aquí.':model?'Puedes inspeccionar el modelo o agregar animaciones del mismo esqueleto.':'Carga un personaje animado para reproducir sus movimientos.'}</p></div></div>}
               <MotionExtractor model={model} clips={clips} activeClip={activeClip}
