@@ -13,9 +13,9 @@ const roles=[
   ['rightUpperArm','Brazo superior derecho'],
   ['head','Cabeza'],
 ];
-export default function ExistingRigMotionLab({model,getViewer}){
+export default function ExistingRigMotionLab({model,getViewer,compact=false,active=true}){
   const status=getViewer?.()?.getExistingRigMotionStatus?.()||{ok:false,bones:[],detected:{}};
-  const [clipIndex,setClipIndex]=useState(0);
+  const [clipIndex,setClipIndex]=useState(()=>Math.max(0,getViewer?.()?.current??0));
   const [settings,setSettings]=useState(defaults);
   const [overrides,setOverrides]=useState(null);
   const [note,setNote]=useState('');
@@ -26,24 +26,35 @@ export default function ExistingRigMotionLab({model,getViewer}){
   const [time,setTime]=useState(0);
   const [playing,setPlaying]=useState(Boolean(getViewer?.()?.playing));
   useEffect(()=>{
-    let frame=0,last=0,active=true;
+    if(!active)return undefined;
+    let frame=0,last=0,running=true;
     const refresh=now=>{
-      if(!active)return;
+      if(!running)return;
       if(now-last>=150){
         last=now;
         const viewer=getViewer?.();
-        const clip=viewer?.clips?.[clipIndex]?.clip;
-        if(viewer?.current===clipIndex&&clip?.duration>0){
-          const seconds=((viewer.mixer?.time||0)%clip.duration+clip.duration)%clip.duration;
-          setTime(t=>Math.abs(t-seconds)>.045?seconds:t);
-          setPlaying(Boolean(viewer.playing));
+        if(Number.isInteger(viewer?.current)&&viewer?.current!==clipIndex&&
+          viewer.clips[viewer.current]){
+          const chosen=viewer.clips[viewer.current];
+          setClipIndex(viewer.current);
+          setSettings(chosen.adjustments||defaults());
+          setOverrides(null);
+          setIsEdited(Boolean(chosen.modified));
+          setTime(0);
+        }else{
+          const clip=viewer?.clips?.[clipIndex]?.clip;
+          if(viewer?.current===clipIndex&&clip?.duration>0){
+            const seconds=((viewer.mixer?.time||0)%clip.duration+clip.duration)%clip.duration;
+            setTime(t=>Math.abs(t-seconds)>.045?seconds:t);
+            setPlaying(Boolean(viewer.playing));
+          }
         }
       }
       frame=requestAnimationFrame(refresh);
     };
     frame=requestAnimationFrame(refresh);
-    return ()=>{active=false;cancelAnimationFrame(frame);};
-  },[clipIndex,getViewer]);
+    return ()=>{running=false;cancelAnimationFrame(frame);};
+  },[clipIndex,getViewer,active]);
   if(!model||model.bones<1)return null;
   const active=status.clips?.[clipIndex];
   const names=overrides||status.detected||{};
@@ -108,9 +119,19 @@ export default function ExistingRigMotionLab({model,getViewer}){
   };
   const currentSettings=Object.keys(DEFAULT_MOTION_ADJUSTMENTS).every(
     k=>settings[k]===DEFAULT_MOTION_ADJUSTMENTS[k])&&settings.overdrive===1;
-  return <div style={{display:'grid',gap:12,padding:'14px 15px',
-    borderTop:'1px solid #304455'}}>
-    <div style={{display:'flex',alignItems:'center',gap:8,
+  const boneSelectors=roles.map(([role,label])=><label key={role}
+        style={{color:'#bfdae3',fontSize:11}}>
+        {label}
+        <select style={{...field,marginTop:4}} value={names[role]||''}
+          onChange={e=>changeBone(role,e.target.value)}>
+          <option value="">— Sin identificar —</option>
+          {status.bones.map(b=><option key={b.uuid} value={b.name}>{b.name}</option>)}
+        </select>
+      </label>);
+  return <div style={{display:'grid',gap:compact?9:12,
+    padding:compact?'9px 10px 12px':'14px 15px',
+    borderTop:compact?'none':'1px solid #304455'}}>
+    {!compact&&<><div style={{display:'flex',alignItems:'center',gap:8,
       color:'#d7f4ed',fontWeight:700,fontSize:13}}>
       <Film size={18}/> AUTORIG-02D · Editor de animaciones existentes
     </div>
@@ -119,7 +140,7 @@ export default function ExistingRigMotionLab({model,getViewer}){
       <ShieldCheck size={15} style={{verticalAlign:'middle',marginRight:6}}/>
       Rig existente detectado. No se recalculan pesos ni se reemplazan huesos.
       Puedes modificar una animación y exportar un nuevo GLB.
-    </div>
+    </div></>}
     {!status.ok?<div style={{color:'#edca95',fontSize:12,lineHeight:1.5}}>
       {status.reason||'No hay animaciones disponibles.'}
     </div>:<>
@@ -164,28 +185,28 @@ export default function ExistingRigMotionLab({model,getViewer}){
             }}/>
         </label>
       </div>
-      <small style={{fontSize:10,color:'#a8bdca',lineHeight:1.55}}>
-        Las articulaciones se detectan por nombre. Si alguna no coincide,
-        asígnala manualmente al hueso correspondiente antes de modificar el
-        movimiento.
-      </small>
-      {roles.map(([role,label])=><label key={role}
-        style={{color:'#bfdae3',fontSize:11}}>
-        {label}
-        <select style={{...field,marginTop:4}} value={names[role]||''}
-          onChange={e=>changeBone(role,e.target.value)}>
-          <option value="">— Sin identificar —</option>
-          {status.bones.map(b=><option key={b.uuid} value={b.name}>{b.name}</option>)}
-        </select>
-      </label>)}
+      {compact?<details className="lp-accordion">
+        <summary>Asignación de huesos (avanzado)</summary>
+        <div style={{display:'grid',gap:7}}>
+          <small style={{fontSize:10,color:'#a8bdca',lineHeight:1.5}}>
+            Si los brazos no están identificados, elige los huesos de tu
+            personaje para habilitar los ajustes.
+          </small>
+          {boneSelectors}
+        </div>
+      </details>:<>
+        <small style={{fontSize:10,color:'#a8bdca',lineHeight:1.55}}>
+          Las articulaciones se detectan por nombre. Si alguna no coincide,
+          asígnala manualmente al hueso correspondiente.
+        </small>
+        {boneSelectors}
+      </>}
       <div style={{display:'grid',gap:9,padding:9,
         border:'1px solid #35556b',borderRadius:8}}>
         <strong style={{fontSize:12,color:'#c7eee8'}}>Ajustes en vivo</strong>
         {[
           ['armSpace','Character Arm-Space · separación de brazos',0,100,5],
           ['armSwing','Arms · amplitud del movimiento (%)',0,150,5],
-          ['look','Look · giro horizontal de cabeza',0,100,5],
-          ['overdrive','Overdrive · ritmo que se guarda al exportar',.25,2,.05],
         ].map(([name,label,min,max,step])=>
           <label key={name} style={{fontSize:11,color:'#cce5e9'}}>
             <span style={{display:'flex',justifyContent:'space-between',gap:7}}>
@@ -199,6 +220,21 @@ export default function ExistingRigMotionLab({model,getViewer}){
           Character Arm-Space: 50 neutro. Prueba 65–75 cuando las manos
           atraviesen las piernas.
         </small>
+        <details className="lp-accordion">
+          <summary>Más ajustes · Look, Overdrive, Trim y Mirror</summary>
+          <div style={{display:'grid',gap:9}}>
+        {[
+          ['look','Look · giro horizontal de cabeza',0,100,5],
+          ['overdrive','Overdrive · ritmo que se guarda al exportar',.25,2,.05],
+        ].map(([name,label,min,max,step])=>
+          <label key={name} style={{fontSize:11,color:'#cce5e9'}}>
+            <span style={{display:'flex',justifyContent:'space-between',gap:7}}>
+              <span>{label}</span><strong>{settings[name]}</strong>
+            </span>
+            <input type="range" min={min} max={max} step={step}
+              value={settings[name]} onChange={e=>change(name,Number(e.target.value))}
+              style={{width:'100%',marginTop:7}}/>
+          </label>)}
         <div style={{display:'grid',gap:5}}>
           <strong style={{fontSize:11,color:'#cce5e9'}}>
             Trim · conservar {settings.trimStart}%–{settings.trimEnd}%
@@ -230,6 +266,8 @@ export default function ExistingRigMotionLab({model,getViewer}){
           animaciones solo afecta la reproducción. Mirror y los ajustes
           angulares son aproximados: revisa frente y perfil.
         </small>
+          </div>
+        </details>
         <button type="button" className="outline-btn" style={button}
           disabled={currentSettings} onClick={()=>{
             try{apply(defaults());}catch(e){setError(e.message||String(e));}
