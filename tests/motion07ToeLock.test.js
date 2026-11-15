@@ -81,7 +81,7 @@ test('MOTION-07 distinguishes V09 and V06B by actual inverse-bind rest positions
 });
 test('MOTION-07 never accepts a random replacement for certified Blender script',async()=>{
  await assert.rejects(inspectToeLockKit(new Uint8Array([1,2,3]).buffer),
-   /abrir el ZIP/);
+   /kit V4 íntegro aprobado/);
  await assert.rejects(makeToeLockMixamoPackage({
    kitBuffer:new ArrayBuffer(0),
    glbBuffer:new ArrayBuffer(0),
