@@ -6,6 +6,7 @@ import TextureStudio from './TextureStudio.jsx';
 import LivingPresenceLab from './LivingPresenceLab.jsx';
 import FaceQuickDock from './FaceQuickDock.jsx';
 import MotionExtractor from './MotionExtractor.jsx';
+import MixamoRetargetLab from './MixamoRetargetLab.jsx';
 import AutoRigLab from './AutoRigLab.jsx';
 import ViewportMotionDock from './ViewportMotionDock.jsx';
 import {accessoryModeLabel,strictSplitRigHint} from './lib/motionExportModes.js';
@@ -35,7 +36,7 @@ function Tutorial({onClose}) {
         <div><span className="step-num">01</span><div><strong>Carga tu modelo</strong><p>Selecciona un .glb, .gltf, .fbx o .vrm. Si utilizas .gltf con archivos externos, incluye también los .bin y las texturas en la selección.</p></div></div>
         <div><span className="step-num">02</span><div><strong>Explora e inspecciona</strong><p>Gira con el ratón, acerca con la rueda y desplázate con el botón derecho. Revisa las mallas, materiales, huesos y la jerarquía.</p></div></div>
         <div><span className="step-num">03</span><div><strong>Reproduce sus animaciones</strong><p>Si el modelo contiene movimientos, elige uno en el panel «Animaciones». Puedes pausarlo y ajustar la velocidad.</p></div></div>
-        <div><span className="step-num">04</span><div><strong>Opcional: nuevos movimientos desde Mixamo</strong><p>Prepara tu personaje en Blender/Mixamo, descarga un personaje base riggeado y nuevas animaciones FBX del mismo esqueleto (preferiblemente «Without Skin»). Carga aquí el mismo personaje base y después los movimientos. No se admite rigging ni retargeting de esqueletos distintos. Un FBX «Without Skin» no incluye modelo visible: cárgalo como animación, no como personaje base.</p></div></div>
+        <div><span className="step-num">04</span><div><strong>Opcional: nuevos movimientos desde Mixamo</strong><p>Prepara tu personaje en Blender/Mixamo, descarga un personaje base riggeado y nuevas animaciones FBX del mismo esqueleto (preferiblemente «Without Skin»). Carga aquí el mismo personaje base y después los movimientos. El flujo normal exige el mismo rig; MOTION-06 ofrece una transferencia experimental separada para los dos perfiles certificados de LUMIA. Un FBX «Without Skin» no incluye modelo visible: cárgalo como animación, no como personaje base.</p></div></div>
         <div><span className="step-num">05</span><div><strong>Exporta un GLB integrado</strong><p>Descarga una copia nueva con las animaciones. Tu archivo original permanece intacto. Verificamos que el GLB generado se pueda volver a abrir.</p></div></div>
       </div>
       <div className="tutorial-warning"><ShieldCheck size={18}/><span>Los VRM 0.x y 1.0 permiten previsualizar FBX humanoides de Mixamo. Si el FBX contiene movimiento adicional de la malla, la vista puede omitir esa pista y mostrará una advertencia explícita: la animación visualizada será aproximada y no apta para exportar como definitiva. La exportación desde VRM permite crear un GLB estándar aproximado mediante aceptación explícita, sin conservar las funciones exclusivas de VRM. Para modelos FBX/GLB se exige el mismo esqueleto y jerarquía. Si hay diferencias, la aplicación rechazará la integración. Para editar huesos utiliza Blender.</span></div>
@@ -347,6 +348,9 @@ export default function App() {
                 busy={busy} onExportRig={exportCleanFBX}
                 onSaveClip={saveExtractedClip}
                 onDownloadRigDiagnostic={downloadRigDiagnostic}/>
+              <MixamoRetargetLab key={'mixamo-retarget-'+modelGeneration}
+                model={model} getViewer={getViewer}
+                onComplete={()=>{syncPlayer();setModel(current=>current?{...current,...viewer.current.getInfo()}:current);}}/>
             </section>
           </section>
           <aside className="sidebar-panels"><section className="panel inspector-panel"><div className="panel-header"><div><div className="section-icon"><SlidersHorizontal size={19}/></div><div><h3>Inspector 3D</h3><p>Detalles de tu modelo</p></div></div></div>
