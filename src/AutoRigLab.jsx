@@ -350,7 +350,7 @@ export default function AutoRigLab({model,getViewer}){
   return <section className="panel inspector-panel" aria-label="ORBI AutoRig Studio">
     <div className="panel-header"><div>
       <div className="section-icon mint"><Bone size={19}/></div>
-      <div><h3>AutoRig Studio</h3><p>AUTORIG-02C.3 · Rigging y animación corporal sin Blender</p></div>
+      <div><h3>AutoRig Studio</h3><p>AUTORIG-02C.4 · Rigging y ajustes de animación sin Blender</p></div>
     </div></div>
     <div style={{padding:'14px 15px',display:'grid',gap:12}}>
       <div className="compat-note" style={{margin:0,alignItems:'flex-start'}}>
@@ -459,8 +459,10 @@ export default function AutoRigLab({model,getViewer}){
           disabled={!audit?.ok} onClick={createSkeleton}>
           <Bone size={16}/> {preview?'Actualizar':'Generar'} esqueleto de 19 huesos
         </button>
-        {preview&&<div style={{fontSize:11,color:'#a6d2cc'}}>
+        {preview&&<div style={{fontSize:11,color:'#a6d2cc',lineHeight:1.5}}>
           Esqueleto anatómico preliminar preparado: 19 huesos.
+          Al activar el cálculo de pesos aparecerán los controles
+          <strong> AUTORIG-02C.4 · Ajustes de animación estilo Mixamo</strong>.
         </div>}
         {preview&&<div style={{border:'1px solid #315064',borderRadius:10,
           padding:10,display:'grid',gap:9}}>
