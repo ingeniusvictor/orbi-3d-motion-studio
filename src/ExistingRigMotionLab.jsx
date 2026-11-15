@@ -18,6 +18,10 @@ export default function ExistingRigMotionLab({model,getViewer,compact=false,visi
   const [clipIndex,setClipIndex]=useState(()=>Math.max(0,getViewer?.()?.current??0));
   const [settings,setSettings]=useState(defaults);
   const [overrides,setOverrides]=useState(null);
+  const [mappingOpen,setMappingOpen]=useState(()=>{
+    const mapped=status.detected||{};
+    return !mapped.leftUpperArm||!mapped.rightUpperArm||!mapped.head;
+  });
   const [note,setNote]=useState('');
   const [error,setError]=useState('');
   const [busy,setBusy]=useState(false);
@@ -58,6 +62,8 @@ export default function ExistingRigMotionLab({model,getViewer,compact=false,visi
   if(!model||model.bones<1)return null;
   const active=status.clips?.[clipIndex];
   const names=overrides||status.detected||{};
+  const missingArmRoles=['leftUpperArm','rightUpperArm'].filter(role=>!names[role]);
+  const missingHead=!names.head;
   const apply=(newSettings,targets=names)=>{
     const viewer=getViewer?.();
     if(!status.ok||!viewer)return;
@@ -92,13 +98,15 @@ export default function ExistingRigMotionLab({model,getViewer,compact=false,visi
   };
   const changeBone=(role,boneName)=>{
     const next={...names,[role]:boneName};
-    const pending=Object.keys(settings).some(
-      k=>settings[k]!==DEFAULT_MOTION_ADJUSTMENTS[k])&&
-      !Object.keys(settings).every(k=>
-        settings[k] === (k==='overdrive'?1:DEFAULT_MOTION_ADJUSTMENTS[k]));
+    const pending=Object.keys(DEFAULT_MOTION_ADJUSTMENTS).some(
+      k=>settings[k]!==DEFAULT_MOTION_ADJUSTMENTS[k])||
+      settings.overdrive!==1;
     try{
       if(pending)apply(settings,next);
       else {setOverrides(next);setError('');}
+      const stillMissing=['leftUpperArm','rightUpperArm','head']
+        .some(role=>!next[role]);
+      if(!stillMissing)setMappingOpen(false);
     }catch(e){setError(e.message||String(e));}
   };
   const save=async()=>{
@@ -122,10 +130,13 @@ export default function ExistingRigMotionLab({model,getViewer,compact=false,visi
   const boneSelectors=roles.map(([role,label])=><label key={role}
         style={{color:'#bfdae3',fontSize:11}}>
         {label}
-        <select style={{...field,marginTop:4}} value={names[role]||''}
+        <select style={{...field,marginTop:4}}
+          value={status.bones.find(b=>b.uuid===names[role]||b.name===names[role])?.uuid||''}
           onChange={e=>changeBone(role,e.target.value)}>
           <option value="">— Sin identificar —</option>
-          {status.bones.map(b=><option key={b.uuid} value={b.name}>{b.name}</option>)}
+          {status.bones.map(b=><option key={b.uuid} value={b.uuid}>
+            {b.name||'(sin nombre)'} · {b.uuid.slice(0,8)}
+          </option>)}
         </select>
       </label>);
   return <div style={{display:'grid',gap:compact?9:12,
@@ -185,8 +196,11 @@ export default function ExistingRigMotionLab({model,getViewer,compact=false,visi
             }}/>
         </label>
       </div>
-      {compact?<details className="lp-accordion">
-        <summary>Asignación de huesos (avanzado)</summary>
+      {compact?<details className="lp-accordion" open={mappingOpen}
+        onToggle={e=>setMappingOpen(e.currentTarget.open)}>
+        <summary>Asignación de huesos (avanzado)
+          {missingArmRoles.length||missingHead?' · requiere revisión':' · correcta'}
+        </summary>
         <div style={{display:'grid',gap:7}}>
           <small style={{fontSize:10,color:'#a8bdca',lineHeight:1.5}}>
             Si los brazos no están identificados, elige los huesos de tu
@@ -204,6 +218,28 @@ export default function ExistingRigMotionLab({model,getViewer,compact=false,visi
       <div style={{display:'grid',gap:9,padding:9,
         border:'1px solid #35556b',borderRadius:8}}>
         <strong style={{fontSize:12,color:'#c7eee8'}}>Ajustes en vivo</strong>
+        {!!error&&<div role="alert" style={{
+          color:'#ffd9cd',background:'#562f35',border:'1px solid #b37378',
+          borderRadius:6,padding:9,fontSize:11,lineHeight:1.5
+        }}>
+          <strong>No se pudo aplicar el ajuste:</strong> {error}
+          {(missingArmRoles.length||missingHead)&&
+            <button type="button" className="outline-btn"
+              style={{...button,marginTop:7}}
+              onClick={()=>setMappingOpen(true)}>
+              Asignar huesos ahora
+            </button>}
+        </div>}
+        {!!missingArmRoles.length&&<div role="status"
+          style={{fontSize:10,lineHeight:1.55,color:'#f8d99d'}}>
+          ORBI aún no identifica {missingArmRoles.length===2?
+          'los dos brazos superiores':'uno de los brazos superiores'}.
+          Los controles de separación y amplitud necesitan esos huesos.
+          <button type="button" className="outline-btn"
+            style={{...button,marginTop:5}} onClick={()=>setMappingOpen(true)}>
+            Identificar brazos
+          </button>
+        </div>}
         {[
           ['armSpace','Character Arm-Space · separación de brazos',0,100,5],
           ['armSwing','Arms · amplitud del movimiento (%)',0,150,5],
@@ -223,6 +259,14 @@ export default function ExistingRigMotionLab({model,getViewer,compact=false,visi
         <details className="lp-accordion">
           <summary>Más ajustes · Look, Overdrive, Trim y Mirror</summary>
           <div style={{display:'grid',gap:9}}>
+        {!!missingHead&&<div role="status" style={{fontSize:10,
+          color:'#f8d99d',lineHeight:1.5}}>
+          Look requiere identificar el hueso de la cabeza.
+          <button type="button" className="outline-btn"
+            style={{...button,marginTop:5}} onClick={()=>setMappingOpen(true)}>
+            Identificar cabeza
+          </button>
+        </div>}
         {[
           ['look','Look · giro horizontal de cabeza',0,100,5],
           ['overdrive','Overdrive · ritmo que se guarda al exportar',.25,2,.05],
@@ -293,7 +337,7 @@ export default function ExistingRigMotionLab({model,getViewer,compact=false,visi
         GLB y comprueba las flexiones, texturas, esqueleto y movimiento.
       </small>
       {!!note&&<div style={{color:'#9be7c8',fontSize:11,lineHeight:1.5}}>{note}</div>}
-      {!!error&&<div role="alert" style={{color:'#ffad9b',fontSize:11,
+      {!compact&&!!error&&<div role="alert" style={{color:'#ffad9b',fontSize:11,
         lineHeight:1.5}}>{error}</div>}
     </>}
   </div>;
