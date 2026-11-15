@@ -22,7 +22,9 @@ En AutoRig Studio > generar esqueleto > calcular pesos > **AUTORIG-02C.3 · Anim
 
 Los cambios son **en vivo y reversibles**. No alteran ni el archivo FBX descargado ni el clip de origen en memoria. Los controles son aproximaciones de ORBI: **no se usa ni se replica el algoritmo interno de Mixamo**. Algunas opciones originales de Mixamo varían por tipo de animación y no son equivalentes a nuestros ajustes.
 
-Cada clip dentro de la misma sesión conserva su configuración al cambiar de animación. Los parámetros no se guardan automáticamente entre reinicios ni se incluyen en una exportación GLB: AUTORIG-02C sigue sin exportar un avatar riggeado.
+Cada clip dentro de la misma sesión conserva su configuración al cambiar de animación. Los parámetros no se guardan automáticamente entre reinicios. Ahora hay botones **Guardar ajustes JSON** y **Abrir ajustes JSON** para conservar y restaurar la configuración del clip seleccionado, incluida su velocidad. El preset verifica nombre del modelo y del clip, y no contiene FBX, GLB ni mallas.
+
+**No se incluyen estos ajustes en una exportación GLB**: AUTORIG-02C sigue sin exportar un avatar riggeado. La descarga JSON solo guarda parámetros, no una animación con skinning.
 
 ## Prueba recomendada con el problema concreto
 
