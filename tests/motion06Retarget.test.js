@@ -90,5 +90,5 @@ test('MOTION-06 rejects unsupported options instead of guessing',()=>{
   assert.throws(()=>retargetMixamoToV06B({
     sourceRoot:makeRig(155).root,sourceClip:sourceClip(),
     targetRoot:makeRig(346,{target:true}).root,pivot:'freefall',
-  }),/opciones/);
+  }),/opciones/i);
 });
