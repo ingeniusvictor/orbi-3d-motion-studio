@@ -93,7 +93,9 @@ export default function App() {
     if (!files?.length || !viewer.current) return;
     setBusy('Abriendo modelo…');setNotice(null);setImportResults([]);setAllowVrmExport(false);setFinalFormat('glb');setLightMeshes([]);setLightBoneCount(0);setTextureMaterials([]);setCanUndoTextures(false);setMotionDockOpen(false);
     try {
-      const info = await viewer.current.open(files);
+      const info = await viewer.current.open(files,{
+        onProgress:message=>setBusy(message),
+      });
       if (info) { setFaceDockOpen(['VRM','FBX','GLB','GLTF'].includes(info.format));setModel(info);setLightMeshes(viewer.current.getLightMeshes());setLightBoneCount(viewer.current.getLightBoneCount());setTextureMaterials(viewer.current.getTextureMaterials());setModelGeneration(n=>n+1);syncPlayer();const axis=viewer.current.getCharacterOrientationInfo();
         const note=axis&&axis.angleToWorldY>45?
           ' El eje cabeza-pelvis está inclinado '+axis.angleToWorldY+

@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import {VRMUtils} from '@pixiv/three-vrm';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import {computeVisibleCharacterBounds,cameraFitParameters,detectBodyUpDirection} from './visibleBounds.js';
+import {computeVisibleCharacterBounds,fastStaticGeometryBounds,
+  cameraFitParameters,detectBodyUpDirection} from './visibleBounds.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { adaptFbxToVrm } from './vrmMotion.js';
 import { auditVrmRig } from './livingPresence/rigAudit.js';
@@ -269,12 +270,24 @@ export class MotionViewer {
     // The imported character is *never* moved, resized or rotated here.
     // Fit a camera around actual world-space skinned vertex positions,
     // not Bone helpers / bind ghost offsets in an imported FBX hierarchy.
-    const visible=computeVisibleCharacterBounds(this.model);
+    const staticModel=!this.clips?.length;
+    const visible=computeVisibleCharacterBounds(this.model,{
+      // Unanimated skinned characters should not evaluate CPU skinning on
+      // thousands of sampled vertices only to position the camera.
+      deformed:!staticModel,
+      maxSamplesPerMesh:staticModel?1600:4800,
+    });
     let box=visible?.box;
     let method=visible?.method||'fallback';
     if(!box){
-      this.model.updateWorldMatrix(true,true);
-      box=new THREE.Box3().setFromObject(this.model,true);
+      if(staticModel){
+        const fallback=fastStaticGeometryBounds(this.model);
+        box=fallback?.box;
+        if(fallback)method=fallback.method;
+      }else{
+        this.model.updateWorldMatrix(true,true);
+        box=new THREE.Box3().setFromObject(this.model,true);
+      }
     }
     const fit=cameraFitParameters(box,{
       fovDegrees:this.camera.fov,aspect:this.camera.aspect,
@@ -363,9 +376,21 @@ export class MotionViewer {
     return {ok:true,angleToWorldY:orientation.angleToWorldY,
       head:orientation.head,hips:orientation.hips};
   }
-  async open(files) {
+  async open(files,{onProgress}={}) {
     const request = ++this.loadSequence;
+    const stage=name=>{
+      if(this.disposed||request!==this.loadSequence)return;
+      // A stage update remains visible when an import takes longer than
+      // expected. Never log model bytes or personal file paths.
+      try{onProgress?.(name);}catch{/* diagnostic callback cannot break load */}
+    };
+    stage('Leyendo y decodificando modelo 3D…');
     const loaded = await loadObject(files,{renderer:this.renderer});
+    if (this.disposed || request !== this.loadSequence) return null;
+    stage('Preparando huesos, materiales y expresiones…');
+    // Allow React/Chrome to paint the new loading stage before any expensive
+    // synchronous initialization. A synchronous stall remains diagnosable.
+    await new Promise(resolve=>setTimeout(resolve,0));
     if (this.disposed || request !== this.loadSequence) return null;
     this.clearModel();
     this.model = loaded.model;
@@ -393,6 +418,7 @@ export class MotionViewer {
         :'Modelo y animaciones cargados.',
     };
     this.scene.add(this.model);
+    stage('Preparando visualización segura del personaje…');
     const staticPreview=prepareStaticRigPreview(this.model,{
       animations:loaded.clips.length,
     });
@@ -404,9 +430,11 @@ export class MotionViewer {
     this.clips = loaded.clips.map((clip,index)=>({name:uniqueClipName(loaded.clips.slice(0,index).map(c=>c.name),clip.name || `Animación ${index+1}`),clip,source:'Original'}));
     this.mixer = new THREE.AnimationMixer(this.model);
     if (this.clips.length) { this.play(0); this.mixer.update(0); }
+    stage('Ajustando cámara al personaje…');
     this.resetCamera();
     this.setSkeletonVisible(this.showBones);
     this.setWireframe(this.wireframe);
+    stage('Verificando geometría y esqueleto…');
     const info = inspect(this.model,this.clips);
     this.notify();
     return {...info,filename:loaded.name,bytes:loaded.bytes,format:loaded.format,

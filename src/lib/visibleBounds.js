@@ -23,7 +23,7 @@ function boundsOf(points,{trim=0.002}={}){
   if(b.isEmpty()||!finite3(b.min)||!finite3(b.max))return null;
   return b;
 }
-function sampleWorldVertices(mesh,maximum){
+function sampleWorldVertices(mesh,maximum,{deformed=true}={}){
   const attr=mesh.geometry?.getAttribute('position');
   const count=attr?.count||0;
   if(!count||!mesh.visible)return [];
@@ -34,7 +34,11 @@ function sampleWorldVertices(mesh,maximum){
   const push=i=>{
     try{
       // Points/point clouds have no Mesh.getVertexPosition().
-      if(typeof mesh.getVertexPosition==='function')
+      // For a STATIC skinned GLB, skip CPU skinning and all morph targets.
+      // The neutral rest geometry provides a quick camera estimate; the
+      // renderer handles the actual skinning on the GPU. Animated models
+      // preserve the original deform-aware camera behavior.
+      if(deformed&&typeof mesh.getVertexPosition==='function')
         mesh.getVertexPosition(i,local);
       else local.fromBufferAttribute(attr,i);
       local.applyMatrix4(mesh.matrixWorld);
@@ -58,7 +62,9 @@ function nearAnchor(box,anchor){
   const radius=Math.max(anchor.getSize(new THREE.Vector3()).length(),1e-5);
   return center.distanceTo(centerAnchor)<=radius*3;
 }
-export function computeVisibleCharacterBounds(root,{maxSamplesPerMesh=4800}={}){
+export function computeVisibleCharacterBounds(root,{
+  maxSamplesPerMesh=4800,deformed=true,
+}={}){
   if(!root)return null;
   root.updateWorldMatrix(true,true);
   const candidates=[];
@@ -72,13 +78,14 @@ export function computeVisibleCharacterBounds(root,{maxSamplesPerMesh=4800}={}){
     b.geometry.getAttribute('position').count-
     a.geometry.getAttribute('position').count);
   const anchor=ranked[0];
-  const anchorPoints=sampleWorldVertices(anchor,maxSamplesPerMesh);
+  const anchorPoints=sampleWorldVertices(anchor,maxSamplesPerMesh,{deformed});
   const anchorBox=boundsOf(anchorPoints);
   if(!anchorBox)return null;
   const points=[...anchorPoints];
   let included=1,excluded=0;
   for(const mesh of ranked.slice(1)){
-    const extra=sampleWorldVertices(mesh,Math.max(250,Math.floor(maxSamplesPerMesh/3)));
+    const extra=sampleWorldVertices(mesh,
+      Math.max(250,Math.floor(maxSamplesPerMesh/3)),{deformed});
     const box=boundsOf(extra);
     if(box&&nearAnchor(box,anchorBox)){
       points.push(...extra);included++;
@@ -92,8 +99,33 @@ export function computeVisibleCharacterBounds(root,{maxSamplesPerMesh=4800}={}){
     box.expandByScalar(1e-4);
   return {box,anchorName:anchor.name||'(sin nombre)',
     includedMeshes:included,excludedMeshes:excluded,
-    sampleCount:points.length,method:'skinned-vertices'};
+    sampleCount:points.length,
+    method:deformed?'skinned-vertices':'rest-vertices-fast'};
 }
+// Guaranteed no CPU skeletal/morph evaluation. A fallback for badly formed
+// static meshes whose vertex samples cannot yield a usable camera box.
+// Geometry.boundingBox is computed from raw positions; Three.js's
+// Box3.setFromObject(..., true) can trigger costly getVertexPosition() on
+// SkinnedMesh, so it must not be used in the static import path.
+export function fastStaticGeometryBounds(root){
+  if(!root)return null;
+  const box=new THREE.Box3();
+  let included=0;
+  root.updateWorldMatrix(true,true);
+  root.traverse(mesh=>{
+    if(!(mesh.isMesh||mesh.isPoints)||!mesh.visible)return;
+    const geometry=mesh.geometry;
+    if(!geometry?.getAttribute('position')?.count)return;
+    if(!geometry.boundingBox)geometry.computeBoundingBox();
+    if(!geometry.boundingBox||geometry.boundingBox.isEmpty())return;
+    const bounds=geometry.boundingBox.clone().applyMatrix4(mesh.matrixWorld);
+    if(!finite3(bounds.min)||!finite3(bounds.max))return;
+    box.union(bounds);included++;
+  });
+  if(!included||box.isEmpty())return null;
+  return {box,method:'static-geometry-box-fast',includedMeshes:included};
+}
+
 export function cameraFitParameters(box,{fovDegrees=38,aspect=1}={}){
   if(!box||box.isEmpty())return null;
   const size=box.getSize(new THREE.Vector3());
