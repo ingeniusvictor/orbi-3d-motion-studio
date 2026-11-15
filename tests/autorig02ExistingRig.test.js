@@ -169,6 +169,26 @@ test('02D resolves namespaced Mixamo tracks through UUID on the edited copy',()=
     'UUID-backed animation should differ from original and reach the bone');
   mixer.stopAllAction();mixer.uncacheRoot(model);
 });
+test('02F matches Mixamo colon bone names with prefix-only FBX tracks and exports by UUID',()=>{
+  const {model,clip,l,r}=buildFixture();
+  l.name='mixamorig:LeftArm';r.name='mixamorig:RightArm';
+  // Keep source tracks as mixamorigLeftArm without colon.
+  const rest=captureExistingRigRest(model);
+  const result=editExistingRigClip(clip,model,{rest,settings:{armSpace:75}});
+  assert.deepEqual(result.targets.sort(),['leftUpperArm','rightUpperArm']);
+  assert.ok(result.clip.tracks.some(t=>t.name===l.uuid+'.quaternion'));
+  assert.ok(result.clip.tracks.some(t=>t.name===r.uuid+'.quaternion'));
+  const mixer=new THREE.AnimationMixer(model);
+  mixer.clipAction(result.clip).play();mixer.update(.5);
+  assert.ok(l.quaternion.angleTo(new THREE.Quaternion())>.1);
+  assert.ok(r.quaternion.angleTo(new THREE.Quaternion())>.1);
+  mixer.stopAllAction();mixer.uncacheRoot(model);
+  const portable=prepareExistingRigClipForExport(clip,model);
+  assert.ok(portable.tracks.some(t=>t.name===l.uuid+'.quaternion'));
+  assert.ok(portable.tracks.some(t=>t.name===r.uuid+'.quaternion'));
+  assert.ok(clip.tracks.some(t=>t.name==='mixamorigLeftArm.quaternion'));
+});
+
 test('02D restores exactly original source clip when neutral settings',()=>{
   const {model,clip}=buildFixture();
   const rest=captureExistingRigRest(model);
