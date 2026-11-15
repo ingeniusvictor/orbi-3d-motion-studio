@@ -21,7 +21,7 @@ import { skinnedMeshes, skinBoneCount, exportLightweightGLB } from './lightweigh
 import { lightweightBinaryFBX, animatedBinaryFBX, cleanRiggedMixamoFBX } from './fbxExport.js';
 import { captureReferencePose, cloneAtReferencePose, exportableClipJSON } from './motionExtraction.js';
 import {captureExistingRigRest,editExistingRigClip,detectExistingRigRoles,
-  existingRigBones} from './autoRig/existingRigMotion.js';
+  existingRigBones,prepareExistingRigClipForExport} from './autoRig/existingRigMotion.js';
 import { buildRigDiagnostic } from './rigDiagnostics.js';
 import { extensionOf, formatBytes, inspectRigCompatibility, uniqueClipName, summarizeRenderableGeometry, validateLoadedContent } from './modelInfo.js';
 
@@ -950,7 +950,10 @@ export class MotionViewer {
         })())
       : null;
     const exportModel=converted?.model||this.model;
-    const exportClips=converted?.clips||this.clips.map(item=>item.clip);
+    const edited=this.clips.some(item=>item.modified);
+    const exportClips=converted?.clips||
+      (edited?this.clips.map(item=>prepareExistingRigClipForExport(item.clip,this.model)):
+        this.clips.map(item=>item.clip));
     const exporter=new GLTFExporter();
     const buffer=await exporter.parseAsync(exportModel,{
       binary:true, animations:exportClips, onlyVisible:false,
