@@ -32,12 +32,13 @@ function inspect(root, clips) {
   root.traverse(object => {
     nodes += 1;
     if (object.isBone) bones += 1;
-    if (object.isMesh) {
+    if (object.isMesh || object.isPoints) {
       meshes += 1;
       const geometry = object.geometry;
       const count = geometry?.getAttribute('position')?.count || 0;
       vertices += count;
-      triangles += geometry?.index ? Math.floor(geometry.index.count / 3) : Math.floor(count / 3);
+      triangles += object.isPoints?0:
+        geometry?.index ? Math.floor(geometry.index.count / 3) : Math.floor(count / 3);
       for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
         if (!material) continue;
         materials.add(material.uuid);
