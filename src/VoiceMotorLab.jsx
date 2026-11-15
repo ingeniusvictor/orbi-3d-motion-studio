@@ -302,10 +302,10 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
       <div style={{display:'grid',gap:9,padding:10}}>
       <strong style={{fontSize:12}}>LP-03D.1 · Expresión facial integral</strong>
       <small style={{fontSize:11,lineHeight:1.6,opacity:0.82}}>
-        Coordina microexpresiones, cejas, mejillas, párpados y mandíbula
-        según los controles reales del modelo. VRM dispone de expresiones;
-        FBX usa pruebas óseas pequeñas, reversibles y sujetas a reconocimiento de nombres.
-        La animación original tiene prioridad y no se exportan estas pruebas.
+        Coordina controles reales del modelo. VRM conserva su gestor facial;
+        GLB y FBX pueden usar morph targets (Blink, A/I/U/E/O y emociones)
+        cuando existen, o huesos faciales identificados. Las pruebas son
+        reversibles y no se guardan en el archivo fuente.
       </small>
       <label style={{display:'flex',gap:8,alignItems:'center',fontSize:12}}>
         <input type="checkbox" checked={faceActive} disabled={!model||!['VRM','FBX','GLB','GLTF'].includes(model?.format)||!faceInfo?.supported}
@@ -326,7 +326,7 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
       </label>
       <label style={{fontSize:12,display:'grid',gap:5}}>
         Estado facial de prueba
-        <select style={style} disabled={!faceEnabled||model?.format!=='VRM'}
+        <select style={style} disabled={!faceActive||!faceInfo?.supported}
           value={faceMode} onChange={e=>{
             const next=e.target.value;
             if(getViewer()?.setLivingFacialMode?.(next))setFaceMode(next);
@@ -338,7 +338,7 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
         </select>
       </label>
       <small style={{opacity:0.78,lineHeight:1.6}}>
-        Ojos: {faceInfo?.gaze?(model?.format==='VRM'?'VRMLookAt detectado':'huesos oculares candidatos identificados'):'sin controlador compatible'}.
+        Ojos: {faceInfo?.gaze?(model?.format==='VRM'?'VRMLookAt detectado':'huesos oculares manualmente reconocidos'):'sin controlador de mirada calibrado'}.
         {' '}Parpadeo: {faceInfo?.blink?'control detectado':'sin control compatible'}.
         {' '}Cejas: {faceInfo?.channels?.browLift||faceInfo?.channels?.browFrown||'sin control'}.
         {' '}Mejillas: {faceInfo?.channels?.cheeks||'sin morph localizado'}.
@@ -348,12 +348,12 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
         {' '}Mandíbula: {faceInfo?.channels?.jaw||'sin control independiente'}.
       </small>
       {faceInfo?.proxies?.length>0&&<small style={{lineHeight:1.6,opacity:0.76}}>
-        Control facial aproximado mediante emociones VRM:
-        {' '}{faceInfo.proxies.join(', ')}. Esos presets pueden afectar varias zonas
+        Controles faciales aproximados mediante expresiones completas:
+        {' '}{faceInfo.proxies.join(', ')}. Estos morphs pueden afectar varias zonas
         a la vez; no sustituyen morphs anatómicos independientes.
       </small>}
-      {model?.format==='FBX'&&<small style={{opacity:0.78,lineHeight:1.5}}>
-        Huesos faciales FBX candidatos: {faceInfo?.candidates?.length
+      {model?.format!=='VRM'&&<small style={{opacity:0.78,lineHeight:1.5}}>
+        Huesos faciales candidatos GLB/FBX: {faceInfo?.candidates?.length
           ?faceInfo.candidates.slice(0,18).join(', '):'no reconocidos'}. Solo se
         activan controles con nombres únicos. La mandíbula y los ojos requieren
         confirmar la dirección de giro visualmente; no se fuerzan sonrisas o mejillas.
@@ -401,7 +401,7 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
       </div>
     </details>
     <details className="lp-accordion">
-      <summary>LP-03C.2 · Labios VRM / mandíbula FBX (experimental)</summary>
+      <summary>LP-03C.2 · Vocales VRM/GLB y mandíbula FBX (experimental)</summary>
       <div style={{display:'grid',gap:7,padding:10}}>
       <strong style={{fontSize:12}}>LP-03C.2 · Boca y labios (visemas)</strong>
       <small style={{lineHeight:1.5,opacity:0.86}}>
@@ -437,6 +437,7 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
         </small>
       </>}
       <small style={{fontSize:11,opacity:0.75,lineHeight:1.5}}>
+        GLB con A/I/U/E/O: se utilizan las deformaciones originales del rostro.
         Voz del navegador: simulación aproximada de vocales basada en el texto y
         eventos de palabra, sin acceso a muestras reales del sintetizador.
         WAV/MP3 local: apertura guiada por volumen medido y forma vocálica aproximada.
