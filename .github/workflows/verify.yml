@@ -20,5 +20,7 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Unit tests
         run: npm test
+      - name: MOTION-06 Python wrapper safety tests
+        run: python3 -m unittest discover -s tools/mixamo-retarget -p 'test_*.py'
       - name: Build
         run: npm run build
