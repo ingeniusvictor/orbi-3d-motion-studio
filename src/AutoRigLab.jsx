@@ -766,6 +766,7 @@ export default function AutoRigLab({model,getViewer}){
       </div>}
       {!!error&&<div role="alert" style={{fontSize:11,color:'#ff9e96'}}>{error}</div>}
       {!!notice&&<div role="status" style={{fontSize:11,color:'#9adccc'}}>{notice}</div>}
+      {!model?.bones&&<>
       <details className="lp-accordion">
         <summary>Ruta anterior AUTORIG-01 (Blender opcional)</summary>
         <div style={{padding:10,display:'grid',gap:8,fontSize:11,lineHeight:1.6}}>
@@ -787,6 +788,7 @@ export default function AutoRigLab({model,getViewer}){
           un punto usa Deshacer o Restaurar punto. Guarda JSON antes de cerrar.
           No modifica archivos de origen.</span>
       </div>
+      </>}
     </div>
   </section>;
 }
