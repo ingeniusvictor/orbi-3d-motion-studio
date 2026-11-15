@@ -26,22 +26,17 @@ export function prepareStaticRigPreview(root,{
     }
     try{
       node.updateWorldMatrix(true,false);
-      node.skeleton.update();
-      // Avoid expensive CPU bounding-sphere rebuilds on huge characters.
-      // The optimization applies only to moderate meshes, such as V09.
-      if(count>0&&count<=maxBypassVertices){
-        if(typeof node.computeBoundingSphere==='function'){
-          node.computeBoundingSphere();
-          const b=node.boundingSphere;
-          if(b&&Number.isFinite(b.radius)&&b.radius>0)
-            stats.spheresUpdated++;
-        }
-        node.frustumCulled=false;
-        stats.cullingBypassed++;
-      }else if(count>maxBypassVertices){
-        stats.warnings.push('La malla '+(node.name||'skin')+
-          ' supera el límite seguro para desactivar descarte por cámara.');
-      }
+      // IMPORTANT: SkinnedMesh.computeBoundingSphere() loops over EVERY
+      // vertex and performs CPU skinning (and possibly morph evaluation).
+      // It blocks Chrome's main thread on rich STATIC characters like LUMIA
+      // V09. Animated assets bypassed this code, explaining the difference.
+      // Frustum culling itself is only an optimization: disabling it does
+      // NOT change skin weights, animation, vertex buffers, or materials.
+      // Never call computeBoundingSphere() during import.
+      node.frustumCulled=false;
+      stats.cullingBypassed++;
+      // Keep the old public diagnostic field but do not imply recalculation.
+      // The GPU/WebGL computes the skinned vertices during rendering.
     }catch(error){
       stats.warnings.push('No se pudo estabilizar '+(node.name||'skin')+
         ': '+(error?.message||String(error)));
