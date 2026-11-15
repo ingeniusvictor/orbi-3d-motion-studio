@@ -102,6 +102,30 @@ export function computeVisibleCharacterBounds(root,{
     sampleCount:points.length,
     method:deformed?'skinned-vertices':'rest-vertices-fast'};
 }
+// Guaranteed no CPU skeletal/morph evaluation. A fallback for badly formed
+// static meshes whose vertex samples cannot yield a usable camera box.
+// Geometry.boundingBox is computed from raw positions; Three.js's
+// Box3.setFromObject(..., true) can trigger costly getVertexPosition() on
+// SkinnedMesh, so it must not be used in the static import path.
+export function fastStaticGeometryBounds(root){
+  if(!root)return null;
+  const box=new THREE.Box3();
+  let included=0;
+  root.updateWorldMatrix(true,true);
+  root.traverse(mesh=>{
+    if(!(mesh.isMesh||mesh.isPoints)||!mesh.visible)return;
+    const geometry=mesh.geometry;
+    if(!geometry?.getAttribute('position')?.count)return;
+    if(!geometry.boundingBox)geometry.computeBoundingBox();
+    if(!geometry.boundingBox||geometry.boundingBox.isEmpty())return;
+    const bounds=geometry.boundingBox.clone().applyMatrix4(mesh.matrixWorld);
+    if(!finite3(bounds.min)||!finite3(bounds.max))return;
+    box.union(bounds);included++;
+  });
+  if(!included||box.isEmpty())return null;
+  return {box,method:'static-geometry-box-fast',includedMeshes:included};
+}
+
 export function cameraFitParameters(box,{fovDegrees=38,aspect=1}={}){
   if(!box||box.isEmpty())return null;
   const size=box.getSize(new THREE.Vector3());
