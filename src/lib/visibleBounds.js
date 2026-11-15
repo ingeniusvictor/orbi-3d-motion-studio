@@ -30,7 +30,10 @@ function sampleWorldVertices(mesh,maximum){
   mesh.updateWorldMatrix(true,false);
   const push=i=>{
     try{
-      mesh.getVertexPosition(i,local);
+      // Points/point clouds have no Mesh.getVertexPosition().
+      if(typeof mesh.getVertexPosition==='function')
+        mesh.getVertexPosition(i,local);
+      else local.fromBufferAttribute(attr,i);
       local.applyMatrix4(mesh.matrixWorld);
       if(finite3(local))samples.push(local.clone());
     }catch{ /* Never let a malformed vertex prevent the fallback camera. */ }
@@ -57,7 +60,7 @@ export function computeVisibleCharacterBounds(root,{maxSamplesPerMesh=4800}={}){
   root.updateWorldMatrix(true,true);
   const candidates=[];
   root.traverse(node=>{
-    if(node.isMesh&&node.geometry?.getAttribute('position')?.count&&
+    if((node.isMesh||node.isPoints)&&node.geometry?.getAttribute('position')?.count&&
       visibleMesh(node,root))candidates.push(node);
   });
   if(!candidates.length)return null;
