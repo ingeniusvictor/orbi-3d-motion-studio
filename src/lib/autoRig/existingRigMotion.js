@@ -227,7 +227,7 @@ export function editExistingRigClip(original,model,{
     // Three.js PropertyBinding uses ':' and '|' as reserved path separators.
     // Resolve such names through a stable bone UUID on the edited COPY only,
     // otherwise browser playback and GLTFExporter can silently skip the track.
-    if(sourceBone&&/[:|]/.test(node))
+    if(sourceBone&&(node!==sourceBone.name||/[:|]/.test(node)))
       resized.name=sourceBone.uuid+'.'+property;
     if(sourceBone && v.mirror){
       const opposite=mirrorBoneName(sourceBone.name,index);
@@ -327,10 +327,10 @@ export function prepareExistingRigClipForExport(original,model){
   let fixed=0;
   const tracks=original.tracks.map(track=>{
     const {node,property}=nameProperty(track.name);
-    if(!/[:|]/.test(node))return track;
     const bound=lookupBone(index,node)||objects.find(obj=>
       obj.name===node);
-    if(!bound)return track; // QA roundtrip will reject any lost track.
+    if(!bound||(!/[:|]/.test(node)&&node===bound.name))
+      return track; // QA roundtrip will reject any lost track.
     const copy=track.clone();
     copy.name=bound.uuid+'.'+property;
     fixed++;
