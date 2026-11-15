@@ -960,12 +960,17 @@ export class MotionViewer {
   }
   // 02D: existing-rig motion editing is a separate workflow from bone creation.
   getExistingRigMotionStatus(){
-    if(!this.model)return {ok:false,reason:'Carga un personaje.'};
-    if(!existingRigBones(this.model).length)
-      return {ok:false,reason:'Este personaje todavía no tiene huesos.'};
-    if(!this.clips.length)
-      return {ok:false,reason:'Este rig no incluye animaciones. Importa un clip compatible.'};
+    // Always return a complete shape. The floating motion dock is mounted
+    // even when closed; zero-animation GLBs must render without exceptions.
+    const empty={ok:false,bones:[],detected:{},clips:[]};
+    if(!this.model)return {...empty,reason:'Carga un personaje.'};
+    const bones=existingRigBones(this.model);
+    if(!bones.length)
+      return {...empty,reason:'Este personaje todavía no tiene huesos.'};
     const roles=detectExistingRigRoles(this.model);
+    if(!this.clips.length)
+      return {...empty,bones:roles.bones,detected:roles.detected,
+        reason:'Este rig no incluye animaciones. Puedes visualizarlo en reposo o importar un clip compatible.'};
     return {ok:true,bones:roles.bones,detected:roles.detected,
       clips:this.getClips()};
   }

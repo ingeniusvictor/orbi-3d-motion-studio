@@ -167,3 +167,17 @@
  .graphics-main-actions{width:100%;justify-content:flex-start}
  .graphics-recovery-overlay{padding:15px}
 }
+
+/* VIEWER-04: a broken optional editor must never make the entire app black */
+.panel-error-boundary{
+  position:relative;z-index:6;display:flex;flex-direction:column;gap:6px;
+  padding:12px;border:1px solid #966a54;border-radius:9px;
+  background:#301f29;color:#ffdbce;font-size:11px;line-height:1.5;
+}
+.panel-error-boundary strong{font-size:12px}
+.panel-error-boundary p{margin:0}
+.panel-error-boundary code{overflow-wrap:anywhere;color:#f9c2b8}
+.panel-error-boundary button{
+  align-self:start;padding:6px 10px;border:1px solid #9b7372;
+  color:#ffe4d8;background:#54313a;border-radius:6px;cursor:pointer;
+}

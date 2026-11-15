@@ -3,7 +3,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: ['feat/**']
+    branches: ['feat/**', 'fix/**']
 jobs:
   verify:
     runs-on: ubuntu-latest
