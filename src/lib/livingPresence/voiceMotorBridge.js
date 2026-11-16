@@ -19,7 +19,7 @@ export class VoiceMotorBridge{
     this.session={
       token,intent,started:false,paused:false,motorApplied:false,lipsApplied:false,faceApplied:false,
       lipSource:lipSource==='file'?'file':'browser',
-      viewer:null,presenceIdentity:null,restore:null,gestureTriggered:false,
+      viewer:null,presenceIdentity:null,modelIdentity:null,restore:null,gestureTriggered:false,
     };
     this.last={status:'prepared',reason:'Esperando audio audible.',motorApplied:false};
     return token;
@@ -33,6 +33,7 @@ export class VoiceMotorBridge{
     // speech even when FBX excludes the entire procedural BODY compositor.
     s.viewer=viewer||null;
     s.presenceIdentity=viewer?.presence??null;
+    s.modelIdentity=viewer?.model; // Keep undefined in legacy mocks; real GLB uses object identity.
     s.lipsApplied=Boolean(viewer?.startLivingLipSync?.(token,{
       text:s.intent.dialogue,source:s.lipSource,
     }));
@@ -102,11 +103,14 @@ export class VoiceMotorBridge{
     const s=this.session;
     if(!s||s.token!==token)return false;
     this.session=null;
-    if(s.lipsApplied&&s.viewer&&s.viewer.presence===s.presenceIdentity)
+    if(s.lipsApplied&&s.viewer&&s.viewer.model===s.modelIdentity&&
+      s.viewer.presence===s.presenceIdentity)
       s.viewer.stopLivingLipSync?.(token);
-    if(s.faceApplied&&s.viewer&&s.viewer.presence===s.presenceIdentity)
+    if(s.faceApplied&&s.viewer&&s.viewer.model===s.modelIdentity&&
+      s.viewer.presence===s.presenceIdentity)
       s.viewer.stopLivingFaceSpeech?.(token);
-    if(s.motorApplied&&s.viewer&&s.viewer.presence===s.presenceIdentity){
+    if(s.motorApplied&&s.viewer&&s.viewer.model===s.modelIdentity&&
+      s.viewer.presence===s.presenceIdentity){
       // End always returns the motor controls to precisely their user-owned
       // enabling/mode/intensity. Gesture reset prevents stale actions.
       s.viewer.setLivingGestureEnabled(false);

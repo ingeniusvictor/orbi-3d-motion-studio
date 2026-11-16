@@ -12,6 +12,7 @@ import { MotionComposer } from './livingPresence/motionComposer.js';
 import { LipSyncController } from './livingPresence/lipSync.js';
 import { FacialPresence } from './livingPresence/facialPresence.js';
 import { FbxFaceQA } from './livingPresence/fbxFaceQA.js';
+import { GlbAutonomyDirector } from './livingPresence/glbAutonomyDirector.js';
 import { getFaceFraming } from './faceFraming.js';
 import { bakeVrmForGlb, convertVrmMaterials } from './vrmExport.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
@@ -168,6 +169,7 @@ export class MotionViewer {
     this.lipSync = null;
     this.facial = null;
     this.fbxFace = null;
+    this.glbAutonomy = null;
     this.faceTracking = null;
     this.presenceSuspendCount = 0;
     this.disposed = false;
@@ -184,6 +186,7 @@ export class MotionViewer {
         // Undo in reverse overlay order: LivingPresence → FBX softener.
         this.presence?.beforeFrame();
         this.facial?.beforeFrame();
+        this.glbAutonomy?.beforeFrame();
         this.fbxFace?.beforeFrame();
         this.motionComposer?.beforeFrame();
       }
@@ -201,6 +204,7 @@ export class MotionViewer {
           presenceActive:Boolean(this.presence?.enabled),
           lipOpening:this.lipSync?.opening||0,
         });
+        this.glbAutonomy?.update(delta,{clipPlaying:Boolean(this.playing&&this.current!==null)});
         this.fbxFace?.update(delta);
       }
       // VRM spring bones, constraints and expressions require an update each frame.
@@ -358,6 +362,7 @@ export class MotionViewer {
       seed:this.presence?.randomSeed||367,
     }) : null;
     this.fbxFace = !this.vrm ? new FbxFaceQA(this.model) : null;
+    this.glbAutonomy = !this.vrm ? new GlbAutonomyDirector(this.model) : null;
     this.lastFilename = loaded.name;
     this.lastFormat = loaded.format;
     this.scene.add(this.model);
@@ -375,6 +380,7 @@ export class MotionViewer {
   }
   clearModel() {
     this.faceTracking=null;
+    this.glbAutonomy?.dispose();this.glbAutonomy=null;
     this.fbxFace?.dispose();this.fbxFace=null;
     this.facial?.dispose();this.facial=null;
     this.lipSync?.dispose();
@@ -482,25 +488,64 @@ export class MotionViewer {
     return this.lipSync?.audioSignal(token,rms,progress)??this.fbxFace?.audioSignal(token,rms,progress)??false;
   }
   stopLivingLipSync(token){return this.lipSync?.stop(token)??this.fbxFace?.stop(token)??false;}
+  // LP-04A is explicitly opt-in: a GLB never starts moving just because it loads.
+  getGlbAutonomyStatus(){return this.glbAutonomy?.getStatus()||{
+    eligible:false,enabled:false,reason:'El modelo actual no es GLB LUMIA 346.'};}
+  setGlbAutonomyEnabled(value){
+    if(!this.glbAutonomy)return false;
+    if(value&&this.playing&&this.current!==null)return false;
+    return this.glbAutonomy.setEnabled(value);
+  }
   getLivingSpeechMotorAvailability(){
+    if(!this.vrm&&this.glbAutonomy){
+      const status=this.getGlbAutonomyStatus();
+      if(!status.eligible||!status.enabled)
+        return {available:false,reason:'Autoriza LP-04A sobre la LUMIA GLB 346 antes de hablar.'};
+      if(this.playing&&this.current!==null)
+        return {available:false,reason:'Detén el clip para que la voz no interfiera con Mixamo.'};
+      return {available:true,reason:'LP-04A lista para sincronizar el movimiento con la voz.'};
+    }
     if(!this.vrm||!this.presence?.enabled)
       return {available:false,reason:'Activa Presencia natural A/B sobre un VRM.'};
     if(this.mixer&&this.current!==null&&!this.motionComposer?.active)
       return {available:false,reason:'Activa LP-02C.1 sobre un Idle Mixamo autorizado; el FBX actual tiene prioridad.'};
     return {available:true,reason:'Motor preparado para acompañar la reproducción de voz.'};
   }
-  setLivingMotorCoordination(value){this.presence?.setMotorCoordination(value);}
-  setLivingMotorIntensity(value){this.presence?.setMotorIntensity(value);}
+  setLivingMotorCoordination(value){
+    if(this.glbAutonomy&&!this.vrm)this.glbAutonomy.setMotorEnabled(value);
+    else this.presence?.setMotorCoordination(value);
+  }
+  setLivingMotorIntensity(value){
+    if(this.glbAutonomy&&!this.vrm)this.glbAutonomy.setMotorIntensity(value);
+    else this.presence?.setMotorIntensity(value);
+  }
   setLivingMotorMode(value){
-    const accepted=this.presence?.setMotorMode(value)??false;
+    const accepted=this.glbAutonomy&&!this.vrm ? this.glbAutonomy.setMotorMode(value):
+      (this.presence?.setMotorMode(value)??false);
     if(accepted)this.facial?.setMode(value);
     return accepted;
   }
-  getLivingMotorStatus(){return this.presence?.getMotorStatus()||null;}
-  setLivingGestureEnabled(value){this.presence?.setGestureEnabled(value);}
-  setLivingGestureIntensity(value){this.presence?.setGestureIntensity(value);}
-  getLivingGestureStatus(){return this.presence?.getGestureStatus()||null;}
+  getLivingMotorStatus(){
+    return this.glbAutonomy&&!this.vrm?this.glbAutonomy.getMotorStatus():
+      this.presence?.getMotorStatus()||null;
+  }
+  setLivingGestureEnabled(value){
+    if(this.glbAutonomy&&!this.vrm)this.glbAutonomy.setGestureEnabled(value);
+    else this.presence?.setGestureEnabled(value);
+  }
+  setLivingGestureIntensity(value){
+    if(this.glbAutonomy&&!this.vrm)this.glbAutonomy.setGestureIntensity(value);
+    else this.presence?.setGestureIntensity(value);
+  }
+  getLivingGestureStatus(){
+    return this.glbAutonomy&&!this.vrm?this.glbAutonomy.getGestureStatus():
+      this.presence?.getGestureStatus()||null;
+  }
   triggerLivingGesture(name){
+    if(!this.vrm&&this.glbAutonomy){
+      if(this.playing&&this.current!==null)return false;
+      return this.glbAutonomy?.triggerGesture(name)??false;
+    }
     if(!this.presence?.enabled)return false;
     // An FBX selection is never overridden without user-approved idle
     // composition, even when the imported action is paused.
