@@ -505,7 +505,7 @@ export class MotionViewer {
         return {available:false,reason:'Detén el clip para que la voz no interfiera con Mixamo.'};
       return {available:true,reason:'LP-04A lista para sincronizar el movimiento con la voz.'};
     }
-    if(!this.presence?.enabled)
+    if(!this.vrm||!this.presence?.enabled)
       return {available:false,reason:'Activa Presencia natural A/B sobre un VRM.'};
     if(this.mixer&&this.current!==null&&!this.motionComposer?.active)
       return {available:false,reason:'Activa LP-02C.1 sobre un Idle Mixamo autorizado; el FBX actual tiene prioridad.'};
