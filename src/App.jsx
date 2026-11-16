@@ -100,6 +100,16 @@ export default function App() {
     setActiveTool(current=>toggleStudioTool(current,next));
     setFaceDockOpen(false);setMotionDockOpen(false);setActiveTool('');
   },[]);
+  useEffect(()=>{
+    if(!activeTool&&!faceDockOpen&&!motionDockOpen)return;
+    const keydown=event=>{
+      if(event.key==='Escape'&&!event.defaultPrevented){
+        changeTool('');
+      }
+    };
+    window.addEventListener('keydown',keydown);
+    return ()=>window.removeEventListener('keydown',keydown);
+  },[activeTool,faceDockOpen,motionDockOpen,changeTool]);
   const syncPlayer = useCallback(() => {
     const instance = viewer.current;
     if (!instance) return;
@@ -427,7 +437,7 @@ export default function App() {
         <div className="top-actions"><span className="local-chip"><span className="live-dot"/> ARCHIVOS PRIVADOS</span><button className="subtle-btn help-button" onClick={()=>setShowTutorial(true)}><CircleHelp size={16}/> Guía rápida</button></div>
       </header>
       <main className="main-content">
-        <div className="heading-row"><div><div className="eyebrow"><span className="signal"/> ESTUDIO DE VISUALIZACIÓN 3D</div><h1>Explora cada <span>dimensión.</span></h1><p>Inspecciona tus modelos, descubre sus movimientos y crea nuevas posibilidades.</p></div><div className="graphics-main-actions">
+        <div className="heading-row"><div><div className="eyebrow"><span className="signal"/> ESTUDIO DE VISUALIZACIÓN 3D</div><h1>Tu personaje. <span>Todo el estudio.</span></h1><p>Abre herramientas en la escena, sin perder de vista cada movimiento.</p></div><div className="graphics-main-actions">
           <button type="button" className="subtle-btn"
             onClick={()=>rebuildViewer(!safeRenderer)}>
             <ShieldCheck size={16}/>{safeRenderer?'Salir del modo seguro':'Modo gráfico seguro'}
