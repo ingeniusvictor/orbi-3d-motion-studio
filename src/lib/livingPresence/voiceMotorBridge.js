@@ -33,7 +33,7 @@ export class VoiceMotorBridge{
     // speech even when FBX excludes the entire procedural BODY compositor.
     s.viewer=viewer||null;
     s.presenceIdentity=viewer?.presence??null;
-    s.modelIdentity=viewer?.model??null;
+    s.modelIdentity=viewer?.model; // Keep undefined in legacy mocks; real GLB uses object identity.
     s.lipsApplied=Boolean(viewer?.startLivingLipSync?.(token,{
       text:s.intent.dialogue,source:s.lipSource,
     }));
