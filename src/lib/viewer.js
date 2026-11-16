@@ -648,7 +648,7 @@ export class MotionViewer {
   }
   stopLivingLipSync(token){return this.lipSync?.stop(token)??this.fbxFace?.stop(token)??false;}
   getLivingSpeechMotorAvailability(){
-    if(!this.vrm){
+    if(!this.vrm&&this.bodyPresence){
       const body=this.bodyPresence?.getStatus();
       if(!body?.supported||!body?.enabled)
         return {available:false,reason:
@@ -666,16 +666,17 @@ export class MotionViewer {
     return {available:true,reason:'Motor preparado para acompañar la reproducción de voz.'};
   }
   setLivingMotorCoordination(value){
-    if(!this.vrm)return this.bodyPresence?.setMotorEnabled(value)??false;
+    if(!this.vrm&&this.bodyPresence)return this.bodyPresence?.setMotorEnabled(value)??false;
     return this.presence?.setMotorCoordination(value);
   }
   setLivingMotorIntensity(value){
-    if(!this.vrm)return this.bodyPresence?.setMotorIntensity(value)??false;
+    if(!this.vrm&&this.bodyPresence)return this.bodyPresence?.setMotorIntensity(value)??false;
     return this.presence?.setMotorIntensity(value);
   }
   setLivingMotorMode(value){
-    const accepted=this.vrm?this.presence?.setMotorMode(value)??false:
-      this.bodyPresence?.setMotorMode(value)??false;
+    const accepted=this.bodyPresence&&!this.vrm?
+      this.bodyPresence.setMotorMode(value):
+      (this.presence?.setMotorMode(value)??false);
     if(accepted){
       this.facial?.setMode(value);
       this.fbxFace?.setMode(value);
@@ -686,23 +687,23 @@ export class MotionViewer {
     return !this.vrm?(this.bodyPresence?.setAttentionTarget(value)??false):false;
   }
   getLivingMotorStatus(){
-    return this.vrm?(this.presence?.getMotorStatus()||null):
-      (this.bodyPresence?.getMotorStatus()||null);
+    return this.bodyPresence&&!this.vrm?
+      this.bodyPresence.getMotorStatus():(this.presence?.getMotorStatus()||null);
   }
   setLivingGestureEnabled(value){
-    if(!this.vrm)return this.bodyPresence?.setGestureEnabled(value);
+    if(!this.vrm&&this.bodyPresence)return this.bodyPresence?.setGestureEnabled(value);
     return this.presence?.setGestureEnabled(value);
   }
   setLivingGestureIntensity(value){
-    if(!this.vrm)return this.bodyPresence?.setGestureIntensity(value);
+    if(!this.vrm&&this.bodyPresence)return this.bodyPresence?.setGestureIntensity(value);
     return this.presence?.setGestureIntensity(value);
   }
   getLivingGestureStatus(){
-    return this.vrm?(this.presence?.getGestureStatus()||null):
-      (this.bodyPresence?.getGestureStatus()||null);
+    return this.bodyPresence&&!this.vrm?
+      this.bodyPresence.getGestureStatus():(this.presence?.getGestureStatus()||null);
   }
   triggerLivingGesture(name){
-    if(!this.vrm){
+    if(!this.vrm&&this.bodyPresence){
       // Both playing AND paused selected clips own all bone rotations.
       if(this.current!==null)return false;
       return this.bodyPresence?.triggerGesture(name)??false;
