@@ -90,6 +90,7 @@ test('LP-04A intent cannot move the body before real voice start; audio starts o
   const {root,map,mesh}=makeApprovedRig();
   const viewer=v09Viewer(root);
   viewer.setLumiaV09BodyEnabled(true);
+  viewer.setLivingMotorIntensity(.21);
   const bridge=new VoiceMotorBridge(()=>viewer);
   const head=map.get('J_Bip_C_Head');
   const foot=map.get('V8_Bip001-L-Foot');
@@ -105,6 +106,7 @@ test('LP-04A intent cannot move the body before real voice start; audio starts o
   assert.equal(bridge.start(token),true);
   assert.equal(bridge.start(token),false);
   assert.equal(viewer.getLivingMotorStatus().mode,'explaining');
+  assert.equal(viewer.getLivingMotorStatus().intensity,.35);
   assert.equal(viewer.getLivingGestureStatus().current,'acknowledge');
   for(let i=0;i<12;i++){
     viewer.bodyPresence.beforeFrame();
@@ -121,6 +123,8 @@ test('LP-04A intent cannot move the body before real voice start; audio starts o
   assert.equal(viewer.getLivingGestureStatus().current,null);
   assert.equal(viewer.getLivingMotorStatus().mode,'resting');
   assert.equal(viewer.getLivingMotorStatus().enabled,false);
+  assert.equal(viewer.getLivingMotorStatus().intensity,.21,
+    'User-owned GLB motor strength must be restored after speech');
   assert.equal(viewer.getLumiaV09BodyStatus().enabled,true,
     'User consent and idle breathing survive a completed utterance');
   viewer.bodyPresence.dispose();
