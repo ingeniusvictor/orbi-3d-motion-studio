@@ -20,7 +20,8 @@ test('STUDIO-09 LP audit only enables body on VRM but recognizes Claude facial m
     getLivingComposerStatus:()=>null,
   };
   const s=statuses(glb,viewer);
-  assert.equal(LP_FEATURES.length,5);
+  assert.equal(LP_FEATURES.length,6);
+  assert.equal(s.lp04.state,'pending');
   assert.equal(s.lp01.state,'requires-vrm');
   assert.equal(s.lp02.state,'requires-vrm');
   assert.equal(s.lp03ab.state,'requires-vrm');

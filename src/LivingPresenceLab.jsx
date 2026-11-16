@@ -2,6 +2,7 @@ import {useEffect,useState} from 'react';
 import {Activity,HeartPulse,ShieldCheck} from 'lucide-react';
 import {describePresenceGate} from './lib/livingPresence/activationGate.js';
 import VoiceMotorLab from './VoiceMotorLab.jsx';
+import LumiaV09BodyLab from './LumiaV09BodyLab.jsx';
 import {describeLpCapabilities} from './lib/livingPresence/lpCapabilities.js';
 
 const FINGERS=[['Thumb','Pulgar'],['Index','Índice'],['Middle','Medio'],['Ring','Anular'],['Little','Meñique']];
@@ -204,8 +205,9 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
     </div></div>
     <div style={{padding:'14px 16px',display:'grid',gap:12}}>
       <div className="compat-note"><ShieldCheck size={16}/>
-        <span>Modo de laboratorio reversible. No edita el VRM, los FBX ni las exportaciones.</span>
+        <span>Movimiento reversible y no destructivo. Las animaciones importadas conservan prioridad.</span>
       </div>
+      <LumiaV09BodyLab model={model} generation={generation} getViewer={getViewer}/>
       {model&&<div className="lp-capability-list" role="status" aria-label="Disponibilidad real de módulos Living Presence">
         {lpStatuses.map(item=><div className="lp-capability-row" key={item.id}>
           <div><strong>{item.name}</strong><small>{item.engine}</small></div>
@@ -220,9 +222,10 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
         <div>La cámara «Rostro» y el panel de QA facial funcionan también con GLB/FBX.
           Los controles se habilitan únicamente cuando sus huesos se identifican
           de forma única. La prueba de voz sigue disponible con o sin boca compatible.</div>
-        <div>El motor corporal LP-02/03 de VRM continúa bloqueado para este rig
-          de 488 huesos hasta calibrar las correspondencias, límites y ejes.
-          No se aplicarán gestos corporales arbitrarios a la animación V8.</div>
+        <div>LP-04 permite respiración/cabeza en la maestra Claude V09 de
+          346 huesos auditados. Los motores completos de IK, compositor
+          corporal y gestos LP-02/03 siguen siendo específicos de VRM
+          hasta certificar sus ejes y límites en V09.</div>
       </div>}
       <button className="outline-btn" disabled={!canUse}
         onClick={inspect}>
@@ -510,7 +513,9 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
         rodillas, pies o la raíz. La cinemática corporal completa, las colisiones
         y la actuación ligada a la voz siguen pendientes.
       </small>
-      {!canUse&&<small>Los controles corporales LP-01/02/03A/B requieren VRM. Los controles faciales y de voz disponibles se manejan desde «Rostro» y «Voz» en la barra del personaje.</small>}
+      {!canUse&&<small>LP-01/02/03A/B completos continúan usando VRM.
+        Para Claude V09, utiliza LP-04 (arriba) en modo A/B y los controles
+        faciales/voz desde «Rostro» y «Voz».</small>}
         </div>
       </details>
     </div>

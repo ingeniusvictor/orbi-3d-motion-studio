@@ -343,3 +343,48 @@
 @media(prefers-reduced-motion:reduce){
   .studio-tool-tab,.studio-tool-chevron{transition:none}
 }
+
+
+/* LP-04 — native V09 micro-presence: compact in-scene design system */
+.lumia-body-presence{
+  display:grid;gap:12px;padding:13px;border:1px solid #34716c;
+  border-radius:12px;background:linear-gradient(150deg,#102e34,#101f30);
+  box-shadow:inset 0 1px #83ebd826;color:#dae9ed;
+}
+.lumia-body-presence-heading{
+  display:flex;align-items:center;gap:10px;
+}
+.lumia-body-presence-heading>svg{color:#7ce7d4;flex-shrink:0}
+.lumia-body-presence-heading strong{display:block;font-size:13px}
+.lumia-body-presence-heading small{color:#a2bbc6;font-size:10px}
+.lumia-body-presence .compat-note{padding:8px 10px;margin:0}
+.lumia-body-presence-status{
+  display:flex;align-items:flex-start;gap:9px;font-size:11px;
+  line-height:1.55;color:#a6edd8;
+}
+.lumia-body-presence-status svg{flex-shrink:0;margin-top:1px}
+.lumia-body-presence-warning{
+  border:1px solid #77634c;border-radius:8px;padding:9px;
+  background:#322c28;color:#f2c89b;font-size:11px;line-height:1.5;
+}
+.lumia-body-presence-toggle{
+  display:flex;align-items:center;gap:9px;font-size:12px;
+  font-weight:700;color:#effffa;
+}
+.lumia-body-presence input[type="checkbox"]{accent-color:#43bfa5}
+.lumia-body-presence-options{display:grid;gap:5px}
+.lumia-body-presence-options>label{
+  display:flex;align-items:flex-start;gap:10px;padding:8px 9px;
+  border-radius:8px;border:1px solid #2c4a53;background:#112937;
+  cursor:pointer;
+}
+.lumia-body-presence-options>label input{margin-top:2px}
+.lumia-body-presence-options>label>div{flex:1;min-width:0}
+.lumia-body-presence-options strong{display:block;font-size:11px}
+.lumia-body-presence-options small{display:block;font-size:10px;
+  margin-top:3px;color:#92b5bf;line-height:1.45}
+.lumia-body-presence-options>label>svg{color:#78c9bf}
+.lumia-body-presence-range{display:grid;gap:6px;color:#b2d6d8;font-size:11px}
+.lumia-body-presence-range input[type="range"]{width:100%;accent-color:#6fe2cb}
+.lumia-body-presence-feedback{color:#a8efd7;line-height:1.6}
+.lumia-body-presence-footnote{font-size:10px;color:#92aeb9;line-height:1.65}
