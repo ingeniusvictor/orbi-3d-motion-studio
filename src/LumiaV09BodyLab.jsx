@@ -67,10 +67,16 @@ export default function LumiaV09BodyLab({model,generation,getViewer}){
       <div>{status.reason}</div>
     </div>}
     <label className="lumia-body-presence-toggle">
-      <input type="checkbox" checked={enabled} disabled={!capable}
+      <input type="checkbox" checked={Boolean(status.enabled)} disabled={!capable}
         onChange={event=>toggle(event.target.checked)}/>
       Activar presencia natural V09 (prueba A/B)
     </label>
+    {status.enabled&&<small className="lumia-body-presence-feedback" role="status">
+      Motor compartido LP-04A: {status.motor?.enabled?
+        'voz Qwen activa':'reposo autónomo disponible'}.
+      {status.gesture?.current?' Gesto actual: '+status.gesture.current+'.':''}
+      {' '}No existe otro controlador sobre el mismo esqueleto.
+    </small>}
     <div className="lumia-body-presence-options">
       {CHOICES.map(([id,label,description])=><label key={id}>
         <input type="checkbox" checked={Boolean(options[id])} disabled={!capable}
