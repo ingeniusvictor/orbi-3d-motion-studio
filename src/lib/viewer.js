@@ -648,27 +648,67 @@ export class MotionViewer {
   }
   stopLivingLipSync(token){return this.lipSync?.stop(token)??this.fbxFace?.stop(token)??false;}
   getLivingSpeechMotorAvailability(){
-    if(!this.vrm||!this.presence?.enabled)
+    if(!this.vrm&&this.bodyPresence){
+      const body=this.bodyPresence?.getStatus();
+      if(!body?.supported||!body?.enabled)
+        return {available:false,reason:
+          'Activa LP-04 en la LUMIA GLB 346 reconocida antes de autorizar gestos de Qwen.'};
+      if(this.current!==null)
+        return {available:false,reason:
+          'Hay una animación Mixamo seleccionada: conserva propiedad exclusiva de los huesos.'};
+      return {available:true,reason:
+        'LP-04: el motor contextual está listo y aguardará el audio audible.'};
+    }
+    if(!this.presence?.enabled)
       return {available:false,reason:'Activa Presencia natural A/B sobre un VRM.'};
     if(this.mixer&&this.current!==null&&!this.motionComposer?.active)
       return {available:false,reason:'Activa LP-02C.1 sobre un Idle Mixamo autorizado; el FBX actual tiene prioridad.'};
     return {available:true,reason:'Motor preparado para acompañar la reproducción de voz.'};
   }
-  setLivingMotorCoordination(value){this.presence?.setMotorCoordination(value);}
-  setLivingMotorIntensity(value){this.presence?.setMotorIntensity(value);}
+  setLivingMotorCoordination(value){
+    if(!this.vrm&&this.bodyPresence)return this.bodyPresence?.setMotorEnabled(value)??false;
+    return this.presence?.setMotorCoordination(value);
+  }
+  setLivingMotorIntensity(value){
+    if(!this.vrm&&this.bodyPresence)return this.bodyPresence?.setMotorIntensity(value)??false;
+    return this.presence?.setMotorIntensity(value);
+  }
   setLivingMotorMode(value){
-    const accepted=this.presence?.setMotorMode(value)??false;
-    if(accepted)this.facial?.setMode(value);
+    const accepted=this.bodyPresence&&!this.vrm?
+      this.bodyPresence.setMotorMode(value):
+      (this.presence?.setMotorMode(value)??false);
+    if(accepted){
+      this.facial?.setMode(value);
+      this.fbxFace?.setMode(value);
+    }
     return accepted;
   }
-  getLivingMotorStatus(){return this.presence?.getMotorStatus()||null;}
-  setLivingGestureEnabled(value){this.presence?.setGestureEnabled(value);}
-  setLivingGestureIntensity(value){this.presence?.setGestureIntensity(value);}
-  getLivingGestureStatus(){return this.presence?.getGestureStatus()||null;}
+  setLivingAttentionTarget(value){
+    return !this.vrm?(this.bodyPresence?.setAttentionTarget(value)??false):false;
+  }
+  getLivingMotorStatus(){
+    return this.bodyPresence&&!this.vrm?
+      this.bodyPresence.getMotorStatus():(this.presence?.getMotorStatus()||null);
+  }
+  setLivingGestureEnabled(value){
+    if(!this.vrm&&this.bodyPresence)return this.bodyPresence?.setGestureEnabled(value);
+    return this.presence?.setGestureEnabled(value);
+  }
+  setLivingGestureIntensity(value){
+    if(!this.vrm&&this.bodyPresence)return this.bodyPresence?.setGestureIntensity(value);
+    return this.presence?.setGestureIntensity(value);
+  }
+  getLivingGestureStatus(){
+    return this.bodyPresence&&!this.vrm?
+      this.bodyPresence.getGestureStatus():(this.presence?.getGestureStatus()||null);
+  }
   triggerLivingGesture(name){
+    if(!this.vrm&&this.bodyPresence){
+      // Both playing AND paused selected clips own all bone rotations.
+      if(this.current!==null)return false;
+      return this.bodyPresence?.triggerGesture(name)??false;
+    }
     if(!this.presence?.enabled)return false;
-    // An FBX selection is never overridden without user-approved idle
-    // composition, even when the imported action is paused.
     if(this.mixer&&this.current!==null&&!this.motionComposer?.active)return false;
     return this.presence.triggerGesture(name);
   }

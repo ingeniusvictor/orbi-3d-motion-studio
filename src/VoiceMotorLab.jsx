@@ -41,6 +41,8 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
   const [source,setSource]=useState('browser');
   const [audioName,setAudioName]=useState('');
   const [speakerEnabled,setSpeakerEnabled]=useState(false);
+  // Shared LP-04 authorization; NO parallel GLB autonomy state or engine.
+  const [,refreshLp04Authorization]=useState(0);
   const [voiceStatus,setVoiceStatus]=useState('idle');
   const [lipStrength,setLipStrength]=useState(72);
   const [faceEnabled,setFaceEnabled]=useState(true);
@@ -50,6 +52,7 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
   const [lipReadout,setLipReadout]=useState(null);
   const [fbxFaceSnapshot,setFbxFaceSnapshot]=useState(null);
   const origin=typeof window==='undefined'?'':window.location.origin;
+  const lp04Status=getViewer()?.getLumiaV09BodyStatus?.()||null;
   const lipInfo=lipReadout||getViewer()?.getLivingLipDiagnostics?.()||null;
   const faceInfo=(model?.format!=='VRM'&&fbxFaceSnapshot)
     ||getViewer()?.getLivingFacialDiagnostics?.()||null;
@@ -445,6 +448,30 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
       </small>
       </div>
     </details>
+    {(model?.format==='GLB'||model?.format==='GLTF')&&
+      <label className="lp04-voice-permission">
+        <input type="checkbox" checked={Boolean(lp04Status?.enabled)}
+          disabled={!lp04Status?.supported||voiceStatus!=='idle'}
+          onChange={event=>{
+            stop('lp04-authorization-change');
+            const allowed=getViewer()?.setLumiaV09BodyEnabled?.(
+              event.target.checked);
+            refreshLp04Authorization(n=>n+1);
+            setMessage(event.target.checked&&allowed
+              ?'LP-04 compartido activado: espera el audio audible para gestos Qwen.'
+              :'LP-04 desactivado o no compatible; la voz sigue disponible.');
+          }}/>
+        <span>
+          <strong>LP-04A · Autorizar gestos de Qwen con LUMIA GLB</strong>
+          <small>Este interruptor utiliza el MISMO motor LP-04 del panel
+            «LP cuerpo». No crea un controlador paralelo. El audio inicia
+            el gesto; una animación Mixamo seleccionada lo suspende.</small>
+          {lp04Status?.suspendedForClip&&
+            <small>Clip seleccionado: movimiento Qwen suspendido.</small>}
+          {!lp04Status?.supported&&
+            <small>{lp04Status?.reason||'Rig sin perfil corporal reconocido.'}</small>}
+        </span>
+      </label>}
     <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12}}>
       <input type="checkbox" checked={speakerEnabled}
         onChange={e=>{stop('disabled');setSpeakerEnabled(e.target.checked);}}/>
@@ -523,9 +550,10 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
     {message&&<small role="status" style={{lineHeight:1.55,opacity:0.87}}>{message}</small>}
     {error&&<small role="alert" style={{color:'#ffb4a7',lineHeight:1.55}}>{error}</small>}
     <small style={{display:'flex',alignItems:'start',gap:7,lineHeight:1.5,opacity:0.76}}>
-      <ShieldCheck size={15}/> Para mover el personaje, activa Presencia A/B;
-      con FBX seleccionado activa también LP-02C.1 sobre un Idle.
-      La voz puede sonar aunque la animación esté bloqueada por seguridad.
+      <ShieldCheck size={15}/> Para LUMIA GLB, autoriza LP-04 en «LP cuerpo»
+      o aquí y después inicia el audio. Para VRM se mantiene Presencia A/B
+      y LP-02C.1 sobre un Idle. La voz funciona incluso si el movimiento
+      corporal está bloqueado por prioridad Mixamo.
     </small>
     <details style={{fontSize:11}}>
       <summary style={{cursor:'pointer'}}>Configuración local de Ollama / permisos de origen</summary>

@@ -87,7 +87,7 @@ export async function askLocalMotorIntent({
     });
   }catch(error){
     if(error?.name==='AbortError')throw new Error('Consulta a Qwen cancelada.');
-    throw new Error('No se pudo conectar a Ollama local. Revisa Ollama y OLLAMA_ORIGINS para localhost:5174. '+String(error?.message||error));
+    throw new Error('No se pudo conectar a Ollama local. Revisa Ollama y autoriza el origen local exacto de ORBI en OLLAMA_ORIGINS. '+String(error?.message||error));
   }
   if(!response?.ok)throw new Error('Ollama respondió HTTP '+(response?.status??'desconocido'));
   const body=await response.json();
