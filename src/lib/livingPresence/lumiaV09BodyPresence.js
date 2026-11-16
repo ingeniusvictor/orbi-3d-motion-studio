@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import {inspectLumiaMasterRest} from '../autoRig/lumiaMasterProfile.js';
+import {GestureDirector} from './gestureDirector.js';
+import {MotorCoordinator,MOTOR_MODES} from './motorCoordinator.js';
 
 // LP-04: explicitly opt-in, local and fully reversible procedural presence for
 // the validated Claude V09 346-bone rig, not a universal FBX/GLB animator.
@@ -19,6 +21,14 @@ const FINGERS=[0,1,2,3,4];
 const AXIS_X=new THREE.Vector3(1,0,0);
 const AXIS_Y=new THREE.Vector3(0,1,0);
 const AXIS_Z=new THREE.Vector3(0,0,1);
+const GESTURE_ROLES=Object.freeze({
+  chest:'spine',upperChest:'torso',neck:'neck',head:'head',
+  leftUpperArm:'armL',rightUpperArm:'armR',
+  leftHand:'wristL',rightHand:'wristR',
+});
+const MAX_GESTURE_ANGLE=4*Math.PI/180;
+const motorModes=new Set(Object.keys(MOTOR_MODES));
+const attentionTargets=new Set(['interlocutor','ambient']);
 const DEFAULT_OPTIONS=Object.freeze({
   breathing:true,head:true,arms:false,fingers:false,
 });
@@ -87,6 +97,14 @@ export class LumiaV09BodyPresence {
     this.options={...DEFAULT_OPTIONS};
     this.clock=0;this.fade=0;
     this.applied=new Map();this.suspendedForClip=false;
+    // The SAME director drives both manual LP-04 idle and Qwen speech cues.
+    // No second GLB autonomy engine or concurrent quaternion writer.
+    this.coordinator=new MotorCoordinator();
+    this.gestures=new GestureDirector();
+    this.motorEnabled=false;
+    this.motorMode='resting';this.motorIntensity=.35;
+    this.attentionTarget='ambient';
+    this.lastMotor={applied:false,maxDegrees:0};
   }
   getStatus(){
     const {ok,profile,bones,fingerCount,reason}=this.audit;
@@ -96,6 +114,8 @@ export class LumiaV09BodyPresence {
       bones:bones||0,fingersRecognized:fingerCount||0,
       profile:profile?.version||null,
       suspendedForClip:this.suspendedForClip,
+      motor:this.getMotorStatus(),gesture:this.getGestureStatus(),
+      autonomyAvailable:Boolean(ok),
       reason:reason||'No se reconoce un rig corporal Claude V09.',
       safety:'Solo superposición de vista previa. No modifica clips, skin ni exportación.',
     };
@@ -104,7 +124,11 @@ export class LumiaV09BodyPresence {
     if(!this.audit.ok){this.enabled=false;return false;}
     this.enabled=Boolean(value);
     this.fade=0;
-    if(!this.enabled){this.release();this.suspendedForClip=false;}
+    if(!this.enabled){
+      this.release();this.suspendedForClip=false;
+      this.setGestureEnabled(false);this.setMotorEnabled(false);
+      this.attentionTarget='ambient';
+    }
     return true;
   }
   setIntensity(value){this.intensity=clamp(value,0,.65);}
@@ -114,6 +138,54 @@ export class LumiaV09BodyPresence {
       if(Object.hasOwn(options,k))this.options[k]=Boolean(options[k]);
     this.release();
     return {...this.options};
+  }
+  setMotorEnabled(value){
+    this.motorEnabled=Boolean(value)&&this.enabled&&this.audit.ok;
+    this.coordinator.setEnabled(this.motorEnabled);
+    if(!this.motorEnabled)this.coordinator.reset();
+    return this.motorEnabled;
+  }
+  setMotorMode(mode){
+    if(!motorModes.has(mode))return false;
+    this.motorMode=mode;this.coordinator.setMode(mode);return true;
+  }
+  setMotorIntensity(value){
+    if(!Number.isFinite(value))return false;
+    this.motorIntensity=clamp(value,0,.65);
+    this.coordinator.setIntensity(this.motorIntensity);
+    return true;
+  }
+  setAttentionTarget(target){
+    if(!attentionTargets.has(target))return false;
+    this.attentionTarget=target;return true;
+  }
+  getMotorStatus(){
+    return {enabled:this.motorEnabled,mode:this.motorMode,
+      intensity:this.motorIntensity,attentionTarget:this.attentionTarget};
+  }
+  setGestureEnabled(value){
+    this.gestures.setEnabled(Boolean(value)&&this.enabled&&this.audit.ok);
+  }
+  setGestureIntensity(value){
+    if(!Number.isFinite(value))return false;
+    this.gestures.setIntensity(clamp(value,0,.65));
+    return true;
+  }
+  getGestureStatus(){return this.gestures.getStatus();}
+  triggerGesture(name){
+    if(!this.enabled||!this.motorEnabled||this.suspendedForClip)return false;
+    return this.gestures.trigger(name);
+  }
+  // The body model owns local axes. Qwen provides ENUMs only; the existing
+  // coordinator and gesture catalog generate bounded local joint deltas.
+  applyRoleAngles(role,angles){
+    const bone=this.audit.mapping[GESTURE_ROLES[role]];
+    if(!bone||!Array.isArray(angles))return;
+    const axes=[AXIS_X,AXIS_Y,AXIS_Z];
+    for(let axis=0;axis<3;axis++){
+      const amount=clamp(angles[axis]||0,-MAX_GESTURE_ANGLE,MAX_GESTURE_ANGLE);
+      this.rotate(bone,axes[axis],amount);
+    }
   }
   // Only restore transforms if no other editor changed them since our overlay.
   // This preserves edits performed while the preview was visible.
@@ -140,6 +212,10 @@ export class LumiaV09BodyPresence {
     this.suspendedForClip=Boolean(clipSelected);
     if(!this.audit.ok||!this.enabled||this.suspendedForClip){
       this.release();
+      // A selected clip, even paused, owns the entire skeleton.
+      if(this.suspendedForClip){
+        this.gestures.reset();this.coordinator.reset();
+      }
       this.fade=0;
       return false;
     }
@@ -178,11 +254,34 @@ export class LumiaV09BodyPresence {
         this.rotate(bone,AXIS_X,direction*.009*gain*Math.sin(phase));
       }
     }
+    if(this.motorEnabled){
+      const gaze=this.attentionTarget==='interlocutor'?.009:0;
+      const motor=this.coordinator.update(dt,{
+        roll:Math.sin(t*.39)*.008,yaw:Math.sin(t*.21)*.012,
+        headYaw:gaze*Math.sin(t*.45),
+        wristLeft:Math.sin(t*.37)*.2,
+        wristRight:-Math.sin(t*.42)*.2,
+      });
+      for(const [role,angles] of Object.entries(motor.euler||{}))
+        this.applyRoleAngles(role,angles);
+    }
+    const gesture=this.gestures.update(dt);
+    if(this.motorEnabled){
+      for(const [role,angles] of Object.entries(gesture.pose||{}))
+        this.applyRoleAngles(role,angles);
+    }
+    this.lastMotor={applied:this.applied.size>0,
+      maxDegrees:Math.min(4,Math.max(
+        this.coordinator.last?.maxDegrees||0,
+        ...Object.values(gesture.pose||{}).flat()
+          .map(a=>Math.abs(a)*180/Math.PI),0)),
+      gesture:gesture.name||null};
     return this.applied.size>0;
   }
   dispose(){
     this.setEnabled(false);
-    this.release();this.root=null;
+    this.release();this.gestures.reset();this.coordinator.reset();
+    this.root=null;
     this.audit={ok:false,reason:'Adaptador liberado.'};
   }
 }
