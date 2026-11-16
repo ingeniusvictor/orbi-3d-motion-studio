@@ -57,6 +57,7 @@ export class GlbAutonomyDirector {
   setEnabled(enabled){
     this.beforeFrame();
     this.enabled=Boolean(enabled)&&this.eligible;
+    if(this.enabled)this.motorEnabled=true; // User-authorized gentle idle presence.
     if(!this.enabled){
       this.motorEnabled=false;
       this.gestures.setEnabled(false);
