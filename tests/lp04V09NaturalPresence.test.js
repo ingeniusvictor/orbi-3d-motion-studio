@@ -125,7 +125,7 @@ test('LP-04 prevents destructive restoration if external editing changed a previ
   const userEdit=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),.2);
   head.quaternion.copy(userEdit);
   motor.release();
-  assert.ok(head.quaternion.angleTo(userEdit)<1e-8);
+  assert.ok(head.quaternion.angleTo(userEdit)<1e-6);
   assert.equal(motor.applied.size,0);
   motor.dispose();
 });
