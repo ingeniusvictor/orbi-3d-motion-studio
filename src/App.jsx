@@ -526,7 +526,6 @@ export default function App() {
             <div className="studio-tool-slot studio-tool-floating" data-tool="toelock" data-open={activeTool==='toelock'}>
               <MixamoToeLockLab key={'toe-lock-'+modelGeneration}
                 model={model} getViewer={getViewer}/>
-            </section>
             </div>
           </section>
           <aside className="sidebar-panels studio-tool-drawer"
