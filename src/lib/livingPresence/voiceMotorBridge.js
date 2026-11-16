@@ -65,6 +65,10 @@ export class VoiceMotorBridge{
     // A "thinking" answer still SPEAKS. The state is a stylistic cue only.
     viewer.setLivingMotorMode(mode);
     viewer.setLivingAttentionTarget?.(s.intent.attentionTarget);
+    // The GLB motor bounds Qwen intensity again. Preserve VRM's historical
+    // coordination policy and restore the prior GLB level on voice end.
+    if(viewer?.getLumiaV09BodyStatus?.().supported)
+      viewer.setLivingMotorIntensity?.(Math.min(s.intent.intensity,.65));
     // Keep the lab's user-selected gesture weight; bound the LLM's proposed
     // intensity to a conservative cap, and restore original settings at end.
     viewer.setLivingGestureIntensity(Math.min(s.intent.intensity,0.65));
