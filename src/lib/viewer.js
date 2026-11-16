@@ -11,6 +11,7 @@ import { MotionComposer } from './livingPresence/motionComposer.js';
 import { LipSyncController } from './livingPresence/lipSync.js';
 import { FacialPresence } from './livingPresence/facialPresence.js';
 import { GlbMorphFaceQA } from './livingPresence/glbMorphFaceQA.js';
+import {LumiaV09BodyPresence} from './livingPresence/lumiaV09BodyPresence.js';
 import { getFaceFraming } from './faceFraming.js';
 import { bakeVrmForGlb, convertVrmMaterials } from './vrmExport.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
@@ -213,6 +214,7 @@ export class MotionViewer {
     this.lipSync = null;
     this.facial = null;
     this.fbxFace = null;
+    this.bodyPresence = null;
     this.faceTracking = null;
     this.presenceSuspendCount = 0;
     this.disposed = false;
@@ -231,6 +233,7 @@ export class MotionViewer {
         this.presence?.beforeFrame();
         this.facial?.beforeFrame();
         this.fbxFace?.beforeFrame();
+        this.bodyPresence?.beforeFrame();
         this.motionComposer?.beforeFrame();
       }
       if (!this.presenceSuspendCount && this.mixer && this.playing) this.mixer.update(delta);
@@ -239,6 +242,11 @@ export class MotionViewer {
       if(!this.presenceSuspendCount)this.presence?.update(delta,{
         clipPlaying:Boolean(this.mixer && this.current !== null),
         composition:this.motionComposer,
+      });
+      // LP-04 owns ONLY idle V09 microgestures, after clip evaluation.
+      // Any selected FBX/GLB clip has exclusive skeletal ownership.
+      if(!this.presenceSuspendCount)this.bodyPresence?.update(delta,{
+        clipSelected:this.current !== null,
       });
       // Speech mouth expressions are separate from Mixamo bone ownership.
       if(!this.presenceSuspendCount){
@@ -483,6 +491,7 @@ export class MotionViewer {
     // Joy...). Inspect the actual imported mesh dictionaries and fall back
     // to the existing conservative, manually-calibrated bone QA when absent.
     this.fbxFace = !this.vrm ? new GlbMorphFaceQA(this.model) : null;
+    this.bodyPresence = !this.vrm ? new LumiaV09BodyPresence(this.model) : null;
     this.lastFilename = loaded.name;
     this.lastFormat = loaded.format;
     this.lastImportDiagnostics={
@@ -519,6 +528,7 @@ export class MotionViewer {
   }
   clearModel() {
     this.faceTracking=null;
+    this.bodyPresence?.dispose();this.bodyPresence=null;
     this.fbxFace?.dispose();this.fbxFace=null;
     this.facial?.dispose();this.facial=null;
     this.lipSync?.dispose();
@@ -567,6 +577,17 @@ export class MotionViewer {
   }
   setPlaying(playing) { if (!this.mixer) return; this.playing = Boolean(playing); this.notify(); }
   setSpeed(speed) { this.speed = Number(speed); if(this.mixer) this.mixer.timeScale=this.speed; }
+  getLumiaV09BodyStatus(){
+    const status=this.bodyPresence?.getStatus()||
+      {supported:false,enabled:false,reason:'El modelo no tiene adaptador corporal V09.'};
+    return {...status,suspendedForClip:Boolean(this.current !== null)};
+  }
+  setLumiaV09BodyEnabled(value){
+    return this.bodyPresence?.setEnabled(value)??false;
+  }
+  setLumiaV09BodyIntensity(value){this.bodyPresence?.setIntensity(value);}
+  setLumiaV09BodySpeed(value){this.bodyPresence?.setSpeed(value);}
+  setLumiaV09BodyOptions(options){return this.bodyPresence?.setOptions(options)||null;}
   getLivingComposerStatus() { return this.motionComposer?.getStatus() || null; }
   setLivingComposerEnabled(value) {
     if(!this.motionComposer)return false;
@@ -711,6 +732,7 @@ export class MotionViewer {
       this.lipSync?.release();
       this.facial?.release();
       this.fbxFace?.release();
+      this.bodyPresence?.beforeFrame();
       // Three-VRM copies normalized humanoid bones to raw bones during update.
       // Synchronize once BEFORE cloning/exporting the raw skinned model.
       this.vrm?.update(0);
