@@ -497,7 +497,7 @@ export class MotionViewer {
     return this.glbAutonomy.setEnabled(value);
   }
   getLivingSpeechMotorAvailability(){
-    if(!this.vrm){
+    if(!this.vrm&&this.glbAutonomy){
       const status=this.getGlbAutonomyStatus();
       if(!status.eligible||!status.enabled)
         return {available:false,reason:'Autoriza LP-04A sobre la LUMIA GLB 346 antes de hablar.'};
@@ -512,37 +512,37 @@ export class MotionViewer {
     return {available:true,reason:'Motor preparado para acompañar la reproducción de voz.'};
   }
   setLivingMotorCoordination(value){
-    if(this.vrm)this.presence?.setMotorCoordination(value);
-    else this.glbAutonomy?.setMotorEnabled(value);
+    if(this.glbAutonomy&&!this.vrm)this.glbAutonomy.setMotorEnabled(value);
+    else this.presence?.setMotorCoordination(value);
   }
   setLivingMotorIntensity(value){
-    if(this.vrm)this.presence?.setMotorIntensity(value);
-    else this.glbAutonomy?.setMotorIntensity(value);
+    if(this.glbAutonomy&&!this.vrm)this.glbAutonomy.setMotorIntensity(value);
+    else this.presence?.setMotorIntensity(value);
   }
   setLivingMotorMode(value){
-    const accepted=this.vrm ? (this.presence?.setMotorMode(value)??false):
-      (this.glbAutonomy?.setMotorMode(value)??false);
+    const accepted=this.glbAutonomy&&!this.vrm ? this.glbAutonomy.setMotorMode(value):
+      (this.presence?.setMotorMode(value)??false);
     if(accepted)this.facial?.setMode(value);
     return accepted;
   }
   getLivingMotorStatus(){
-    return this.vrm?this.presence?.getMotorStatus()||null:
-      this.glbAutonomy?.getMotorStatus()||null;
+    return this.glbAutonomy&&!this.vrm?this.glbAutonomy.getMotorStatus():
+      this.presence?.getMotorStatus()||null;
   }
   setLivingGestureEnabled(value){
-    if(this.vrm)this.presence?.setGestureEnabled(value);
-    else this.glbAutonomy?.setGestureEnabled(value);
+    if(this.glbAutonomy&&!this.vrm)this.glbAutonomy.setGestureEnabled(value);
+    else this.presence?.setGestureEnabled(value);
   }
   setLivingGestureIntensity(value){
-    if(this.vrm)this.presence?.setGestureIntensity(value);
-    else this.glbAutonomy?.setGestureIntensity(value);
+    if(this.glbAutonomy&&!this.vrm)this.glbAutonomy.setGestureIntensity(value);
+    else this.presence?.setGestureIntensity(value);
   }
   getLivingGestureStatus(){
-    return this.vrm?this.presence?.getGestureStatus()||null:
-      this.glbAutonomy?.getGestureStatus()||null;
+    return this.glbAutonomy&&!this.vrm?this.glbAutonomy.getGestureStatus():
+      this.presence?.getGestureStatus()||null;
   }
   triggerLivingGesture(name){
-    if(!this.vrm){
+    if(!this.vrm&&this.glbAutonomy){
       if(this.playing&&this.current!==null)return false;
       return this.glbAutonomy?.triggerGesture(name)??false;
     }
