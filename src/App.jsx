@@ -5,6 +5,8 @@ import LightPrep from './LightPrep.jsx';
 import TextureStudio from './TextureStudio.jsx';
 import LivingPresenceLab from './LivingPresenceLab.jsx';
 import FaceQuickDock from './FaceQuickDock.jsx';
+import VoiceMotorLab from './VoiceMotorLab.jsx';
+import StudioToolStrip,{toggleStudioTool,toolLabel} from './StudioToolStrip.jsx';
 import MotionExtractor from './MotionExtractor.jsx';
 import MixamoRetargetLab from './MixamoRetargetLab.jsx';
 import MixamoToeLockLab from './MixamoToeLockLab.jsx';
@@ -83,9 +85,31 @@ export default function App() {
   const [mobilePanel,setMobilePanel] = useState(false);
   const [faceDockOpen,setFaceDockOpen]=useState(false);
   const [motionDockOpen,setMotionDockOpen]=useState(false);
+  const [activeTool,setActiveTool]=useState('');
   const voiceQARef=useRef(null);
   const [voiceQAState,setVoiceQAState]=useState({ready:false,authorized:false,status:'idle'});
   const getViewer = useCallback(() => viewer.current, []);
+  const changeTool=useCallback(next=>{
+    if(!next){setActiveTool('');setFaceDockOpen(false);setMotionDockOpen(false);return;}
+    if(next==='face'){
+      setFaceDockOpen(open=>!open);setMotionDockOpen(false);setActiveTool('');return;
+    }
+    if(next==='motion'){
+      setMotionDockOpen(open=>!open);setFaceDockOpen(false);setActiveTool('');return;
+    }
+    setActiveTool(current=>toggleStudioTool(current,next));
+    setFaceDockOpen(false);setMotionDockOpen(false);setActiveTool('');
+  },[]);
+  useEffect(()=>{
+    if(!activeTool&&!faceDockOpen&&!motionDockOpen)return;
+    const keydown=event=>{
+      if(event.key==='Escape'&&!event.defaultPrevented){
+        changeTool('');
+      }
+    };
+    window.addEventListener('keydown',keydown);
+    return ()=>window.removeEventListener('keydown',keydown);
+  },[activeTool,faceDockOpen,motionDockOpen,changeTool]);
   const syncPlayer = useCallback(() => {
     const instance = viewer.current;
     if (!instance) return;
@@ -152,6 +176,7 @@ export default function App() {
     const ext=filename.split('.').pop().toLowerCase();
     rememberLoadPhase('Abriendo modelo…',ext);
     setInterruptedLoad(null);
+    setActiveTool('');
     setBusy('Abriendo modelo…');setNotice(null);setImportResults([]);setAllowVrmExport(false);setFinalFormat('glb');setLightMeshes([]);setLightBoneCount(0);setTextureMaterials([]);setCanUndoTextures(false);setMotionDockOpen(false);
     try {
       const info = await instance.open(files,{
@@ -412,20 +437,21 @@ export default function App() {
         <div className="top-actions"><span className="local-chip"><span className="live-dot"/> ARCHIVOS PRIVADOS</span><button className="subtle-btn help-button" onClick={()=>setShowTutorial(true)}><CircleHelp size={16}/> Guía rápida</button></div>
       </header>
       <main className="main-content">
-        <div className="heading-row"><div><div className="eyebrow"><span className="signal"/> ESTUDIO DE VISUALIZACIÓN 3D</div><h1>Explora cada <span>dimensión.</span></h1><p>Inspecciona tus modelos, descubre sus movimientos y crea nuevas posibilidades.</p></div><div className="graphics-main-actions">
+        <div className="heading-row"><div><div className="eyebrow"><span className="signal"/> ESTUDIO DE VISUALIZACIÓN 3D</div><h1>Tu personaje. <span>Todo el estudio.</span></h1><p>Abre herramientas en la escena, sin perder de vista cada movimiento.</p></div><div className="graphics-main-actions">
           <button type="button" className="subtle-btn"
             onClick={()=>rebuildViewer(!safeRenderer)}>
             <ShieldCheck size={16}/>{safeRenderer?'Salir del modo seguro':'Modo gráfico seguro'}
           </button>
           <button className="primary-btn new-file-btn" onClick={()=>fileInput.current?.click()}><FileUp size={17}/> Cargar modelo</button>
         </div></div>
-        <div className={`studio-layout ${mobilePanel?'mobile-panel-open':''}`}>
+        <div className={`studio-layout ${mobilePanel?'mobile-panel-open':''}`}
+          data-active-tool={activeTool||((faceDockOpen||motionDockOpen)?'floating':'none')}>
           <section className="viewer-column">
             <div className={`viewport-card ${dragging?'dragging':''}`} onDragOver={event=>{event.preventDefault();setDragging(true);}} onDragLeave={event=>{if(!event.currentTarget.contains(event.relatedTarget))setDragging(false);}} onDrop={drop}>
               <div className="viewer-toolbar"><div className="viewport-title"><span className="viewport-led"/> VISOR 3D <span className="viewer-divider">/</span> <span>{model?'MODELO CARGADO':'ESCENA VACÍA'}</span></div><div className="viewer-actions"><button className={grid?'toolbar-btn on':'toolbar-btn'} onClick={toggleGrid} title="Mostrar cuadrícula" aria-label="Cuadrícula"><Grid2X2 size={17}/></button><button className={wireframe?'toolbar-btn on':'toolbar-btn'} onClick={toggleWireframe} title="Vista de malla" aria-label="Vista de malla"><Layers3 size={17}/></button><button className={showBones?'toolbar-btn on':'toolbar-btn'} onClick={toggleBones} title="Visualizar esqueleto" aria-label="Visualizar esqueleto"><Activity size={17}/></button><button className="toolbar-btn toolbar-btn-label" onClick={focusVisibleCharacter} title="Centrar la cámara usando la geometría visible, no el esqueleto" aria-label="Centrar personaje"><Focus size={17}/><span>Centrar</span></button>{model&&<button className="toolbar-btn" onClick={diagnoseVisibility} title="Diagnosticar cámara y mallas sin modificar el modelo" aria-label="Diagnosticar visualización"><Info size={16}/></button>}{model?.format==='FBX'&&<button className="toolbar-btn" onClick={alignUprightCamera} title="Enderezar SOLO la vista según cabeza y pelvis (no modifica FBX)" aria-label="Enderezar vista del personaje"><MoveUp size={17}/></button>}{model&&<button className="toolbar-btn toolbar-btn-label" onClick={focusFaceCamera} title="Primer plano de la cara; sigue la cabeza sin mover el rig" aria-label="Acercar cámara al rostro"><ScanEye size={17}/><span>Rostro</span></button>}{model?.bones>0&&<button
                 type="button"
                 className={motionDockOpen?'toolbar-btn toolbar-btn-label viewport-motion-trigger on':'toolbar-btn toolbar-btn-label viewport-motion-trigger'}
-                onClick={()=>{setMotionDockOpen(v=>!v);setFaceDockOpen(false);}}
+                onClick={()=>changeTool('motion')}
                 title="Abrir ajustes de animación sobre el personaje"
                 aria-label="Ajustes de animación en el visor"
                 aria-controls="orbi-motion-dock"
@@ -433,8 +459,10 @@ export default function App() {
                 aria-pressed={motionDockOpen}>
                 <Film size={17}/><span>Animación</span>
                 <ChevronDown size={13} className={motionDockOpen?'motion-toggle-chevron motion-toggle-open':'motion-toggle-chevron'}/>
-              </button>}{model&&<button className={faceDockOpen?'toolbar-btn on':'toolbar-btn'} onClick={()=>{setFaceDockOpen(v=>!v);setMotionDockOpen(false);}} title="Mostrar controles faciales compatibles" aria-label="Controles rápidos de rostro" aria-pressed={faceDockOpen}><SlidersHorizontal size={17}/></button>}</div></div>
+              </button>}{model&&<button className={faceDockOpen?'toolbar-btn on':'toolbar-btn'} onClick={()=>changeTool('face')} title="Mostrar controles faciales compatibles" aria-label="Controles rápidos de rostro" aria-pressed={faceDockOpen}><SlidersHorizontal size={17}/></button>}</div></div>
               <div className="renderer-mount" ref={mountRef}/>
+              <StudioToolStrip activeTool={faceDockOpen?'face':motionDockOpen?'motion':activeTool}
+                onSelect={changeTool} hasModel={Boolean(model)} disabled={Boolean(busy)}/>
               <PanelErrorBoundary key={'face-boundary-'+modelGeneration}
                 label="los controles del rostro">
                 <FaceQuickDock getViewer={getViewer} model={model}
@@ -491,28 +519,50 @@ export default function App() {
                 Cerrar diagnóstico
               </button>
             </div>}
-            <section className="panel animation-panel"><div className="panel-header"><div><div className="section-icon"><Film size={19}/></div><div><h3>Biblioteca de animaciones</h3><p>{clips.length?`${clips.length} movimientos encontrados`:'Los movimientos de tu modelo aparecerán aquí'}</p></div></div><span className="counter">{clips.length.toString().padStart(2,'0')}</span></div>
+            <section className="panel animation-panel studio-tool-panel" data-open={activeTool==='clips'}><div className="panel-header"><div><div className="section-icon"><Film size={19}/></div><div><h3>Biblioteca de animaciones</h3><p>{clips.length?`${clips.length} movimientos encontrados`:'Los movimientos de tu modelo aparecerán aquí'}</p></div></div><span className="counter">{clips.length.toString().padStart(2,'0')}</span></div>
               {clips.length?<><div className="clips-list">{clips.map(clip=><button className={`clip-row ${activeClip===clip.index?'active':''}`} key={`${clip.index}-${clip.name}`} onClick={()=>chooseClip(clip.index)}><div className="clip-play"><Play size={14} fill={activeClip===clip.index?'currentColor':'none'}/></div><span className="clip-name">{clip.name}<small>{clip.source}</small></span><span className="clip-meta">{clip.duration.toFixed(1)} s</span>{activeClip===clip.index&&<span className="playing-pill">ACTIVA</span>}</button>)}</div><div className="player-controls"><button className="play-btn" onClick={togglePlay} aria-label={playing?'Pausar animación':'Reproducir animación'}>{playing?<Pause size={18} fill="currentColor"/>:<Play size={18} fill="currentColor"/>}</button><div className="now-playing"><small>{playing?'REPRODUCIENDO':'EN PAUSA'}</small><strong>{activeClip!==null?clips[activeClip]?.name:'Selecciona un movimiento'}</strong></div><label className="speed-label">Velocidad <select value={speed} onChange={changeSpeed}><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label></div></>:<div className="no-animation"><div className="no-animation-icon"><Film size={22}/></div><div><strong>{model?'Este modelo no incluye animaciones':'Sin animaciones todavía'}</strong><p>{model?.format==='VRM'?'El VRM puede ser estático. Si tiene animaciones integradas, aparecerán aquí.':model?'Puedes inspeccionar el modelo o agregar animaciones del mismo esqueleto.':'Carga un personaje animado para reproducir sus movimientos.'}</p></div></div>}
+            </section>
+            <div className="studio-tool-slot studio-tool-floating" data-tool="extract" data-open={activeTool==='extract'}>
               <MotionExtractor model={model} clips={clips} activeClip={activeClip}
                 busy={busy} onExportRig={exportCleanFBX}
                 onSaveClip={saveExtractedClip}
                 onDownloadRigDiagnostic={downloadRigDiagnostic}/>
+            </div>
+            <div className="studio-tool-slot studio-tool-floating" data-tool="retarget" data-open={activeTool==='retarget'}>
               <MixamoRetargetLab key={'mixamo-retarget-'+modelGeneration}
                 model={model} getViewer={getViewer}
                 onComplete={()=>{syncPlayer();setModel(current=>current?{...current,...viewer.current.getInfo()}:current);}}/>
+            </div>
+            <div className="studio-tool-slot studio-tool-floating" data-tool="toelock" data-open={activeTool==='toelock'}>
               <MixamoToeLockLab key={'toe-lock-'+modelGeneration}
                 model={model} getViewer={getViewer}/>
-            </section>
+            </div>
           </section>
-          <aside className="sidebar-panels"><section className="panel inspector-panel"><div className="panel-header"><div><div className="section-icon"><SlidersHorizontal size={19}/></div><div><h3>Inspector 3D</h3><p>Detalles de tu modelo</p></div></div></div>
-            {model?<><div className="model-chip"><div className="model-symbol"><Box size={23}/></div><div><strong title={model.filename}>{model.filename}</strong><span>{model.format} · {formatBytes(model.bytes)}</span></div><CheckCircle2 size={17} className="success-ic"/></div><div className="tab-bar"><button className={inspectorTab==='stats'?'active':''} onClick={()=>setInspectorTab('stats')}>Composición</button><button className={inspectorTab==='tree'?'active':''} onClick={()=>setInspectorTab('tree')}>Estructura</button></div>{inspectorTab==='stats'?<div className="stats-grid"><Stat icon={Box} label="Mallas" value={number(model.meshes)}/><Stat icon={Grid2X2} label="Triángulos" value={number(model.triangles)}/><Stat icon={Layers3} label="Materiales" value={number(model.materials)}/><Stat icon={Boxes} label="Texturas" value={number(model.textures)}/><Stat icon={Activity} label="Huesos" value={number(model.bones)}/><Stat icon={Film} label="Animaciones" value={number(clips.length)}/><Stat icon={Eye} label="Nodos" value={number(model.nodes)}/><Stat icon={ScanEye} label="Vértices" value={number(model.vertices)}/></div>:<div className="tree-list">{model.hierarchy.map((node,index)=><div key={index} className="tree-node" style={{paddingLeft:`${Math.min(node.depth,7)*12+8}px`}}><span className="tree-mark">{node.type==='Bone'?'◇':'▸'}</span><span title={node.name}>{node.name}</span><small>{node.type}</small></div>)}{model.nodes>180&&<div className="tree-more">Mostrando los primeros 180 nodos de {model.nodes}.</div>}</div>}</>:<div className="inspector-empty"><Boxes size={32}/><strong>Aún no hay modelo</strong><p>La composición y estructura aparecerán al cargar un archivo.</p></div>}</section>
+          <aside className="sidebar-panels studio-tool-drawer"
+            data-open={['inspector','autorig','voice','presence','textures','integrate','light'].includes(activeTool)}>
+            <div className="studio-tool-drawer-head">
+              <span><SlidersHorizontal size={15}/> {toolLabel(activeTool)}</span>
+              <button type="button" onClick={()=>changeTool('')} aria-label="Cerrar panel desplegable"><X size={17}/></button>
+            </div><div className="studio-tool-slot" data-tool="inspector" data-open={activeTool==='inspector'}><section className="panel inspector-panel"><div className="panel-header"><div><div className="section-icon"><SlidersHorizontal size={19}/></div><div><h3>Inspector 3D</h3><p>Detalles de tu modelo</p></div></div></div>
+            {model?<><div className="model-chip"><div className="model-symbol"><Box size={23}/></div><div><strong title={model.filename}>{model.filename}</strong><span>{model.format} · {formatBytes(model.bytes)}</span></div><CheckCircle2 size={17} className="success-ic"/></div><div className="tab-bar"><button className={inspectorTab==='stats'?'active':''} onClick={()=>setInspectorTab('stats')}>Composición</button><button className={inspectorTab==='tree'?'active':''} onClick={()=>setInspectorTab('tree')}>Estructura</button></div>{inspectorTab==='stats'?<div className="stats-grid"><Stat icon={Box} label="Mallas" value={number(model.meshes)}/><Stat icon={Grid2X2} label="Triángulos" value={number(model.triangles)}/><Stat icon={Layers3} label="Materiales" value={number(model.materials)}/><Stat icon={Boxes} label="Texturas" value={number(model.textures)}/><Stat icon={Activity} label="Huesos" value={number(model.bones)}/><Stat icon={Film} label="Animaciones" value={number(clips.length)}/><Stat icon={Eye} label="Nodos" value={number(model.nodes)}/><Stat icon={ScanEye} label="Vértices" value={number(model.vertices)}/></div>:<div className="tree-list">{model.hierarchy.map((node,index)=><div key={index} className="tree-node" style={{paddingLeft:`${Math.min(node.depth,7)*12+8}px`}}><span className="tree-mark">{node.type==='Bone'?'◇':'▸'}</span><span title={node.name}>{node.name}</span><small>{node.type}</small></div>)}{model.nodes>180&&<div className="tree-more">Mostrando los primeros 180 nodos de {model.nodes}.</div>}</div>}</>:<div className="inspector-empty"><Boxes size={32}/><strong>Aún no hay modelo</strong><p>La composición y estructura aparecerán al cargar un archivo.</p></div>}</section></div>
+          <div className="studio-tool-slot" data-tool="autorig" data-open={activeTool==='autorig'}>
           <PanelErrorBoundary key={'autorig-boundary-'+modelGeneration} label="AutoRig Studio">
             <AutoRigLab model={model} getViewer={getViewer}/>
-          </PanelErrorBoundary>
+          </PanelErrorBoundary></div>
+          <div className="studio-tool-slot" data-tool="presence" data-open={activeTool==='presence'}>
           <PanelErrorBoundary key={'presence-boundary-'+modelGeneration} label="Living Presence">
-            <LivingPresenceLab model={model} generation={modelGeneration} getViewer={getViewer} activeClip={activeClip} voiceQARef={voiceQARef} onVoiceQAState={setVoiceQAState}/>
-          </PanelErrorBoundary>
+            <LivingPresenceLab model={model} generation={modelGeneration} getViewer={getViewer} activeClip={activeClip} voiceQARef={voiceQARef} onVoiceQAState={setVoiceQAState} showVoice={false}/>
+          </PanelErrorBoundary></div>
+          <div className="studio-tool-slot" data-tool="voice" data-open={activeTool==='voice'}>
+            <PanelErrorBoundary key={'voice-boundary-'+modelGeneration} label="LP-03C · Voz">
+              <VoiceMotorLab model={model} generation={modelGeneration} getViewer={getViewer}
+                activeClip={activeClip} voiceQARef={voiceQARef} onVoiceQAState={setVoiceQAState}/>
+            </PanelErrorBoundary>
+          </div>
+          <div className="studio-tool-slot" data-tool="textures" data-open={activeTool==='textures'}>
           <TextureStudio key={modelGeneration} model={model} materials={textureMaterials} busy={busy} onApply={applyTexture} onBatch={batchTexture} onUndo={undoTexture} canUndo={canUndoTextures} onCapture={id=>viewer.current.captureMaterialViews(id)}/>
+          </div>
+          <div className="studio-tool-slot" data-tool="integrate" data-open={activeTool==='integrate'}>
           <section className="panel integrate-panel"><div className="panel-header"><div><div className="section-icon mint"><FilePlus2 size={19}/></div><div><h3>Integrar movimientos</h3><p>Animaciones externas del mismo rig</p></div></div></div><div className="compat-note"><ShieldCheck size={17}/><span>{model?.format==='VRM'?'VRM: los movimientos se pueden guardar como GLB estándar aproximado (no como VRM).':'Solo FBX del mismo esqueleto y jerarquía del personaje. No realiza rigging ni retargeting.'}</span></div><button className="outline-btn" onClick={()=>animationInput.current?.click()} disabled={!model||!!busy}><FilePlus2 size={16}/> Añadir animaciones FBX</button>{importResults.length>0&&<div className="results-list">{importResults.map((item,index)=><div key={`${item.name}-${index}`} className={item.ok?'ok':'fail'}>{item.ok?<CheckCircle2 size={15}/>:<XCircle size={15}/>}<span><strong>{item.name}</strong><small>{item.ok?`${item.count} animación(es) añadida(s)`:item.reason}</small>{item.ok&&item.warning&&<small>{item.warning}</small>}</span></div>)}</div>}
             {model?.format==='VRM'&&<label className="vrm-export-warning" style={{display:'flex',alignItems:'flex-start',gap:9,margin:'10px 0',fontSize:12,lineHeight:1.6,color:'#c6d3e4',cursor:'pointer'}}><input type="checkbox" checked={allowVrmExport} onChange={event=>setAllowVrmExport(event.target.checked)} style={{accentColor:'#48d9cb',marginTop:3,flexShrink:0}}/><span>Entiendo que descargaré un <strong>GLB estándar aproximado</strong>, no un VRM. Materiales MToon, expresiones, física y desplazamientos omitidos pueden perderse.</span></label>}
             <label style={{display:'block',fontSize:12,color:'#c6d3e4',margin:'8px 0'}}>Formato final
@@ -523,9 +573,11 @@ export default function App() {
               </select>
             </label>
             <button className="export-btn" onClick={exportModel} disabled={!model||(finalFormat==='fbx'&&!clips.length)||(model.format==='VRM'&&!allowVrmExport)||!!busy}><Download size={17}/>{finalFormat==='fbx'?' Exportar FBX animado directo (beta)':model?.format==='VRM'?' Exportar GLB estándar (aproximado)':clips.length?' Exportar GLB integrado':' Exportar GLB con materiales'}</button>
-            <div className="small-note">{finalFormat==='fbx'?'FBX experimental: vuelve a abrirlo y comprueba la integridad de todos sus clips en Blender y Mixamo.':'Se genera una copia nueva. Tu modelo original nunca se modifica.'}</div></section>
+            <div className="small-note">{finalFormat==='fbx'?'FBX experimental: vuelve a abrirlo y comprueba la integridad de todos sus clips en Blender y Mixamo.':'Se genera una copia nueva. Tu modelo original nunca se modifica.'}</div></section></div>
+          <div className="studio-tool-slot" data-tool="light" data-open={activeTool==='light'}>
           <LightPrep model={model} meshes={lightMeshes} boneCount={lightBoneCount} busy={busy} onExport={prepareLight} onExportFBX={prepareLightFBX} onPreview={previewLight} onScript={downloadScript}/>
-          <button className="help-card" onClick={()=>setShowTutorial(true)}><div><span className="eyebrow">¿PRIMERA VEZ AQUÍ?</span><strong>Una guía para crear sin límites.</strong><small>Descubre cómo preparar animaciones con Mixamo y probarlas aquí.</small><span className="help-link">Ver tutorial <ChevronRight size={14}/></span></div><Sparkles size={28}/></button>
+          </div>
+
           </aside>
         </div>
         <footer className="footer"><span>© 2026 ORBI ECOSYSTEM · MOTION STUDIO</span><span><span className="live-dot"/> Hecho para explorar. Diseñado para crear.</span></footer>

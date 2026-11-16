@@ -2,11 +2,12 @@ import {useEffect,useState} from 'react';
 import {Activity,HeartPulse,ShieldCheck} from 'lucide-react';
 import {describePresenceGate} from './lib/livingPresence/activationGate.js';
 import VoiceMotorLab from './VoiceMotorLab.jsx';
+import {describeLpCapabilities} from './lib/livingPresence/lpCapabilities.js';
 
 const FINGERS=[['Thumb','Pulgar'],['Index','Índice'],['Middle','Medio'],['Ring','Anular'],['Little','Meñique']];
 
 // LP-01: all model analysis and motion stay on-device; this panel never uploads.
-export default function LivingPresenceLab({model,generation,getViewer,activeClip=null,voiceQARef,onVoiceQAState}) {
+export default function LivingPresenceLab({model,generation,getViewer,activeClip=null,voiceQARef,onVoiceQAState,showVoice=true}) {
   const [enabled,setEnabled]=useState(false);
   const [composerRequested,setComposerRequested]=useState(false);
   const [composerIntensity,setComposerIntensity]=useState(65);
@@ -74,6 +75,7 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
     getViewer()?.setLivingComposerEnabled(false);
   },[activeClip,getViewer]);
   const canUse=Boolean(model?.format==='VRM');
+  const lpStatuses=describeLpCapabilities(model,getViewer?.());
   const clipComposition=getViewer()?.getLivingComposerStatus()||null;
   const canCompose=Boolean(canUse&&enabled&&clipComposition?.eligible);
   const presenceGate=describePresenceGate({
@@ -204,10 +206,18 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
       <div className="compat-note"><ShieldCheck size={16}/>
         <span>Modo de laboratorio reversible. No edita el VRM, los FBX ni las exportaciones.</span>
       </div>
-      {model?.format==='FBX'&&<div role="status" style={{fontSize:12,lineHeight:1.65,
+      {model&&<div className="lp-capability-list" role="status" aria-label="Disponibilidad real de módulos Living Presence">
+        {lpStatuses.map(item=><div className="lp-capability-row" key={item.id}>
+          <div><strong>{item.name}</strong><small>{item.engine}</small></div>
+          <span data-state={item.state}>{item.state==='available'?'Compatible':
+            item.state==='partial'?'Parcial':item.state==='requires-vrm'?'Solo VRM':'Pendiente'}</span>
+          <small className="lp-capability-reason">{item.reason}</small>
+        </div>)}
+      </div>}
+      {(model?.format==='FBX'||model?.format==='GLB'||model?.format==='GLTF')&&<div role="status" style={{fontSize:12,lineHeight:1.65,
         padding:10,border:'1px solid #315064',borderRadius:8}}>
-        <strong>Mint FBX · compatibilidad por capacidades</strong>
-        <div>La cámara «Rostro» y el panel de QA facial funcionan también con FBX.
+        <strong>LUMIA GLB/FBX · compatibilidad por capacidades</strong>
+        <div>La cámara «Rostro» y el panel de QA facial funcionan también con GLB/FBX.
           Los controles se habilitan únicamente cuando sus huesos se identifican
           de forma única. La prueba de voz sigue disponible con o sin boca compatible.</div>
         <div>El motor corporal LP-02/03 de VRM continúa bloqueado para este rig
@@ -242,7 +252,7 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
         <input type="range" min="0" max="100" step="5" value={intensity}
           disabled={!canUse} onChange={changeIntensity}/>
       </label>
-      <VoiceMotorLab getViewer={getViewer} model={model} generation={generation} activeClip={activeClip} voiceQARef={voiceQARef} onVoiceQAState={onVoiceQAState}/>
+      {showVoice&&<VoiceMotorLab getViewer={getViewer} model={model} generation={generation} activeClip={activeClip} voiceQARef={voiceQARef} onVoiceQAState={onVoiceQAState}/>}
       <details className="lp-accordion">
         <summary>Movimiento avanzado · Mixamo, manos, cuerpo y LP-03A/B</summary>
         <div style={{display:'grid',gap:10}}>
@@ -500,7 +510,7 @@ export default function LivingPresenceLab({model,generation,getViewer,activeClip
         rodillas, pies o la raíz. La cinemática corporal completa, las colisiones
         y la actuación ligada a la voz siguen pendientes.
       </small>
-      {!canUse&&<small>Carga un VRM para habilitar este laboratorio.</small>}
+      {!canUse&&<small>Los controles corporales LP-01/02/03A/B requieren VRM. Los controles faciales y de voz disponibles se manejan desde «Rostro» y «Voz» en la barra del personaje.</small>}
         </div>
       </details>
     </div>

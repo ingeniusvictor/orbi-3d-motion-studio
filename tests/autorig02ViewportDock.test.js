@@ -12,8 +12,9 @@ test('02E places one accessible animation toggle in the 3D viewport toolbar',()=
   assert.match(app,/aria-expanded=\{motionDockOpen\}/);
   assert.match(app,/model\?\.bones>0&&<button/);
   assert.match(app,/<ViewportMotionDock/);
-  assert.match(app,/onClick=\{\(\)=>\{setMotionDockOpen\(v=>!v\);setFaceDockOpen\(false\);\}\}/);
-  assert.match(app,/setFaceDockOpen\(v=>!v\);setMotionDockOpen\(false\)/);
+  assert.match(app,/onClick=\{\(\)=>changeTool\('motion'\)\}/);
+  assert.match(app,/setMotionDockOpen\(open=>!open\);setFaceDockOpen\(false\);setActiveTool\(''\)/);
+  assert.match(app,/setFaceDockOpen\(open=>!open\);setMotionDockOpen\(false\);setActiveTool\(''\)/);
 });
 
 test('02E moves the ONLY rigged animation editor from sidebar into viewer',()=>{
