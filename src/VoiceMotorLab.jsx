@@ -41,6 +41,7 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
   const [source,setSource]=useState('browser');
   const [audioName,setAudioName]=useState('');
   const [speakerEnabled,setSpeakerEnabled]=useState(false);
+  const [glbAutonomyEnabled,setGlbAutonomyEnabled]=useState(false);
   const [voiceStatus,setVoiceStatus]=useState('idle');
   const [lipStrength,setLipStrength]=useState(72);
   const [faceEnabled,setFaceEnabled]=useState(true);
@@ -50,10 +51,15 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
   const [lipReadout,setLipReadout]=useState(null);
   const [fbxFaceSnapshot,setFbxFaceSnapshot]=useState(null);
   const origin=typeof window==='undefined'?'':window.location.origin;
+  const glbStatus=getViewer()?.getGlbAutonomyStatus?.()||null;
   const lipInfo=lipReadout||getViewer()?.getLivingLipDiagnostics?.()||null;
   const faceInfo=(model?.format!=='VRM'&&fbxFaceSnapshot)
     ||getViewer()?.getLivingFacialDiagnostics?.()||null;
   const faceActive=model?.format==='VRM'?faceEnabled:Boolean(faceInfo?.enabled);
+  useEffect(()=>{
+    getViewer()?.setGlbAutonomyEnabled?.(false);
+    setGlbAutonomyEnabled(false);
+  },[generation,getViewer]);
   useEffect(()=>{
     if(!model||model.format==='VRM'){setFbxFaceSnapshot(null);return;}
     const refresh=()=>setFbxFaceSnapshot(
@@ -444,6 +450,26 @@ export default function VoiceMotorLab({getViewer,model,generation,activeClip,voi
       </small>
       </div>
     </details>
+    {model?.format==='GLB'&&<label style={{display:'grid',gridTemplateColumns:'auto 1fr',
+      alignItems:'start',gap:8,fontSize:12}}>
+      <input type="checkbox" checked={glbAutonomyEnabled}
+        disabled={!glbStatus?.eligible||voiceStatus!=='idle'||
+          (Boolean(getViewer()?.playing)&&!glbAutonomyEnabled)}
+        onChange={e=>{
+          const next=e.target.checked;
+          const ok=getViewer()?.setGlbAutonomyEnabled?.(next);
+          setGlbAutonomyEnabled(Boolean(next&&ok));
+        }}/>
+      <span>
+        <strong>LP-04A · Movimiento corporal GLB con Qwen (opcional)</strong>
+        <small style={{display:'block',opacity:0.76,lineHeight:1.5}}>
+          Solo LUMIA 346. Autoriza microgestos de cabeza, cuello, torso y brazos.
+          Detén la reproducción de bailes antes de activarlo.
+          No modifica la geometría ni exporta estos movimientos.
+          {!glbStatus?.eligible?' '+(glbStatus?.reason||'Rig no compatible.'):''}
+        </small>
+      </span>
+    </label>}
     <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12}}>
       <input type="checkbox" checked={speakerEnabled}
         onChange={e=>{stop('disabled');setSpeakerEnabled(e.target.checked);}}/>
